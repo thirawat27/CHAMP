@@ -35,6 +35,21 @@ describe("Dashboard Component", () => {
       error_message: null,
     },
   };
+  const mockAppPaths = {
+    base_dir: "C:\\CHAMP",
+    runtime_dir: "C:\\CHAMP\\runtime",
+    config_dir: "C:\\CHAMP\\config",
+    mysql_data_dir: "C:\\CHAMP\\mysql\\data",
+    logs_dir: "C:\\CHAMP\\logs",
+    projects_dir: "C:\\CHAMP\\projects",
+  };
+  const mockSystemMetrics = {
+    cpu_usage: 12.5,
+    memory_used_bytes: 4 * 1024 * 1024 * 1024,
+    memory_total_bytes: 16 * 1024 * 1024 * 1024,
+    network_rx_bps: 128_000,
+    network_tx_bps: 64_000,
+  };
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -107,9 +122,22 @@ describe("Dashboard Component", () => {
 
   describe("TC-PM-DASH-03: Start Service", () => {
     it("should call start_service when Start button is clicked", async () => {
-      vi.mocked(invoke)
-        .mockResolvedValueOnce(mockServiceMap) // get_all_statuses
-        .mockResolvedValueOnce({ success: true }); // start_service
+      vi.mocked(invoke).mockImplementation(async (cmd: string) => {
+        switch (cmd) {
+          case "get_all_statuses":
+            return mockServiceMap;
+          case "start_service":
+            return mockServiceMap;
+          case "get_app_paths":
+            return mockAppPaths;
+          case "get_installed_versions":
+            return {};
+          case "get_system_metrics":
+            return mockSystemMetrics;
+          default:
+            return {};
+        }
+      });
 
       render(<Dashboard />);
 
@@ -134,9 +162,22 @@ describe("Dashboard Component", () => {
         },
       };
 
-      vi.mocked(invoke)
-        .mockResolvedValueOnce(runningMap) // get_all_statuses
-        .mockResolvedValueOnce({ success: true }); // stop_service
+      vi.mocked(invoke).mockImplementation(async (cmd: string) => {
+        switch (cmd) {
+          case "get_all_statuses":
+            return runningMap;
+          case "stop_service":
+            return runningMap;
+          case "get_app_paths":
+            return mockAppPaths;
+          case "get_installed_versions":
+            return {};
+          case "get_system_metrics":
+            return mockSystemMetrics;
+          default:
+            return {};
+        }
+      });
 
       render(<Dashboard />);
 
@@ -161,9 +202,22 @@ describe("Dashboard Component", () => {
         },
       };
 
-      vi.mocked(invoke)
-        .mockResolvedValueOnce(runningMap) // get_all_statuses
-        .mockResolvedValueOnce({ success: true }); // restart_service
+      vi.mocked(invoke).mockImplementation(async (cmd: string) => {
+        switch (cmd) {
+          case "get_all_statuses":
+            return runningMap;
+          case "restart_service":
+            return runningMap;
+          case "get_app_paths":
+            return mockAppPaths;
+          case "get_installed_versions":
+            return {};
+          case "get_system_metrics":
+            return mockSystemMetrics;
+          default:
+            return {};
+        }
+      });
 
       render(<Dashboard />);
 

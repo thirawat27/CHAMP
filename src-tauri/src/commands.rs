@@ -12,7 +12,9 @@ use crate::AppState;
 use serde::Serialize;
 use std::fs;
 use std::path::Path;
-use std::sync::Mutex;
+use std::sync::{Mutex, OnceLock};
+use std::time::Instant;
+use sysinfo::{Networks, System};
 use tauri::Emitter;
 use tauri::State;
 
@@ -90,6 +92,89 @@ pub struct InstalledPhpVersionDto {
     pub recommended: bool,
     pub path: Option<String>,
 }
+
+#[derive(Debug, Serialize)]
+pub struct SystemMetricsDto {
+    pub cpu_usage: f32,
+    pub memory_used_bytes: u64,
+    pub memory_total_bytes: u64,
+    pub network_rx_bps: u64,
+    pub network_tx_bps: u64,
+}
+
+struct SystemMetricsMonitor {
+    system: System,
+    networks: Networks,
+    last_network_received_bytes: u64,
+    last_network_transmitted_bytes: u64,
+    last_sample_time: Instant,
+}
+
+impl SystemMetricsMonitor {
+    fn new() -> Self {
+        let mut system = System::new_all();
+        system.refresh_cpu_usage();
+        system.refresh_memory();
+
+        let mut networks = Networks::new_with_refreshed_list();
+        networks.refresh(true);
+        let (received, transmitted) = aggregate_network_totals(&networks);
+
+        Self {
+            system,
+            networks,
+            last_network_received_bytes: received,
+            last_network_transmitted_bytes: transmitted,
+            last_sample_time: Instant::now(),
+        }
+    }
+
+    fn collect(&mut self) -> SystemMetricsDto {
+        self.system.refresh_cpu_usage();
+        self.system.refresh_memory();
+        self.networks.refresh(true);
+
+        let now = Instant::now();
+        let elapsed_seconds = now.duration_since(self.last_sample_time).as_secs_f64();
+        let (current_received, current_transmitted) = aggregate_network_totals(&self.networks);
+
+        let received_delta = current_received.saturating_sub(self.last_network_received_bytes);
+        let transmitted_delta =
+            current_transmitted.saturating_sub(self.last_network_transmitted_bytes);
+
+        let (network_rx_bps, network_tx_bps) = if elapsed_seconds > 0.0 {
+            (
+                (received_delta as f64 / elapsed_seconds) as u64,
+                (transmitted_delta as f64 / elapsed_seconds) as u64,
+            )
+        } else {
+            (0, 0)
+        };
+
+        self.last_network_received_bytes = current_received;
+        self.last_network_transmitted_bytes = current_transmitted;
+        self.last_sample_time = now;
+
+        SystemMetricsDto {
+            cpu_usage: self.system.global_cpu_usage(),
+            memory_used_bytes: self.system.used_memory(),
+            memory_total_bytes: self.system.total_memory(),
+            network_rx_bps,
+            network_tx_bps,
+        }
+    }
+}
+
+fn aggregate_network_totals(networks: &Networks) -> (u64, u64) {
+    networks.iter().fold((0, 0), |(received, transmitted), (_, data)| {
+        (
+            received.saturating_add(data.total_received()),
+            transmitted.saturating_add(data.total_transmitted()),
+        )
+    })
+}
+
+static SYSTEM_METRICS_MONITOR: OnceLock<Mutex<SystemMetricsMonitor>> = OnceLock::new();
 
 fn marker_version(path: &Path) -> Option<String> {
     let content = fs::read_to_string(path).ok()?;
@@ -342,6 +427,16 @@ pub async fn get_app_paths() -> Result<AppPathsDto, String> {
         logs_dir: paths.logs_dir.to_string_lossy().to_string(),
         projects_dir: paths.projects_dir.to_string_lossy().to_string(),
     })
+}
+
+#[tauri::command]
+pub async fn get_system_metrics() -> Result<SystemMetricsDto, String> {
+    let monitor = SYSTEM_METRICS_MONITOR.get_or_init(|| Mutex::new(SystemMetricsMonitor::new()));
+    let mut monitor = monitor
+        .lock()
+        .map_err(|e| format!("Failed to acquire system metrics lock: {}", e))?;
+
+    Ok(monitor.collect())
 }
 
 /// Get the download directory path (where ZIP files are stored)
