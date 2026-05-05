@@ -1,0 +1,508 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CAMPP User Manual</title>
+  <style>
+    :root {
+      --color-primary: #24c8db;
+      --color-text: #333;
+      --color-bg: #fff;
+      --color-border: #e5e7eb;
+      --color-code-bg: #f5f5f5;
+    }
+
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --color-text: #e5e5e5;
+        --color-bg: #1a1a1a;
+        --color-border: #374151;
+        --color-code-bg: #2d2d2d;
+      }
+    }
+
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+      line-height: 1.6;
+      color: var(--color-text);
+      background-color: var(--color-bg);
+      padding: 2rem;
+      max-width: 900px;
+      margin: 0 auto;
+    }
+
+    h1 {
+      color: var(--color-primary);
+      margin-bottom: 1rem;
+      font-size: 2rem;
+      border-bottom: 2px solid var(--color-primary);
+      padding-bottom: 0.5rem;
+    }
+
+    h2 {
+      color: var(--color-primary);
+      margin-top: 2rem;
+      margin-bottom: 1rem;
+      font-size: 1.5rem;
+    }
+
+    h3 {
+      margin-top: 1.5rem;
+      margin-bottom: 0.75rem;
+      font-size: 1.2rem;
+    }
+
+    p {
+      margin-bottom: 1rem;
+    }
+
+    ul, ol {
+      margin-bottom: 1rem;
+      padding-left: 1.5rem;
+    }
+
+    li {
+      margin-bottom: 0.5rem;
+    }
+
+    code {
+      background-color: var(--color-code-bg);
+      padding: 0.2rem 0.4rem;
+      border-radius: 4px;
+      font-family: 'Consolas', 'Monaco', monospace;
+      font-size: 0.9em;
+    }
+
+    pre {
+      background-color: var(--color-code-bg);
+      padding: 1rem;
+      border-radius: 8px;
+      overflow-x: auto;
+      margin-bottom: 1rem;
+    }
+
+    pre code {
+      padding: 0;
+      background: none;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-bottom: 1rem;
+    }
+
+    th, td {
+      border: 1px solid var(--color-border);
+      padding: 0.75rem;
+      text-align: left;
+    }
+
+    th {
+      background-color: var(--color-code-bg);
+    }
+
+    .note {
+      background-color: #dbeafe;
+      border-left: 4px solid #3b82f6;
+      padding: 1rem;
+      margin-bottom: 1rem;
+      border-radius: 0 8px 8px 0;
+    }
+
+    .warning {
+      background-color: #fef3c7;
+      border-left: 4px solid #f59e0b;
+      padding: 1rem;
+      margin-bottom: 1rem;
+      border-radius: 0 8px 8px 0;
+    }
+
+    .tip {
+      background-color: #d1fae5;
+      border-left: 4px solid #10b981;
+      padding: 1rem;
+      margin-bottom: 1rem;
+      border-radius: 0 8px 8px 0;
+    }
+
+    @media (prefers-color-scheme: dark) {
+      .note {
+        background-color: #1e3a5f;
+      }
+      .warning {
+        background-color: #78350f;
+      }
+      .tip {
+        background-color: #065f46;
+      }
+    }
+
+    .back-to-top {
+      position: fixed;
+      bottom: 2rem;
+      right: 2rem;
+      background-color: var(--color-primary);
+      color: white;
+      padding: 0.5rem 1rem;
+      border-radius: 8px;
+      text-decoration: none;
+      font-weight: 500;
+    }
+
+    .back-to-top:hover {
+      opacity: 0.9;
+    }
+  </style>
+</head>
+<body>
+  <h1>CAMPP User Manual</h1>
+  <p><strong>Version 0.2.1</strong> | Local Web Development Stack</p>
+
+  <h2 id="overview">Overview</h2>
+  <p>CAMPP is a cross-platform local web development stack that bundles everything you need to run PHP websites locally:</p>
+  <ul>
+    <li><strong>Caddy 2.8.4</strong> - Modern web server with automatic HTTPS</li>
+    <li><strong>PHP-FPM 8.5.1</strong> - Fast PHP runtime</li>
+    <li><strong>Database</strong> - MySQL 8.4.0 on Windows/macOS, MariaDB 12.3.1 on Linux</li>
+    <li><strong>phpMyAdmin 5.2.2</strong> - Web-based database management</li>
+  </ul>
+
+  <h2 id="installation">Installation</h2>
+  <h3>Windows</h3>
+  <ol>
+    <li>Download the installer from <a href="https://github.com/KarnYong/campp/releases">GitHub Releases</a></li>
+    <li>Run the installer (NSIS or MSI)</li>
+    <li>Choose your project folder location during installation (default: <code>%LOCALAPPDATA%\campp\projects</code>)</li>
+    <li>If Windows SmartScreen shows a warning, click <strong>More info</strong> → <strong>Run anyway</strong></li>
+    <li>Launch CAMPP from Start Menu or Desktop shortcut</li>
+  </ol>
+
+  <h3>macOS</h3>
+  <ol>
+    <li>Download the <code>.dmg</code> file from <a href="https://github.com/KarnYong/campp/releases">GitHub Releases</a></li>
+    <li>Open the DMG and drag CAMPP to Applications</li>
+    <li>Launch CAMPP from Applications or Launchpad</li>
+  </ol>
+
+  <h3>Linux</h3>
+  <ol>
+    <li>Download the <code>.AppImage</code> file from <a href="https://github.com/KarnYong/campp/releases">GitHub Releases</a></li>
+    <li>Make the file executable: <code>chmod +x CAMPP-*.AppImage</code></li>
+    <li>Run the AppImage: <code>./CAMPP-*.AppImage</code></li>
+  </ol>
+
+  <div class="note">
+    <strong>Note:</strong> The Windows SmartScreen warning appears because the app is not code-signed. This is normal and safe. The source code is publicly available on GitHub.
+  </div>
+
+  <div class="tip">
+    <strong>Windows Installation:</strong> You can select a custom project folder location during installation. On macOS and Linux, the project folder uses the default location but can be changed later in Settings.
+  </div>
+
+  <h2 id="first-run">First Run</h2>
+  <p>On first launch, CAMPP will display a setup wizard that downloads the required runtime components (~500MB):</p>
+  <ol>
+    <li>Click <strong>Start Setup</strong> to begin downloading</li>
+    <li>Wait for all components to download (this may take a few minutes)</li>
+    <li>Click <strong>Get Started</strong> when complete</li>
+  </ol>
+
+  <h2 id="dashboard">Dashboard</h2>
+  <p>The main dashboard shows three service cards:</p>
+
+  <h3>Service Controls</h3>
+  <p>Each service card displays:</p>
+  <ul>
+    <li><strong>Status</strong> - Running, Stopped, or Error</li>
+    <li><strong>Port</strong> - The port the service uses</li>
+    <li><strong>Start/Stop/Restart</strong> buttons</li>
+  </ul>
+
+  <h3>Quick Actions (Top Right)</h3>
+  <ul>
+    <li><strong>Open Site</strong> - Opens http://localhost:8080 in your browser</li>
+    <li><strong>phpMyAdmin</strong> - Opens http://localhost:8080/phpmyadmin</li>
+    <li><strong>Settings</strong> - Opens the settings panel</li>
+  </ul>
+
+  <h2 id="default-ports">Default Ports</h2>
+  <table>
+    <tr>
+      <th>Service</th>
+      <th>Port</th>
+      <th>Access URL</th>
+    </tr>
+    <tr>
+      <td>Web Server (Caddy)</td>
+      <td>8080</td>
+      <td>http://localhost:8080</td>
+    </tr>
+    <tr>
+      <td>PHP-FPM</td>
+      <td>9000</td>
+      <td>Internal only (FastCGI)</td>
+    </tr>
+    <tr>
+      <td>Database (MySQL/MariaDB)</td>
+      <td>3307</td>
+      <td>localhost:3307</td>
+    </tr>
+    <tr>
+      <td>phpMyAdmin</td>
+      <td>8080</td>
+      <td>http://localhost:8080/phpmyadmin</td>
+    </tr>
+  </table>
+
+  <div class="tip">
+    <strong>Tip:</strong> These ports are chosen to avoid conflicts with system services. You can change them in Settings.
+  </div>
+
+  <div class="note">
+    <strong>Note:</strong> CAMPP uses MySQL 8.4.0 on Windows and macOS, and MariaDB 12.3.1 on Linux. Both are MySQL-compatible and work identically for PHP applications.
+  </div>
+
+  <h2 id="database">Database Connection</h2>
+  <h3>Default Credentials</h3>
+  <table>
+    <tr>
+      <th>Setting</th>
+      <th>Value</th>
+    </tr>
+    <tr>
+      <td>Host</td>
+      <td>localhost</td>
+    </tr>
+    <tr>
+      <td>Port</td>
+      <td>3307</td>
+    </tr>
+    <tr>
+      <td>Username</td>
+      <td>root</td>
+    </tr>
+    <tr>
+      <td>Password</td>
+      <td><em>(empty - leave blank)</em></td>
+    </tr>
+  </table>
+
+  <h3>PHP Connection Example</h3>
+  <pre><code>&lt;?php
+$pdo = new PDO(
+    'mysql:host=localhost;port=3307;charset=utf8mb4',
+    'root',
+    ''
+);</code></pre>
+
+  <h2 id="project-folder">Project Folder</h2>
+  <p>Your website files should be placed in the project folder. The default locations are:</p>
+
+  <h4>Windows</h4>
+  <pre><code>C:\Users\&lt;YourUsername&gt;\AppData\Local\campp\projects</code></pre>
+
+  <h4>macOS</h4>
+  <pre><code>~/Library/Application Support/campp/projects</code></pre>
+
+  <h4>Linux</h4>
+  <pre><code>~/.local/share/campp/projects</code></pre>
+
+  <div class="tip">
+    <strong>Project Folder Location:</strong>
+    <ul style="margin-top: 0.5rem;">
+      <li><strong>Windows:</strong> Choose a custom location during installation.</li>
+      <li><strong>macOS/Linux:</strong> Uses the default location above.</li>
+    </ul>
+  </div>
+
+  <p>To quickly access this folder:</p>
+  <ol>
+    <li>Click <strong>Settings</strong> (gear icon)</li>
+    <li>Click <strong>Open</strong> next to "Project Root Directory"</li>
+  </ol>
+
+  <h3>Example Project Structure</h3>
+  <pre><code>projects/
+├── my-site/
+│   ├── index.php
+│   ├── about.php
+│   └── assets/
+│       └── style.css
+└── another-site/
+    └── index.php</code></pre>
+
+  <p>Access your sites at:</p>
+  <ul>
+    <li>http://localhost:8080/my-site/</li>
+    <li>http://localhost:8080/another-site/</li>
+  </ul>
+
+  <h2 id="settings">Settings</h2>
+  <p>Click the <strong>Settings</strong> button to configure:</p>
+
+  <h3>Port Configuration</h3>
+  <ul>
+    <li>Web Server Port (default: 8080)</li>
+    <li>PHP-FPM Port (default: 9000)</li>
+    <li>Database Port (default: 3307)</li>
+  </ul>
+
+  <div class="warning">
+    <strong>Warning:</strong> Changing ports requires restarting all services to take effect.
+  </div>
+
+  <h3>Project Root Directory</h3>
+  <p>Change where your project files are stored. Click <strong>Open</strong> to view the folder in Explorer.</p>
+
+  <h2 id="debug-menu">Debug Menu</h2>
+  <p>Press <strong>Ctrl+Shift+D</strong> to open the debug menu:</p>
+  <ul>
+    <li><strong>Open Runtime Folder</strong> - View downloaded binaries</li>
+    <li><strong>View Download Folder</strong> - View downloaded ZIP files</li>
+    <li><strong>Reset Installation</strong> - Delete all binaries and restart setup</li>
+    <li><strong>Show First-Run Wizard</strong> - Re-run the initial setup</li>
+  </ul>
+
+  <h2 id="troubleshooting">Troubleshooting</h2>
+
+  <h3>Service won't start</h3>
+  <ul>
+    <li>Check if the port is already in use by another application</li>
+    <li>Try changing the port in Settings</li>
+    <li>Check the error message displayed on the service card</li>
+  </ul>
+
+  <h3>phpMyAdmin shows errors</h3>
+  <ul>
+    <li>Make sure the database service (MySQL/MariaDB) is running first</li>
+    <li>Try restarting the database service</li>
+  </ul>
+
+  <h3>Reset everything</h3>
+  <ol>
+    <li>Press <strong>Ctrl+Shift+D</strong> to open debug menu</li>
+    <li>Click <strong>Reset Installation</strong></li>
+    <li>This will stop all services and delete runtime binaries</li>
+    <li>Restart the app to re-download everything</li>
+  </ol>
+
+  <h3>Antivirus detects a threat</h3>
+  <p>This is a false positive. The app is safe because:</p>
+  <ul>
+    <li>Source code is open and available on GitHub</li>
+    <li>The warning appears because the app is not code-signed</li>
+    <li>Add an exception in your antivirus for the CAMPP folder</li>
+  </ul>
+
+  <h2 id="data-locations">Data Locations</h2>
+
+  <h4>Windows</h4>
+  <table>
+    <tr>
+      <th>What</th>
+      <th>Location</th>
+    </tr>
+    <tr>
+      <td>Runtime Binaries</td>
+      <td><code>%LOCALAPPDATA%\campp\runtime\</code></td>
+    </tr>
+    <tr>
+      <td>Project Files</td>
+      <td><code>%LOCALAPPDATA%\campp\projects\</code> <em>(configurable)</em></td>
+    </tr>
+    <tr>
+      <td>Configuration</td>
+      <td><code>%LOCALAPPDATA%\campp\config\</code></td>
+    </tr>
+    <tr>
+      <td>Database Data</td>
+      <td><code>%LOCALAPPDATA%\campp\mysql\data\</code></td>
+    </tr>
+    <tr>
+      <td>Logs</td>
+      <td><code>%LOCALAPPDATA%\campp\logs\</code></td>
+    </tr>
+  </table>
+
+  <h4>macOS</h4>
+  <table>
+    <tr>
+      <th>What</th>
+      <th>Location</th>
+    </tr>
+    <tr>
+      <td>Runtime Binaries</td>
+      <td><code>~/Library/Application Support/campp/runtime/</code></td>
+    </tr>
+    <tr>
+      <td>Project Files</td>
+      <td><code>~/Library/Application Support/campp/projects/</code></td>
+    </tr>
+    <tr>
+      <td>Configuration</td>
+      <td><code>~/Library/Application Support/campp/config/</code></td>
+    </tr>
+    <tr>
+      <td>Database Data</td>
+      <td><code>~/Library/Application Support/campp/mysql/data/</code></td>
+    </tr>
+    <tr>
+      <td>Logs</td>
+      <td><code>~/Library/Application Support/campp/logs/</code></td>
+    </tr>
+  </table>
+
+  <h4>Linux</h4>
+  <table>
+    <tr>
+      <th>What</th>
+      <th>Location</th>
+    </tr>
+    <tr>
+      <td>Runtime Binaries</td>
+      <td><code>~/.local/share/campp/runtime/</code></td>
+    </tr>
+    <tr>
+      <td>Project Files</td>
+      <td><code>~/.local/share/campp/projects/</code></td>
+    </tr>
+    <tr>
+      <td>Configuration</td>
+      <td><code>~/.local/share/campp/config/</code></td>
+    </tr>
+    <tr>
+      <td>Database Data</td>
+      <td><code>~/.local/share/campp/mysql/data/</code></td>
+    </tr>
+    <tr>
+      <td>Logs</td>
+      <td><code>~/.local/share/campp/logs/</code></td>
+    </tr>
+  </table>
+
+  <div class="note">
+    <strong>Note:</strong> Check Settings to see your actual project folder location. On Windows, this may differ if you configured a custom path during installation.
+  </div>
+
+  <h2 id="support">Support</h2>
+  <ul>
+    <li><strong>GitHub:</strong> <a href="https://github.com/KarnYong/campp">https://github.com/KarnYong/campp</a></li>
+    <li><strong>Report Issues:</strong> <a href="https://github.com/KarnYong/campp/issues">https://github.com/KarnYong/campp/issues</a></li>
+  </ul>
+
+  <hr style="margin: 2rem 0; border: none; border-top: 1px solid var(--color-border);">
+  <p style="text-align: center; color: #666;">
+    <small>CAMPP v0.2.1 | MIT License | &copy; 2024-2025 CAMPP Project</small>
+  </p>
+
+  <a href="#overview" class="back-to-top">Back to Top</a>
+</body>
+</html>

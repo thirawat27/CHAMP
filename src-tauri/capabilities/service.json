@@ -1,0 +1,10 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "service",
+  "description": "Capability for service management commands. Uses core:default for custom command access.",
+  "windows": ["main"],
+  "permissions": [
+    "core:default",
+    "core:event:allow-emit"
+  ]
+}

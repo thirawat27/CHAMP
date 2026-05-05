@@ -1,0 +1,106 @@
+{
+  "$schema": "./runtime-config.schema.json",
+  "version": "1.0",
+  "binaries": {
+    "caddy": {
+      "versions": [
+        {
+          "id": "caddy-2.11",
+          "version": "2.11.2",
+          "selected": true,
+          "display_name": "Caddy 2.11.2 (Latest)",
+          "checksums": {},
+          "urls": {
+            "windowsX64": "https://github.com/caddyserver/caddy/releases/download/v2.11.2/caddy_2.11.2_windows_amd64.zip",
+            "windowsArm64": "https://github.com/caddyserver/caddy/releases/download/v2.11.2/caddy_2.11.2_windows_arm64.zip",
+            "linuxX64": "https://github.com/caddyserver/caddy/releases/download/v2.11.2/caddy_2.11.2_linux_amd64.tar.gz",
+            "macOSX64": "https://github.com/caddyserver/caddy/releases/download/v2.11.2/caddy_2.11.2_mac_amd64.tar.gz",
+            "macOSArm64": "https://github.com/caddyserver/caddy/releases/download/v2.11.2/caddy_2.11.2_mac_arm64.tar.gz"
+          }
+        }
+      ]
+    },
+    "php": {
+      "versions": [
+        {
+          "id": "php-8.5",
+          "version": "8.5.1",
+          "selected": true,
+          "display_name": "PHP 8.5.1 (Latest)",
+          "eol": false,
+          "lts": false,
+          "checksums": {
+            "windowsX64": "77fbee57c8159279bc065942d361103b0a3f53c8dfabc182a07433be9eec8dba",
+            "windowsArm64": "cfd66a27d32e0ce2f462527f8f29fd2d797c714083c07a32b6147d06a7553d6f",
+            "linuxX64": "b3871bc4e2d99140d3cba88ec0fe54d828ee2e460a6232f6d74565a288420e62",
+            "macOSX64": "6a211936907b9df16ae32fa8cdaa74d76b7ce3940e09cf5fba0109140953db98",
+            "macOSArm64": "9fb9a6a5ce41a384a611ec3f3e2deb5329ef0ce68848ab50ac7bb391b1890c23"
+          },
+          "urls": {
+            "windowsX64": "https://github.com/KarnYong/campp-runtime-binaries/releases/download/php-8.5.1/php-8.5.1-Win32-vs17-x64.zip",
+            "windowsArm64": "https://github.com/KarnYong/campp-runtime-binaries/releases/download/php-8.5.1/php-8.5.1-Win32-vs17-x86.zip",
+            "linuxX64": "https://github.com/KarnYong/campp-runtime-binaries/releases/download/php-8.5.1/php-8.4.18-fpm-linux-x86_64.tar.gz",
+            "macOSX64": "https://github.com/KarnYong/campp-runtime-binaries/releases/download/php-8.5.1/php-8.4.18-fpm-macos-x86_64.tar.gz",
+            "macOSArm64": "https://github.com/KarnYong/campp-runtime-binaries/releases/download/php-8.5.1/php-8.4.18-fpm-macos-aarch64.tar.gz"
+          }
+        },
+        {
+          "id": "php-7.4",
+          "version": "7.4.33",
+          "selected": false,
+          "display_name": "PHP 7.4.33 (Legacy)",
+          "eol": true,
+          "lts": false,
+          "checksums": {
+            "windowsX64": "cdbb85b45f38f282f05764ca08648b5f92db99c75b2fb3848eb4a559f6553b48",
+            "windowsX86": "6adcf02c02634f258f6b6b2bb666f22916c9bd986db2ccae05acb9868a35f847"
+          },
+          "urls": {
+            "windowsX64": "https://github.com/KarnYong/campp-runtime-binaries/releases/download/php-7.4.33/php-7.4.33-Win32-vc15-x64.zip",
+            "windowsX86": "https://github.com/KarnYong/campp-runtime-binaries/releases/download/php-7.4.33/php-7.4.33-Win32-vc15-x86.zip"
+          }
+        }
+      ]
+    },
+    "mysql": {
+      "versions": [
+        {
+          "id": "mysql-8.4",
+          "version": "8.4.0",
+          "selected": true,
+          "display_name": "MySQL 8.4.0 LTS (Recommended)",
+          "eol": false,
+          "lts": true,
+          "checksums": {
+            "windowsX64": "fb1f0c6cce229be4b3208bec8a605576bb47eabb00512bccbcc4396af332c25c",
+            "windowsArm64": "fb1f0c6cce229be4b3208bec8a605576bb47eabb00512bccbcc4396af332c25c",
+            "linuxX64": "7a5bb527b7821c570b7aec6a20e3c0266b3d4bd5ca7cbde32e043b52a6a27433",
+            "macOSX64": "adbb8b7e261547768a548d97938a5f1b66cf85daee09db28ac4bb657aa7d4192",
+            "macOSArm64": "b4ad74a78aa4378df00e1164c9979dd660ea09bf47e05f6ef8324f4ea1418618"
+          },
+          "urls": {
+            "windowsX64": "https://github.com/KarnYong/campp-runtime-binaries/releases/download/mysql-8.4.0/mysql-8.4.0-winx64.zip",
+            "windowsArm64": "https://github.com/KarnYong/campp-runtime-binaries/releases/download/mysql-8.4.0/mysql-8.4.0-winx64.zip",
+            "linuxX64": "https://archive.mariadb.org/mariadb-12.3.1/bintar-linux-systemd-x86_64/mariadb-12.3.1-linux-systemd-x86_64.tar.gz",
+            "macOSX64": "https://github.com/KarnYong/campp-runtime-binaries/releases/download/mysql-8.4.0/mysql-8.4.0-macos14-x86_64.tar.gz",
+            "macOSArm64": "https://github.com/KarnYong/campp-runtime-binaries/releases/download/mysql-8.4.0/mysql-8.4.0-macos14-arm64.tar.gz"
+          }
+        }
+      ]
+    },
+    "phpmyadmin": {
+      "versions": [
+        {
+          "id": "adminer-5.4",
+          "version": "5.4.1",
+          "selected": true,
+          "display_name": "Adminer 5.4.1 (Latest)",
+          "eol": false,
+          "lts": false,
+          "checksum": null,
+          "url": "https://github.com/vrana/adminer/releases/download/v5.4.1/adminer-5.4.1.php"
+        }
+      ]
+    }
+  }
+}

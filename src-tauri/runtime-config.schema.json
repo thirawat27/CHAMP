@@ -1,0 +1,159 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "CHAMP Runtime Configuration",
+  "description": "Configuration file for runtime binary downloads. Allows users to customize versions and download URLs.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version", "binaries"],
+  "properties": {
+    "version": {
+      "type": "string",
+      "description": "Configuration format version"
+    },
+    "binaries": {
+      "type": "object",
+      "description": "Binary package configurations",
+      "additionalProperties": false,
+      "required": ["caddy", "php", "mysql", "phpmyadmin"],
+      "properties": {
+        "caddy": {
+          "$ref": "#/definitions/binaryWithUrls"
+        },
+        "php": {
+          "$ref": "#/definitions/binaryWithUrls"
+        },
+        "mysql": {
+          "$ref": "#/definitions/binaryWithUrls"
+        },
+        "phpmyadmin": {
+          "$ref": "#/definitions/binaryWithSingleUrl"
+        }
+      }
+    }
+  },
+  "definitions": {
+    "urls": {
+      "type": "object",
+      "description": "Download URLs for different platforms",
+      "additionalProperties": false,
+      "properties": {
+        "windowsX64": {
+          "type": "string",
+          "format": "uri"
+        },
+        "windowsArm64": {
+          "type": "string",
+          "format": "uri"
+        },
+        "linuxX64": {
+          "type": "string",
+          "format": "uri"
+        },
+        "linuxArm64": {
+          "type": "string",
+          "format": "uri"
+        },
+        "macOSX64": {
+          "type": "string",
+          "format": "uri"
+        },
+        "macOSArm64": {
+          "type": "string",
+          "format": "uri"
+        }
+      }
+    },
+    "versionInfo": {
+      "type": "object",
+      "description": "Version information for a binary package",
+      "additionalProperties": false,
+      "required": ["id", "version", "selected", "display_name"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for this version (e.g., 'php-8.4')"
+        },
+        "version": {
+          "type": "string",
+          "description": "Semantic version number (e.g., '8.4.16')"
+        },
+        "selected": {
+          "type": "boolean",
+          "description": "Whether this version should be used (only one per binary should be true)"
+        },
+        "display_name": {
+          "type": "string",
+          "description": "Human-readable name for display in UI"
+        },
+        "eol": {
+          "type": "boolean",
+          "description": "Whether this version is end-of-life",
+          "default": false
+        },
+        "lts": {
+          "type": "boolean",
+          "description": "Whether this is a long-term support version",
+          "default": false
+        }
+      }
+    },
+    "binaryWithUrls": {
+      "type": "object",
+      "description": "Binary package with multiple versions and platform-specific URLs",
+      "additionalProperties": false,
+      "required": ["versions"],
+      "properties": {
+        "versions": {
+          "type": "array",
+          "description": "List of available versions",
+          "items": {
+            "allOf": [
+              {
+                "$ref": "#/definitions/versionInfo"
+              },
+              {
+                "type": "object",
+                "required": ["urls"],
+                "properties": {
+                  "urls": {
+                    "$ref": "#/definitions/urls"
+                  }
+                }
+              }
+            ]
+          }
+        }
+      }
+    },
+    "binaryWithSingleUrl": {
+      "type": "object",
+      "description": "Binary package with multiple versions but single platform-independent URL",
+      "additionalProperties": false,
+      "required": ["versions"],
+      "properties": {
+        "versions": {
+          "type": "array",
+          "description": "List of available versions",
+          "items": {
+            "allOf": [
+              {
+                "$ref": "#/definitions/versionInfo"
+              },
+              {
+                "type": "object",
+                "required": ["url"],
+                "properties": {
+                  "url": {
+                    "type": "string",
+                    "format": "uri",
+                    "description": "Download URL (platform-independent)"
+                  }
+                }
+              }
+            ]
+          }
+        }
+      }
+    }
+  }
+}

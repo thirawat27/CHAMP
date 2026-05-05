@@ -1,0 +1,119 @@
+{
+  "$schema": "./runtime-config.schema.json",
+  "version": "1.0",
+  "_comment": "CAMPP User Configuration - Copy this file to 'runtime-config.json' and modify as needed",
+
+  "_instructions": {
+    "purpose": "Configure which versions of PHP, MySQL, phpMyAdmin, and Caddy to download",
+    "usage": "Copy this file to 'runtime-config.json' in the same directory and modify the values below",
+    "availableVersions": {
+      "php": "8.5.1 - Available from https://github.com/KarnYong/campp-runtime-binaries/releases",
+      "mysql": "8.4.0 - Available from https://github.com/KarnYong/campp-runtime-binaries/releases",
+      "phpmyadmin": "5.2.2 - Available from https://github.com/KarnYong/campp-runtime-binaries/releases",
+      "caddy": "2.8.4 - Available from https://github.com/caddyserver/caddy/releases"
+    },
+    "platforms": {
+      "windowsX64": "Windows 64-bit (Intel/AMD)",
+      "windowsArm64": "Windows on ARM (Surface Pro X, etc.)",
+      "linuxX64": "Linux 64-bit (Intel/AMD)",
+      "linuxArm64": "Linux ARM64 (Raspberry Pi, etc.)",
+      "macOSX64": "macOS Intel",
+      "macOSArm64": "macOS Apple Silicon (M1/M2/M3)"
+    }
+  },
+
+  "binaries": {
+    "_comment_select_below": "Set 'selected: true' for the version you want to use",
+    "_comment_only_one": "Only ONE version per binary should have 'selected: true'",
+
+    "caddy": {
+      "versions": [
+        {
+          "id": "caddy-2.8",
+          "version": "2.8.4",
+          "selected": true,
+          "display_name": "Caddy 2.8.4 (Latest)",
+          "urls": {
+            "windowsX64": "https://github.com/caddyserver/caddy/releases/download/v2.8.4/caddy_2.8.4_windows_amd64.zip",
+            "windowsArm64": "https://github.com/caddyserver/caddy/releases/download/v2.8.4/caddy_2.8.4_windows_arm64.zip",
+            "linuxX64": "https://github.com/caddyserver/caddy/releases/download/v2.8.4/caddy_2.8.4_linux_amd64.tar.gz",
+            "linuxArm64": "https://github.com/caddyserver/caddy/releases/download/v2.8.4/caddy_2.8.4_linux_arm64.tar.gz",
+            "macOSX64": "https://github.com/caddyserver/caddy/releases/download/v2.8.4/caddy_2.8.4_darwin_amd64.tar.gz",
+            "macOSArm64": "https://github.com/caddyserver/caddy/releases/download/v2.8.4/caddy_2.8.4_darwin_arm64.tar.gz"
+          }
+        }
+      ]
+    },
+
+    "php": {
+      "versions": [
+        {
+          "id": "php-8.5",
+          "version": "8.5.1",
+          "selected": true,
+          "display_name": "PHP 8.5.1 (Latest)",
+          "eol": false,
+          "lts": false,
+          "urls": {
+            "windowsX64": "https://github.com/KarnYong/campp-runtime-binaries/releases/download/php-8.5.1/php-8.5.1-Win32-vs17-x64.zip",
+            "windowsArm64": "https://github.com/KarnYong/campp-runtime-binaries/releases/download/php-8.5.1/php-8.5.1-Win32-vs17-x86.zip",
+            "linuxX64": "https://github.com/KarnYong/campp-runtime-binaries/releases/download/php-8.5.1/php-8.4.18-fpm-linux-x86_64.tar.gz",
+            "linuxArm64": "https://github.com/KarnYong/campp-runtime-binaries/releases/download/php-8.5.1/php-8.4.18-fpm-linux-aarch64.tar.gz",
+            "macOSX64": "https://github.com/KarnYong/campp-runtime-binaries/releases/download/php-8.5.1/php-8.4.18-fpm-macos-x86_64.tar.gz",
+            "macOSArm64": "https://github.com/KarnYong/campp-runtime-binaries/releases/download/php-8.5.1/php-8.4.18-fpm-macos-aarch64.tar.gz"
+          }
+        }
+      ]
+    },
+
+    "mysql": {
+      "versions": [
+        {
+          "id": "mysql-8.4",
+          "version": "8.4.0",
+          "selected": true,
+          "display_name": "MySQL 8.4.0 LTS (Recommended)",
+          "eol": false,
+          "lts": true,
+          "urls": {
+            "windowsX64": "https://github.com/KarnYong/campp-runtime-binaries/releases/download/mysql-8.4.0/mysql-8.4.0-winx64.zip",
+            "windowsArm64": "https://github.com/KarnYong/campp-runtime-binaries/releases/download/mysql-8.4.0/mysql-8.4.0-winx64.zip",
+            "linuxX64": "https://github.com/KarnYong/campp-runtime-binaries/releases/download/mysql-8.4.0/mysql-8.4.0-linux-glibc2.28-x86_64.tar.xz",
+            "linuxArm64": "https://github.com/KarnYong/campp-runtime-binaries/releases/download/mysql-8.4.0/mysql-8.4.0-linux-glibc2.28-aarch64.tar.xz",
+            "macOSX64": "https://github.com/KarnYong/campp-runtime-binaries/releases/download/mysql-8.4.0/mysql-8.4.0-macos14-x86_64.tar.gz",
+            "macOSArm64": "https://github.com/KarnYong/campp-runtime-binaries/releases/download/mysql-8.4.0/mysql-8.4.0-macos14-arm64.tar.gz"
+          }
+        }
+      ]
+    },
+
+    "phpmyadmin": {
+      "versions": [
+        {
+          "id": "phpmyadmin-5.2",
+          "version": "5.2.2",
+          "selected": true,
+          "display_name": "phpMyAdmin 5.2.2 (Latest)",
+          "eol": false,
+          "lts": false,
+          "url": "https://github.com/KarnYong/campp-runtime-binaries/releases/download/phpmyadmin-5.2.2/phpMyAdmin-5.2.2-all-languages.zip"
+        }
+      ]
+    }
+  },
+
+  "_custom_urls_example": {
+    "_comment": "You can also use custom URLs for specific versions if needed",
+    "example": {
+      "php": {
+        "id": "php-custom",
+        "version": "8.4.99",
+        "selected": false,
+        "display_name": "PHP Custom Build",
+        "urls": {
+          "windowsX64": "https://your-server.com/custom-php.zip"
+        }
+      }
+    }
+  }
+}

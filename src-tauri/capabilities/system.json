@@ -1,0 +1,11 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "system",
+  "description": "Capability for system operations (paths, folders, debug). Includes opener plugin for file system operations.",
+  "windows": ["main"],
+  "permissions": [
+    "core:default",
+    "opener:default",
+    "opener:allow-reveal-item-in-dir"
+  ]
+}
