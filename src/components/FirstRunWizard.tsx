@@ -160,6 +160,11 @@ export function FirstRunWizard({ onComplete, ...props }: FirstRunWizardProps) {
     try {
       const existing = await invoke<Record<string, string>>("check_existing_components");
 
+      const isAdminerSelected = packageSelection.phpmyadmin.startsWith("adminer");
+      const existingDatabaseToolVersion = isAdminerSelected
+        ? existing.adminer || ""
+        : existing.phpmyadmin || "";
+
       // All components that should be shown
       const allComponents: ExistingComponent[] = [
         {
@@ -183,8 +188,8 @@ export function FirstRunWizard({ onComplete, ...props }: FirstRunWizardProps) {
         {
           name: packageSelection.phpmyadmin.startsWith("adminer") ? "adminer" : "phpmyadmin",
           displayName: packageSelection.phpmyadmin.startsWith("adminer") ? "Adminer" : "phpMyAdmin",
-          isExisting: !!(existing.adminer || existing.phpmyadmin),
-          version: existing.adminer || existing.phpmyadmin || "",
+          isExisting: !!existingDatabaseToolVersion,
+          version: existingDatabaseToolVersion,
         },
       ];
 

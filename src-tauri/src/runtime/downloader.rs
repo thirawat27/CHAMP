@@ -1080,8 +1080,12 @@ impl RuntimeDownloader {
 
             // Skip if component is in skip list. PHP is version-aware: only skip it
             // when the requested active PHP version is already present.
+            let selected_database_tool_id = self.selected_database_tool_id();
             let should_skip_database_tool = *component == BinaryComponent::PhpMyAdmin
-                && (skip_list.contains(&"adminer") || skip_list.contains(&"phpmyadmin"));
+                && ((selected_database_tool_id.starts_with("adminer")
+                    && skip_list.contains(&"adminer"))
+                    || (selected_database_tool_id.starts_with("phpmyadmin")
+                        && skip_list.contains(&"phpmyadmin")));
 
             if (skip_list.contains(&component_name) || should_skip_database_tool)
                 && (*component != BinaryComponent::Php

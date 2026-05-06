@@ -376,7 +376,7 @@ fn start_caddy(
 
     // Prepare the selected database tool in the writable config directory. This avoids writing into
     // Program Files or any other install directory that may require elevation.
-    ensure_database_tool(paths, mysql_port, database_tool_id)?;
+    ensure_database_tool(paths, service_process.port, mysql_port, database_tool_id)?;
 
     // Always regenerate Caddyfile with current port settings
     let caddyfile_path = paths.config_dir.join("Caddyfile");
@@ -1146,6 +1146,7 @@ php_value[memory_limit] = 256M
 
 fn ensure_database_tool(
     paths: &RuntimePaths,
+    web_port: u16,
     mysql_port: u16,
     database_tool_id: &str,
 ) -> Result<(), String> {
@@ -1156,8 +1157,16 @@ fn ensure_database_tool(
     fs::create_dir_all(&paths.adminer)
         .map_err(|e| format!("Failed to create database tool directory: {}", e))?;
 
+    let requested_source =
+        find_database_tool_source(paths, database_tool_id).map(|source| (database_tool_id, source));
+    let fallback_source = if database_tool_id.starts_with("phpmyadmin") {
+        find_database_tool_source(paths, "adminer").map(|source| ("adminer", source))
+    } else {
+        find_database_tool_source(paths, "phpmyadmin").map(|source| ("phpmyadmin", source))
+    };
+
     let index_path = paths.adminer.join("index.php");
-    if let Some(source) = find_database_tool_source(paths, database_tool_id) {
+    if let Some((installed_tool_id, source)) = requested_source.or(fallback_source) {
         if source.is_file() {
             fs::copy(&source, &index_path).map_err(|e| {
                 format!(
@@ -1169,8 +1178,8 @@ fn ensure_database_tool(
         } else {
             copy_dir_contents(&source, &paths.adminer)?;
         }
-        if database_tool_id.starts_with("phpmyadmin") {
-            write_phpmyadmin_config(&paths.adminer, mysql_port)?;
+        if installed_tool_id.starts_with("phpmyadmin") {
+            write_phpmyadmin_config(&paths.adminer, web_port, mysql_port)?;
         }
         return Ok(());
     }
@@ -1321,19 +1330,21 @@ fn copy_dir_contents(source: &PathBuf, target: &PathBuf) -> Result<(), String> {
     Ok(())
 }
 
-fn write_phpmyadmin_config(target: &PathBuf, mysql_port: u16) -> Result<(), String> {
+fn write_phpmyadmin_config(target: &PathBuf, web_port: u16, mysql_port: u16) -> Result<(), String> {
     let config = format!(
         r#"<?php
 $cfg['blowfish_secret'] = 'CHAMP_LOCAL_DEV_BLOWFISH_1234567';
+$cfg['PmaAbsoluteUri'] = 'http://localhost:{}/phpmyadmin/';
 $i = 0;
 $i++;
 $cfg['Servers'][$i]['auth_type'] = 'cookie';
 $cfg['Servers'][$i]['host'] = '127.0.0.1';
 $cfg['Servers'][$i]['port'] = '{}';
 $cfg['Servers'][$i]['AllowNoPassword'] = true;
+$cfg['CheckConfigurationPermissions'] = false;
 $cfg['TempDir'] = __DIR__ . '/tmp';
 "#,
-        mysql_port
+        web_port, mysql_port
     );
 
     fs::create_dir_all(target.join("tmp")).map_err(|e| {
