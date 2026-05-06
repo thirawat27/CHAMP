@@ -37,7 +37,7 @@ export function PackageSelector({ onSelectionChange, initialSelection }: Package
     if (packages) {
       onSelectionChange(selection);
     }
-  }, [selection, packages]);
+  }, [selection, packages, onSelectionChange]);
 
   const loadPackages = async () => {
     try {
