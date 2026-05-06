@@ -960,6 +960,37 @@ button:disabled {
   min-height: 36px;
 }
 
+.setup-actions .setup-btn-next {
+  background: linear-gradient(135deg, #15803d, #22c55e);
+  border-color: #86efac;
+  color: #f0fdf4;
+}
+
+.setup-actions .setup-btn-back,
+.setup-actions .setup-btn-help {
+  background: linear-gradient(135deg, #475569, #64748b);
+  border-color: #cbd5e1;
+  color: #f8fafc;
+}
+
+.setup-actions .setup-btn-existing {
+  background: linear-gradient(135deg, #1d4ed8, #3b82f6);
+  border-color: #93c5fd;
+  color: #eff6ff;
+}
+
+.setup-actions .setup-btn-keep {
+  background: linear-gradient(135deg, #ca8a04, #facc15);
+  border-color: #fde047;
+  color: #1f1600;
+}
+
+.setup-actions .setup-btn-install-all {
+  background: linear-gradient(135deg, #15803d, #22c55e);
+  border-color: #86efac;
+  color: #f0fdf4;
+}
+
 .setup-summary {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));

@@ -1,508 +1,766 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="th">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>CAMPP User Manual</title>
+  <title>CHAMP User Manual</title>
   <style>
     :root {
-      --color-primary: #24c8db;
-      --color-text: #333;
-      --color-bg: #fff;
-      --color-border: #e5e7eb;
-      --color-code-bg: #f5f5f5;
-    }
-
-    @media (prefers-color-scheme: dark) {
-      :root {
-        --color-text: #e5e5e5;
-        --color-bg: #1a1a1a;
-        --color-border: #374151;
-        --color-code-bg: #2d2d2d;
-      }
+      --bg: #171211;
+      --panel: #211918;
+      --panel-soft: #2e2420;
+      --panel-strong: #3a2922;
+      --text: #f8eee7;
+      --muted: #d0a894;
+      --line: #4d3830;
+      --brand: #c86b3c;
+      --brand-strong: #f28a3a;
+      --accent: #3f7f7a;
+      --green: #22c55e;
+      --yellow: #facc15;
+      --red: #ef4444;
+      --blue: #2563eb;
+      --shadow: 0 22px 50px rgba(0, 0, 0, 0.34);
     }
 
     * {
-      margin: 0;
-      padding: 0;
       box-sizing: border-box;
     }
 
+    html {
+      scroll-behavior: smooth;
+    }
+
     body {
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
-      line-height: 1.6;
-      color: var(--color-text);
-      background-color: var(--color-bg);
-      padding: 2rem;
-      max-width: 900px;
-      margin: 0 auto;
+      margin: 0;
+      font-family: "Noto Sans Thai", "Segoe UI", system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+      line-height: 1.7;
+      color: var(--text);
+      background:
+        radial-gradient(circle at 12% 0%, rgba(200, 107, 60, 0.22), transparent 34rem),
+        linear-gradient(135deg, #120e0d 0%, #1b1311 45%, #171211 100%);
     }
 
-    h1 {
-      color: var(--color-primary);
-      margin-bottom: 1rem;
-      font-size: 2rem;
-      border-bottom: 2px solid var(--color-primary);
-      padding-bottom: 0.5rem;
+    a {
+      color: #9ee7df;
+      text-decoration: none;
+      font-weight: 700;
     }
 
-    h2 {
-      color: var(--color-primary);
-      margin-top: 2rem;
-      margin-bottom: 1rem;
-      font-size: 1.5rem;
+    a:hover {
+      text-decoration: underline;
     }
 
-    h3 {
-      margin-top: 1.5rem;
-      margin-bottom: 0.75rem;
-      font-size: 1.2rem;
-    }
-
-    p {
-      margin-bottom: 1rem;
-    }
-
-    ul, ol {
-      margin-bottom: 1rem;
-      padding-left: 1.5rem;
-    }
-
-    li {
-      margin-bottom: 0.5rem;
+    code,
+    pre {
+      font-family: Consolas, "SFMono-Regular", "Liberation Mono", monospace;
     }
 
     code {
-      background-color: var(--color-code-bg);
-      padding: 0.2rem 0.4rem;
-      border-radius: 4px;
-      font-family: 'Consolas', 'Monaco', monospace;
-      font-size: 0.9em;
+      padding: 0.12rem 0.38rem;
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 6px;
+      background: rgba(255, 255, 255, 0.07);
+      color: #ffe7d2;
+      font-size: 0.94em;
     }
 
     pre {
-      background-color: var(--color-code-bg);
-      padding: 1rem;
-      border-radius: 8px;
       overflow-x: auto;
-      margin-bottom: 1rem;
+      margin: 0.75rem 0 1.25rem;
+      padding: 1rem;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #110d0c;
+      color: #f7d9c7;
     }
 
     pre code {
       padding: 0;
-      background: none;
+      border: 0;
+      background: transparent;
+    }
+
+    .shell {
+      width: min(1120px, calc(100% - 32px));
+      margin: 0 auto;
+      padding: 20px 0 48px;
+    }
+
+    .hero {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 390px;
+      gap: 16px;
+      align-items: stretch;
+      margin-bottom: 16px;
+    }
+
+    .hero-main,
+    .hero-side,
+    section {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: color-mix(in srgb, var(--panel) 92%, transparent);
+      box-shadow: var(--shadow);
+    }
+
+    .hero-main {
+      position: relative;
+      overflow: hidden;
+      padding: 22px;
+      background:
+        linear-gradient(135deg, rgba(200, 107, 60, 0.28), rgba(63, 127, 122, 0.16)),
+        var(--panel);
+    }
+
+    .hero-main::after {
+      content: "";
+      position: absolute;
+      right: -90px;
+      bottom: -120px;
+      width: 240px;
+      height: 240px;
+      border: 1px solid rgba(255, 214, 191, 0.16);
+      border-radius: 50%;
+      background: radial-gradient(circle, rgba(242, 138, 58, 0.16), transparent 64%);
+      pointer-events: none;
+    }
+
+    .eyebrow {
+      display: inline-flex;
+      gap: 8px;
+      align-items: center;
+      margin: 0;
+      color: #ffd6bf;
+      font-size: 0.86rem;
+      font-weight: 800;
+      letter-spacing: 0;
+      text-transform: uppercase;
+    }
+
+    .mark {
+      display: inline-grid;
+      width: 34px;
+      height: 34px;
+      place-items: center;
+      border-radius: 8px;
+      background: #f6e8dd;
+      color: #8c4829;
+      font-weight: 900;
+    }
+
+    .hero-top {
+      position: relative;
+      z-index: 1;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      margin-bottom: 18px;
+    }
+
+    .hero-version {
+      padding: 7px 11px;
+      border: 1px solid rgba(255, 214, 191, 0.18);
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.06);
+      color: #ffd6bf;
+      font-size: 0.82rem;
+      font-weight: 800;
+      white-space: nowrap;
+    }
+
+    h1,
+    h2,
+    h3,
+    p {
+      margin-top: 0;
+    }
+
+    h1 {
+      position: relative;
+      z-index: 1;
+      max-width: 660px;
+      margin-bottom: 10px;
+      font-size: clamp(1.85rem, 3.35vw, 3rem);
+      line-height: 1.08;
+      letter-spacing: 0;
+    }
+
+    .hero-main p {
+      position: relative;
+      z-index: 1;
+      max-width: 720px;
+      margin-bottom: 0;
+      color: #ffe8d8;
+      font-size: 1rem;
+      line-height: 1.55;
+    }
+
+    .hero-points {
+      position: relative;
+      z-index: 1;
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 10px;
+      margin-top: 16px;
+    }
+
+    .hero-point {
+      min-height: 58px;
+      padding: 10px;
+      border: 1px solid rgba(255, 214, 191, 0.16);
+      border-radius: 8px;
+      background: rgba(18, 14, 13, 0.36);
+    }
+
+    .hero-point strong {
+      display: block;
+      color: #fff4ec;
+      font-size: 0.94rem;
+      line-height: 1.2;
+    }
+
+    .hero-point span {
+      display: block;
+      margin-top: 3px;
+      color: #d0a894;
+      font-size: 0.8rem;
+      line-height: 1.35;
+    }
+
+    .hero-side {
+      padding: 18px;
+      background: var(--panel-soft);
+    }
+
+    .hero-side h2 {
+      margin-bottom: 4px;
+      font-size: 1.05rem;
+    }
+
+    .hero-side p {
+      margin-bottom: 10px;
+      color: #cba48f;
+      font-size: 0.84rem;
+    }
+
+    .quick-links {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 7px;
+      margin: 0;
+      padding: 0;
+      list-style: none;
+    }
+
+    .quick-links a {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      min-height: 42px;
+      padding: 8px 10px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: rgba(255, 255, 255, 0.04);
+      color: var(--text);
+      line-height: 1.25;
+    }
+
+    .quick-links a:hover {
+      border-color: rgba(242, 138, 58, 0.58);
+      background: rgba(242, 138, 58, 0.1);
+      text-decoration: none;
+    }
+
+    .quick-links span {
+      display: grid;
+      flex: 0 0 auto;
+      width: 28px;
+      height: 28px;
+      place-items: center;
+      border-radius: 7px;
+      background: rgba(200, 107, 60, 0.2);
+      color: #ffd6bf;
+      font-size: 0.76rem;
+      font-weight: 900;
+    }
+
+    .quick-links small {
+      display: block;
+      margin-top: 2px;
+      color: #b9917f;
+      font-size: 0.72rem;
+      font-weight: 600;
+    }
+
+    section {
+      margin: 18px 0;
+      padding: 24px;
+    }
+
+    h2 {
+      margin-bottom: 14px;
+      color: #fff4ec;
+      font-size: 1.45rem;
+      line-height: 1.2;
+    }
+
+    h3 {
+      margin: 22px 0 8px;
+      color: #ffd6bf;
+      font-size: 1.05rem;
+    }
+
+    p,
+    li,
+    td {
+      color: var(--muted);
+    }
+
+    ul,
+    ol {
+      margin: 0 0 1rem;
+      padding-left: 1.3rem;
+    }
+
+    li {
+      margin-bottom: 0.35rem;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 12px;
+    }
+
+    .stat,
+    .callout {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: rgba(255, 255, 255, 0.04);
+      padding: 14px;
+    }
+
+    .stat strong {
+      display: block;
+      color: var(--text);
+      font-size: 1rem;
+    }
+
+    .stat span,
+    .callout {
+      color: var(--muted);
+      font-size: 0.95rem;
+    }
+
+    .callout {
+      margin: 14px 0;
+      border-left: 4px solid var(--accent);
+    }
+
+    .callout.warning {
+      border-left-color: var(--yellow);
+    }
+
+    .callout.danger {
+      border-left-color: var(--red);
+    }
+
+    .pill-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin: 10px 0 2px;
+    }
+
+    .pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      min-height: 34px;
+      padding: 7px 11px;
+      border-radius: 999px;
+      border: 1px solid var(--line);
+      background: rgba(255, 255, 255, 0.04);
+      color: var(--text);
+      font-weight: 800;
+    }
+
+    .pill.green {
+      background: rgba(34, 197, 94, 0.16);
+      border-color: rgba(134, 239, 172, 0.65);
+      color: #dcfce7;
+    }
+
+    .pill.yellow {
+      background: rgba(250, 204, 21, 0.16);
+      border-color: rgba(253, 224, 71, 0.75);
+      color: #fef9c3;
+    }
+
+    .pill.red {
+      background: rgba(239, 68, 68, 0.16);
+      border-color: rgba(252, 165, 165, 0.7);
+      color: #fee2e2;
+    }
+
+    .pill.blue {
+      background: rgba(37, 99, 235, 0.2);
+      border-color: rgba(147, 197, 253, 0.72);
+      color: #dbeafe;
     }
 
     table {
       width: 100%;
+      margin: 10px 0 16px;
       border-collapse: collapse;
-      margin-bottom: 1rem;
+      overflow: hidden;
+      border: 1px solid var(--line);
+      border-radius: 8px;
     }
 
-    th, td {
-      border: 1px solid var(--color-border);
-      padding: 0.75rem;
+    th,
+    td {
+      padding: 11px 12px;
+      border-bottom: 1px solid var(--line);
       text-align: left;
+      vertical-align: top;
     }
 
     th {
-      background-color: var(--color-code-bg);
+      background: var(--panel-strong);
+      color: var(--text);
     }
 
-    .note {
-      background-color: #dbeafe;
-      border-left: 4px solid #3b82f6;
-      padding: 1rem;
-      margin-bottom: 1rem;
-      border-radius: 0 8px 8px 0;
+    tr:last-child td {
+      border-bottom: 0;
     }
 
-    .warning {
-      background-color: #fef3c7;
-      border-left: 4px solid #f59e0b;
-      padding: 1rem;
-      margin-bottom: 1rem;
-      border-radius: 0 8px 8px 0;
+    .footer {
+      margin-top: 22px;
+      padding: 18px 0 0;
+      color: #a98978;
+      text-align: center;
+      font-size: 0.9rem;
     }
 
-    .tip {
-      background-color: #d1fae5;
-      border-left: 4px solid #10b981;
-      padding: 1rem;
-      margin-bottom: 1rem;
-      border-radius: 0 8px 8px 0;
-    }
-
-    @media (prefers-color-scheme: dark) {
-      .note {
-        background-color: #1e3a5f;
-      }
-      .warning {
-        background-color: #78350f;
-      }
-      .tip {
-        background-color: #065f46;
-      }
-    }
-
-    .back-to-top {
+    .top {
       position: fixed;
-      bottom: 2rem;
-      right: 2rem;
-      background-color: var(--color-primary);
-      color: white;
-      padding: 0.5rem 1rem;
-      border-radius: 8px;
-      text-decoration: none;
-      font-weight: 500;
+      right: 18px;
+      bottom: 18px;
+      padding: 10px 14px;
+      border: 1px solid rgba(255, 255, 255, 0.18);
+      border-radius: 999px;
+      background: var(--brand);
+      color: #fff;
+      box-shadow: 0 12px 30px rgba(0, 0, 0, 0.35);
     }
 
-    .back-to-top:hover {
-      opacity: 0.9;
+    @media (max-width: 820px) {
+      .hero,
+      .grid {
+        grid-template-columns: 1fr;
+      }
+
+      .hero-main,
+      .hero-side,
+      section {
+        padding: 20px;
+      }
+
+      table {
+        display: block;
+        overflow-x: auto;
+      }
+
+      .hero-points {
+        grid-template-columns: 1fr;
+      }
+
+      .hero-top {
+        align-items: flex-start;
+        flex-direction: column;
+        margin-bottom: 22px;
+      }
     }
   </style>
 </head>
 <body>
-  <h1>CAMPP User Manual</h1>
-  <p><strong>Version 0.2.1</strong> | Local Web Development Stack</p>
+  <div class="shell">
+    <header id="top" class="hero">
+      <div class="hero-main">
+        <div class="hero-top">
+          <p class="eyebrow"><span class="mark">C</span> CHAMP Manual</p>
+          <span class="hero-version">Version 1.0.0</span>
+        </div>
+        <h1>คู่มือใช้งาน CHAMP สำหรับเว็บ PHP ในเครื่อง</h1>
+        <p>รัน Caddy, PHP-FPM, MySQL และ phpMyAdmin/Adminer ได้จากแอปเดียว พร้อมพอร์ตเริ่มต้นที่ไม่ชนกับ service ระบบและเก็บข้อมูลทั้งหมดไว้ในโฟลเดอร์ของผู้ใช้</p>
+        <div class="hero-points" aria-label="Default endpoints">
+          <div class="hero-point">
+            <strong>Site</strong>
+            <span>localhost:8080</span>
+          </div>
+          <div class="hero-point">
+            <strong>Database</strong>
+            <span>127.0.0.1:3307</span>
+          </div>
+          <div class="hero-point">
+            <strong>Default Tool</strong>
+            <span>phpMyAdmin 5.2.2</span>
+          </div>
+        </div>
+      </div>
+      <nav class="hero-side" aria-label="Manual sections">
+        <h2>เมนูคู่มือ</h2>
+        <p>เลือกหัวข้อที่ต้องการดูอย่างรวดเร็ว</p>
+        <ul class="quick-links">
+          <li><a href="#stack"><span>01</span><strong>Runtime ปัจจุบัน<small>เวอร์ชันที่แอปใช้ตอนนี้</small></strong></a></li>
+          <li><a href="#first-run"><span>02</span><strong>ติดตั้ง Runtime<small>เลือกแพ็กเกจและ Install All</small></strong></a></li>
+          <li><a href="#dashboard"><span>03</span><strong>Dashboard<small>Start, Stop, Restart และ quick actions</small></strong></a></li>
+          <li><a href="#urls"><span>04</span><strong>URL และพอร์ต<small>ลิงก์เปิดเว็บและ database tool</small></strong></a></li>
+          <li><a href="#database"><span>05</span><strong>Database<small>ข้อมูล login และตัวอย่าง PDO</small></strong></a></li>
+          <li><a href="#settings"><span>06</span><strong>Settings<small>ปรับ port, project path และ tool</small></strong></a></li>
+          <li><a href="#troubleshooting"><span>07</span><strong>แก้ปัญหา<small>แนวทางแก้ error ที่พบบ่อย</small></strong></a></li>
+        </ul>
+      </nav>
+    </header>
 
-  <h2 id="overview">Overview</h2>
-  <p>CAMPP is a cross-platform local web development stack that bundles everything you need to run PHP websites locally:</p>
-  <ul>
-    <li><strong>Caddy 2.8.4</strong> - Modern web server with automatic HTTPS</li>
-    <li><strong>PHP-FPM 8.5.1</strong> - Fast PHP runtime</li>
-    <li><strong>Database</strong> - MySQL 8.4.0 on Windows/macOS, MariaDB 12.3.1 on Linux</li>
-    <li><strong>phpMyAdmin 5.2.2</strong> - Web-based database management</li>
-  </ul>
+    <section id="stack">
+      <h2>Runtime ปัจจุบัน</h2>
+      <div class="grid">
+        <div class="stat"><strong>Caddy 2.11.2</strong><span>Web server หลัก เปิดเว็บผ่านพอร์ต 8080</span></div>
+        <div class="stat"><strong>PHP-FPM 8.5.1</strong><span>PHP runtime ค่าเริ่มต้น เลือกเวอร์ชัน PHP เพิ่มได้ใน Settings</span></div>
+        <div class="stat"><strong>MySQL 8.4.0</strong><span>Database service ค่าเริ่มต้น ใช้พอร์ต 3307</span></div>
+        <div class="stat"><strong>phpMyAdmin 5.2.2</strong><span>เครื่องมือจัดการฐานข้อมูลค่าเริ่มต้น โดยเลือก Adminer 5.4.1 แทนได้</span></div>
+      </div>
+      <div class="callout">
+        CHAMP ใช้โฟลเดอร์ข้อมูลของผู้ใช้ เช่น <code>%LOCALAPPDATA%\CHAMP</code> บน Windows เพื่อหลีกเลี่ยงปัญหา permission และไม่ต้องรันด้วยสิทธิ์ administrator
+      </div>
+    </section>
 
-  <h2 id="installation">Installation</h2>
-  <h3>Windows</h3>
-  <ol>
-    <li>Download the installer from <a href="https://github.com/KarnYong/campp/releases">GitHub Releases</a></li>
-    <li>Run the installer (NSIS or MSI)</li>
-    <li>Choose your project folder location during installation (default: <code>%LOCALAPPDATA%\campp\projects</code>)</li>
-    <li>If Windows SmartScreen shows a warning, click <strong>More info</strong> → <strong>Run anyway</strong></li>
-    <li>Launch CAMPP from Start Menu or Desktop shortcut</li>
-  </ol>
+    <section id="install">
+      <h2>ติดตั้งแอป</h2>
+      <h3>Windows</h3>
+      <ol>
+        <li>ดาวน์โหลดตัวติดตั้งจาก <a href="https://github.com/thirawat27/CHAMP/releases">GitHub Releases</a></li>
+        <li>เปิด installer แล้วติดตั้งตามขั้นตอน</li>
+        <li>ถ้า Windows SmartScreen แจ้งเตือน ให้เลือก <strong>More info</strong> แล้วกด <strong>Run anyway</strong></li>
+        <li>เปิด CHAMP จาก Start Menu หรือ shortcut</li>
+      </ol>
+      <h3>macOS และ Linux</h3>
+      <p>ใช้ไฟล์ bundle ที่เผยแพร่ใน GitHub Releases แล้วเปิดใช้งานตามชนิดไฟล์ของระบบปฏิบัติการ เช่น <code>.dmg</code> บน macOS หรือ <code>.AppImage</code> บน Linux</p>
+    </section>
 
-  <h3>macOS</h3>
-  <ol>
-    <li>Download the <code>.dmg</code> file from <a href="https://github.com/KarnYong/campp/releases">GitHub Releases</a></li>
-    <li>Open the DMG and drag CAMPP to Applications</li>
-    <li>Launch CAMPP from Applications or Launchpad</li>
-  </ol>
+    <section id="first-run">
+      <h2>ติดตั้ง Runtime ครั้งแรก</h2>
+      <p>เมื่อเปิดแอปครั้งแรก CHAMP จะแสดง Setup Wizard เพื่อเลือกและติดตั้ง runtime ที่จำเป็น</p>
+      <ol>
+        <li>ตรวจรายการในหน้า Welcome และ Packages</li>
+        <li>เลือก PHP version, Database package และ Database Tool ที่ต้องการ</li>
+        <li>ค่าเริ่มต้นคือ PHP 8.5.1, MySQL 8.4.0 และ phpMyAdmin 5.2.2</li>
+        <li>หน้า Review จะสรุปรายการก่อนติดตั้ง</li>
+        <li>กด <strong>Install All</strong> เพื่อดาวน์โหลดและติดตั้งทุกอย่าง</li>
+      </ol>
+      <div class="pill-row" aria-label="Setup button colors">
+        <span class="pill">Back</span>
+        <span class="pill blue">Use Existing</span>
+        <span class="pill yellow">Keep &amp; Install</span>
+        <span class="pill green">Install All</span>
+      </div>
+      <div class="callout warning">
+        ถ้ามี runtime อยู่แล้ว ปุ่ม <strong>Use Existing</strong> จะใช้ของเดิม ส่วน <strong>Keep &amp; Install</strong> จะเก็บของเดิมและติดตั้งรายการใหม่ตามที่เลือก
+      </div>
+    </section>
 
-  <h3>Linux</h3>
-  <ol>
-    <li>Download the <code>.AppImage</code> file from <a href="https://github.com/KarnYong/campp/releases">GitHub Releases</a></li>
-    <li>Make the file executable: <code>chmod +x CAMPP-*.AppImage</code></li>
-    <li>Run the AppImage: <code>./CAMPP-*.AppImage</code></li>
-  </ol>
+    <section id="dashboard">
+      <h2>หน้า Dashboard</h2>
+      <p>Dashboard ใช้ควบคุม service ทั้งหมดและเปิดเครื่องมือที่ใช้บ่อย</p>
+      <h3>Service Cards</h3>
+      <ul>
+        <li><strong>Caddy</strong> แสดงพอร์ตเว็บและ URL สำหรับเปิด site root</li>
+        <li><strong>PHP-FPM</strong> แสดง FastCGI port สำหรับ Caddy ใช้ภายใน</li>
+        <li><strong>MySQL</strong> แสดง database port และสถานะ service</li>
+      </ul>
+      <h3>สีปุ่มหลัก</h3>
+      <div class="pill-row">
+        <span class="pill green">Start / Start Stack</span>
+        <span class="pill yellow">Restart</span>
+        <span class="pill red">Stop</span>
+      </div>
+      <h3>Quick Actions</h3>
+      <ul>
+        <li><strong>Site</strong> เปิดเว็บที่ <a href="http://localhost:8080">http://localhost:8080</a></li>
+        <li><strong>phpMyAdmin หรือ Adminer</strong> เปิดตาม Database Tool ที่เลือกไว้</li>
+        <li><strong>Projects</strong> เปิดโฟลเดอร์โปรเจกต์</li>
+        <li><strong>Logs</strong> เปิดโฟลเดอร์ logs</li>
+        <li><strong>Config</strong> เปิดโฟลเดอร์ config</li>
+        <li><strong>GitHub</strong> เปิด repository ของ CHAMP</li>
+      </ul>
+    </section>
 
-  <div class="note">
-    <strong>Note:</strong> The Windows SmartScreen warning appears because the app is not code-signed. This is normal and safe. The source code is publicly available on GitHub.
-  </div>
+    <section id="urls">
+      <h2>URL และพอร์ตค่าเริ่มต้น</h2>
+      <table>
+        <tr>
+          <th>รายการ</th>
+          <th>ค่าเริ่มต้น</th>
+          <th>วิธีใช้งาน</th>
+        </tr>
+        <tr>
+          <td>Site root</td>
+          <td><a href="http://localhost:8080">http://localhost:8080</a></td>
+          <td>เปิดหน้าเว็บหลักจากโฟลเดอร์ projects</td>
+        </tr>
+        <tr>
+          <td>phpMyAdmin</td>
+          <td><a href="http://localhost:8080/phpmyadmin/">http://localhost:8080/phpmyadmin/</a></td>
+          <td>Database Tool ค่าเริ่มต้น</td>
+        </tr>
+        <tr>
+          <td>Adminer</td>
+          <td><a href="http://localhost:8080/adminer/">http://localhost:8080/adminer/</a></td>
+          <td>ใช้เมื่อเลือก Adminer ใน Package selection</td>
+        </tr>
+        <tr>
+          <td>PHP-FPM</td>
+          <td><code>127.0.0.1:9000</code></td>
+          <td>FastCGI ภายใน ไม่ใช่หน้าเว็บสำหรับเปิดใน browser</td>
+        </tr>
+        <tr>
+          <td>MySQL</td>
+          <td><code>127.0.0.1:3307</code></td>
+          <td>ใช้ต่อจาก PHP app หรือ database client</td>
+        </tr>
+      </table>
+      <div class="callout">
+        ใน Service Card ของแต่ละ service จะมี URL/Port ให้กดเปิดหรือคัดลอกได้ง่ายขึ้น ถ้าเปลี่ยน port ใน Settings URL จะเปลี่ยนตาม port ใหม่
+      </div>
+    </section>
 
-  <div class="tip">
-    <strong>Windows Installation:</strong> You can select a custom project folder location during installation. On macOS and Linux, the project folder uses the default location but can be changed later in Settings.
-  </div>
-
-  <h2 id="first-run">First Run</h2>
-  <p>On first launch, CAMPP will display a setup wizard that downloads the required runtime components (~500MB):</p>
-  <ol>
-    <li>Click <strong>Start Setup</strong> to begin downloading</li>
-    <li>Wait for all components to download (this may take a few minutes)</li>
-    <li>Click <strong>Get Started</strong> when complete</li>
-  </ol>
-
-  <h2 id="dashboard">Dashboard</h2>
-  <p>The main dashboard shows three service cards:</p>
-
-  <h3>Service Controls</h3>
-  <p>Each service card displays:</p>
-  <ul>
-    <li><strong>Status</strong> - Running, Stopped, or Error</li>
-    <li><strong>Port</strong> - The port the service uses</li>
-    <li><strong>Start/Stop/Restart</strong> buttons</li>
-  </ul>
-
-  <h3>Quick Actions (Top Right)</h3>
-  <ul>
-    <li><strong>Open Site</strong> - Opens http://localhost:8080 in your browser</li>
-    <li><strong>phpMyAdmin</strong> - Opens http://localhost:8080/phpmyadmin</li>
-    <li><strong>Settings</strong> - Opens the settings panel</li>
-  </ul>
-
-  <h2 id="default-ports">Default Ports</h2>
-  <table>
-    <tr>
-      <th>Service</th>
-      <th>Port</th>
-      <th>Access URL</th>
-    </tr>
-    <tr>
-      <td>Web Server (Caddy)</td>
-      <td>8080</td>
-      <td>http://localhost:8080</td>
-    </tr>
-    <tr>
-      <td>PHP-FPM</td>
-      <td>9000</td>
-      <td>Internal only (FastCGI)</td>
-    </tr>
-    <tr>
-      <td>Database (MySQL/MariaDB)</td>
-      <td>3307</td>
-      <td>localhost:3307</td>
-    </tr>
-    <tr>
-      <td>phpMyAdmin</td>
-      <td>8080</td>
-      <td>http://localhost:8080/phpmyadmin</td>
-    </tr>
-  </table>
-
-  <div class="tip">
-    <strong>Tip:</strong> These ports are chosen to avoid conflicts with system services. You can change them in Settings.
-  </div>
-
-  <div class="note">
-    <strong>Note:</strong> CAMPP uses MySQL 8.4.0 on Windows and macOS, and MariaDB 12.3.1 on Linux. Both are MySQL-compatible and work identically for PHP applications.
-  </div>
-
-  <h2 id="database">Database Connection</h2>
-  <h3>Default Credentials</h3>
-  <table>
-    <tr>
-      <th>Setting</th>
-      <th>Value</th>
-    </tr>
-    <tr>
-      <td>Host</td>
-      <td>localhost</td>
-    </tr>
-    <tr>
-      <td>Port</td>
-      <td>3307</td>
-    </tr>
-    <tr>
-      <td>Username</td>
-      <td>root</td>
-    </tr>
-    <tr>
-      <td>Password</td>
-      <td><em>(empty - leave blank)</em></td>
-    </tr>
-  </table>
-
-  <h3>PHP Connection Example</h3>
-  <pre><code>&lt;?php
+    <section id="database">
+      <h2>Database</h2>
+      <h3>ข้อมูลเชื่อมต่อค่าเริ่มต้น</h3>
+      <table>
+        <tr><th>Setting</th><th>Value</th></tr>
+        <tr><td>Host</td><td><code>127.0.0.1</code> หรือ <code>localhost</code></td></tr>
+        <tr><td>Port</td><td><code>3307</code></td></tr>
+        <tr><td>User</td><td><code>root</code></td></tr>
+        <tr><td>Password</td><td>เว้นว่าง</td></tr>
+      </table>
+      <h3>ตัวอย่าง PHP PDO</h3>
+      <pre><code>&lt;?php
 $pdo = new PDO(
-    'mysql:host=localhost;port=3307;charset=utf8mb4',
+    'mysql:host=127.0.0.1;port=3307;charset=utf8mb4',
     'root',
     ''
 );</code></pre>
+      <div class="callout warning">
+        ถ้าเปิด phpMyAdmin หรือ Adminer แล้วเข้าไม่ได้ ให้ตรวจว่า MySQL service กำลัง Running ก่อน
+      </div>
+    </section>
 
-  <h2 id="project-folder">Project Folder</h2>
-  <p>Your website files should be placed in the project folder. The default locations are:</p>
+    <section id="projects">
+      <h2>โฟลเดอร์ Projects</h2>
+      <p>วางไฟล์เว็บไว้ในโฟลเดอร์ <code>projects</code> แล้วเปิดผ่าน Caddy ที่พอร์ต 8080</p>
+      <pre><code>projects/
+  my-site/
+    index.php
+    assets/
+      style.css
+  another-site/
+    index.php</code></pre>
+      <p>ตัวอย่าง URL:</p>
+      <ul>
+        <li><a href="http://localhost:8080/my-site/">http://localhost:8080/my-site/</a></li>
+        <li><a href="http://localhost:8080/another-site/">http://localhost:8080/another-site/</a></li>
+      </ul>
+    </section>
 
-  <h4>Windows</h4>
-  <pre><code>C:\Users\&lt;YourUsername&gt;\AppData\Local\campp\projects</code></pre>
+    <section id="settings">
+      <h2>Settings</h2>
+      <p>ใช้ Settings เพื่อปรับพอร์ต, โฟลเดอร์โปรเจกต์ และ runtime package ที่เลือกใช้งาน</p>
+      <ul>
+        <li>Web Server Port ค่าเริ่มต้น <code>8080</code></li>
+        <li>PHP-FPM Port ค่าเริ่มต้น <code>9000</code></li>
+        <li>Database Port ค่าเริ่มต้น <code>3307</code></li>
+        <li>Project Root Directory สำหรับเก็บเว็บของคุณ</li>
+        <li>Database Tool เลือกได้ระหว่าง phpMyAdmin และ Adminer โดย phpMyAdmin เป็นค่าเริ่มต้น</li>
+        <li>PHP Versions ใช้ติดตั้งหรือสลับ PHP version ที่มีใน runtime config</li>
+      </ul>
+      <div class="pill-row">
+        <span class="pill red">Cancel</span>
+        <span class="pill green">Save</span>
+      </div>
+      <div class="callout danger">
+        หลังเปลี่ยน port หรือ runtime package ควร Restart Stack เพื่อให้ config และ service ใช้ค่าใหม่ครบถ้วน
+      </div>
+    </section>
 
-  <h4>macOS</h4>
-  <pre><code>~/Library/Application Support/campp/projects</code></pre>
+    <section id="data">
+      <h2>ตำแหน่งข้อมูล</h2>
+      <table>
+        <tr>
+          <th>ระบบ</th>
+          <th>Base directory</th>
+        </tr>
+        <tr>
+          <td>Windows</td>
+          <td><code>%LOCALAPPDATA%\CHAMP\</code></td>
+        </tr>
+        <tr>
+          <td>macOS</td>
+          <td><code>~/Library/Application Support/CHAMP/</code></td>
+        </tr>
+        <tr>
+          <td>Linux</td>
+          <td><code>~/.local/share/CHAMP/</code></td>
+        </tr>
+      </table>
+      <p>ภายใน base directory จะมีโฟลเดอร์หลักเหล่านี้:</p>
+      <ul>
+        <li><code>runtime</code> เก็บ binary ที่ดาวน์โหลดมา</li>
+        <li><code>config</code> เก็บ Caddyfile, php.ini และ config ของ database tool</li>
+        <li><code>mysql\data</code> เก็บข้อมูลฐานข้อมูล</li>
+        <li><code>projects</code> เก็บโปรเจกต์เว็บ</li>
+        <li><code>logs</code> เก็บ log ของ service</li>
+      </ul>
+    </section>
 
-  <h4>Linux</h4>
-  <pre><code>~/.local/share/campp/projects</code></pre>
+    <section id="troubleshooting">
+      <h2>แก้ปัญหาเบื้องต้น</h2>
+      <h3>Service start ไม่ขึ้น</h3>
+      <ul>
+        <li>ตรวจว่า port ไม่ถูกโปรแกรมอื่นใช้อยู่</li>
+        <li>ลองเปลี่ยน port ใน Settings แล้ว Restart Stack</li>
+        <li>เปิด Logs เพื่อดู error จาก service นั้น</li>
+      </ul>
+      <h3>phpMyAdmin ขึ้นว่าไม่ติดตั้ง หรือเปิดแล้วเป็นหน้า error</h3>
+      <ul>
+        <li>เข้า Setup Wizard แล้วติดตั้ง Database Tool อีกครั้ง</li>
+        <li>ตรวจว่าเลือก phpMyAdmin เป็น Database Tool ถ้าต้องการใช้ URL <code>/phpmyadmin/</code></li>
+        <li>กด Restart Stack หลังติดตั้งหรือเปลี่ยนตัวเลือก</li>
+      </ul>
+      <h3>No input file specified.</h3>
+      <ul>
+        <li>มักเกิดจาก config ชี้ไปที่ tool หรือ project path ที่ไม่มีไฟล์จริง</li>
+        <li>ติดตั้ง Database Tool ให้ครบ แล้ว Restart Stack</li>
+        <li>ถ้ายังเกิดซ้ำ ให้ Reset Installation จาก debug/tools ของแอป แล้วติดตั้ง runtime ใหม่</li>
+      </ul>
+    </section>
 
-  <div class="tip">
-    <strong>Project Folder Location:</strong>
-    <ul style="margin-top: 0.5rem;">
-      <li><strong>Windows:</strong> Choose a custom location during installation.</li>
-      <li><strong>macOS/Linux:</strong> Uses the default location above.</li>
-    </ul>
+    <section id="support">
+      <h2>Support</h2>
+      <ul>
+        <li>Repository: <a href="https://github.com/thirawat27/CHAMP">https://github.com/thirawat27/CHAMP</a></li>
+        <li>Issues: <a href="https://github.com/thirawat27/CHAMP/issues">https://github.com/thirawat27/CHAMP/issues</a></li>
+        <li>Version: <code>1.0.0</code></li>
+        <li>License: MIT</li>
+      </ul>
+    </section>
+
+    <p class="footer">CHAMP by Thirawat27 | Local Web Development Stack</p>
   </div>
-
-  <p>To quickly access this folder:</p>
-  <ol>
-    <li>Click <strong>Settings</strong> (gear icon)</li>
-    <li>Click <strong>Open</strong> next to "Project Root Directory"</li>
-  </ol>
-
-  <h3>Example Project Structure</h3>
-  <pre><code>projects/
-├── my-site/
-│   ├── index.php
-│   ├── about.php
-│   └── assets/
-│       └── style.css
-└── another-site/
-    └── index.php</code></pre>
-
-  <p>Access your sites at:</p>
-  <ul>
-    <li>http://localhost:8080/my-site/</li>
-    <li>http://localhost:8080/another-site/</li>
-  </ul>
-
-  <h2 id="settings">Settings</h2>
-  <p>Click the <strong>Settings</strong> button to configure:</p>
-
-  <h3>Port Configuration</h3>
-  <ul>
-    <li>Web Server Port (default: 8080)</li>
-    <li>PHP-FPM Port (default: 9000)</li>
-    <li>Database Port (default: 3307)</li>
-  </ul>
-
-  <div class="warning">
-    <strong>Warning:</strong> Changing ports requires restarting all services to take effect.
-  </div>
-
-  <h3>Project Root Directory</h3>
-  <p>Change where your project files are stored. Click <strong>Open</strong> to view the folder in Explorer.</p>
-
-  <h2 id="debug-menu">Debug Menu</h2>
-  <p>Press <strong>Ctrl+Shift+D</strong> to open the debug menu:</p>
-  <ul>
-    <li><strong>Open Runtime Folder</strong> - View downloaded binaries</li>
-    <li><strong>View Download Folder</strong> - View downloaded ZIP files</li>
-    <li><strong>Reset Installation</strong> - Delete all binaries and restart setup</li>
-    <li><strong>Show First-Run Wizard</strong> - Re-run the initial setup</li>
-  </ul>
-
-  <h2 id="troubleshooting">Troubleshooting</h2>
-
-  <h3>Service won't start</h3>
-  <ul>
-    <li>Check if the port is already in use by another application</li>
-    <li>Try changing the port in Settings</li>
-    <li>Check the error message displayed on the service card</li>
-  </ul>
-
-  <h3>phpMyAdmin shows errors</h3>
-  <ul>
-    <li>Make sure the database service (MySQL/MariaDB) is running first</li>
-    <li>Try restarting the database service</li>
-  </ul>
-
-  <h3>Reset everything</h3>
-  <ol>
-    <li>Press <strong>Ctrl+Shift+D</strong> to open debug menu</li>
-    <li>Click <strong>Reset Installation</strong></li>
-    <li>This will stop all services and delete runtime binaries</li>
-    <li>Restart the app to re-download everything</li>
-  </ol>
-
-  <h3>Antivirus detects a threat</h3>
-  <p>This is a false positive. The app is safe because:</p>
-  <ul>
-    <li>Source code is open and available on GitHub</li>
-    <li>The warning appears because the app is not code-signed</li>
-    <li>Add an exception in your antivirus for the CAMPP folder</li>
-  </ul>
-
-  <h2 id="data-locations">Data Locations</h2>
-
-  <h4>Windows</h4>
-  <table>
-    <tr>
-      <th>What</th>
-      <th>Location</th>
-    </tr>
-    <tr>
-      <td>Runtime Binaries</td>
-      <td><code>%LOCALAPPDATA%\campp\runtime\</code></td>
-    </tr>
-    <tr>
-      <td>Project Files</td>
-      <td><code>%LOCALAPPDATA%\campp\projects\</code> <em>(configurable)</em></td>
-    </tr>
-    <tr>
-      <td>Configuration</td>
-      <td><code>%LOCALAPPDATA%\campp\config\</code></td>
-    </tr>
-    <tr>
-      <td>Database Data</td>
-      <td><code>%LOCALAPPDATA%\campp\mysql\data\</code></td>
-    </tr>
-    <tr>
-      <td>Logs</td>
-      <td><code>%LOCALAPPDATA%\campp\logs\</code></td>
-    </tr>
-  </table>
-
-  <h4>macOS</h4>
-  <table>
-    <tr>
-      <th>What</th>
-      <th>Location</th>
-    </tr>
-    <tr>
-      <td>Runtime Binaries</td>
-      <td><code>~/Library/Application Support/campp/runtime/</code></td>
-    </tr>
-    <tr>
-      <td>Project Files</td>
-      <td><code>~/Library/Application Support/campp/projects/</code></td>
-    </tr>
-    <tr>
-      <td>Configuration</td>
-      <td><code>~/Library/Application Support/campp/config/</code></td>
-    </tr>
-    <tr>
-      <td>Database Data</td>
-      <td><code>~/Library/Application Support/campp/mysql/data/</code></td>
-    </tr>
-    <tr>
-      <td>Logs</td>
-      <td><code>~/Library/Application Support/campp/logs/</code></td>
-    </tr>
-  </table>
-
-  <h4>Linux</h4>
-  <table>
-    <tr>
-      <th>What</th>
-      <th>Location</th>
-    </tr>
-    <tr>
-      <td>Runtime Binaries</td>
-      <td><code>~/.local/share/campp/runtime/</code></td>
-    </tr>
-    <tr>
-      <td>Project Files</td>
-      <td><code>~/.local/share/campp/projects/</code></td>
-    </tr>
-    <tr>
-      <td>Configuration</td>
-      <td><code>~/.local/share/campp/config/</code></td>
-    </tr>
-    <tr>
-      <td>Database Data</td>
-      <td><code>~/.local/share/campp/mysql/data/</code></td>
-    </tr>
-    <tr>
-      <td>Logs</td>
-      <td><code>~/.local/share/campp/logs/</code></td>
-    </tr>
-  </table>
-
-  <div class="note">
-    <strong>Note:</strong> Check Settings to see your actual project folder location. On Windows, this may differ if you configured a custom path during installation.
-  </div>
-
-  <h2 id="support">Support</h2>
-  <ul>
-    <li><strong>GitHub:</strong> <a href="https://github.com/KarnYong/campp">https://github.com/KarnYong/campp</a></li>
-    <li><strong>Report Issues:</strong> <a href="https://github.com/KarnYong/campp/issues">https://github.com/KarnYong/campp/issues</a></li>
-  </ul>
-
-  <hr style="margin: 2rem 0; border: none; border-top: 1px solid var(--color-border);">
-  <p style="text-align: center; color: #666;">
-    <small>CAMPP v0.2.1 | MIT License | &copy; 2024-2025 CAMPP Project</small>
-  </p>
-
-  <a href="#overview" class="back-to-top">Back to Top</a>
+  <a class="top" href="#top">Top</a>
 </body>
 </html>

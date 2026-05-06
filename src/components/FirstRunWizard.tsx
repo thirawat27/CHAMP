@@ -409,20 +409,15 @@ export function FirstRunWizard({ onComplete, ...props }: FirstRunWizardProps) {
                   {hasExistingOnWelcome && (
                     <button
                       onClick={handleSkipFromWelcome}
-                      className="btn-secondary"
-                      style={{
-                        fontSize: "0.875rem",
-                        padding: "0.5rem 1rem",
-                        borderColor: "var(--color-primary)",
-                        color: "var(--color-primary)",
-                      }}
+                      className="btn-secondary setup-btn-existing"
+                      style={{ fontSize: "0.875rem", padding: "0.5rem 1rem" }}
                     >
                       Use Existing
                     </button>
                   )}
                   <button
                     onClick={handleNext}
-                    className="btn-primary"
+                    className="btn-primary setup-btn-next"
                     style={{ fontSize: "0.875rem", padding: "0.5rem 1rem" }}
                   >
                     {hasExistingOnWelcome ? "Download Fresh" : "Get Started"}
@@ -435,7 +430,7 @@ export function FirstRunWizard({ onComplete, ...props }: FirstRunWizardProps) {
                         console.error("Failed to open manual:", err);
                       }
                     }}
-                    className="btn-secondary"
+                    className="btn-secondary setup-btn-help"
                     title="Read User Manual"
                     style={{ fontSize: "0.875rem", padding: "0.5rem 0.75rem" }}
                   >
@@ -459,14 +454,14 @@ export function FirstRunWizard({ onComplete, ...props }: FirstRunWizardProps) {
                 <div className="setup-actions">
                   <button
                     onClick={handleBack}
-                    className="btn-secondary"
+                    className="btn-secondary setup-btn-back"
                     style={{ fontSize: "0.875rem", padding: "0.5rem 1rem" }}
                   >
                     Back
                   </button>
                   <button
                     onClick={startDownload}
-                    className="btn-primary"
+                    className="btn-primary setup-btn-next"
                     style={{ fontSize: "0.875rem", padding: "0.5rem 1rem" }}
                   >
                     Download & Install
@@ -583,14 +578,14 @@ export function FirstRunWizard({ onComplete, ...props }: FirstRunWizardProps) {
                 <div className="setup-actions">
                   <button
                     onClick={handleBack}
-                    className="btn-secondary"
+                    className="btn-secondary setup-btn-back"
                     style={{ fontSize: "0.875rem", padding: "0.5rem 1rem" }}
                   >
                     Back
                   </button>
                   <button
                     onClick={startDownload}
-                    className="btn-primary"
+                    className="btn-primary setup-btn-next"
                     style={{ fontSize: "0.875rem", padding: "0.5rem 1rem" }}
                   >
                     Retry Check
@@ -648,55 +643,17 @@ export function FirstRunWizard({ onComplete, ...props }: FirstRunWizardProps) {
                       >
                         <span style={{ fontWeight: 500 }}>
                           {component.displayName}
-                          {!component.isExisting && (
-                            <span
-                              style={{
-                                fontSize: "0.7rem",
-                                color: "var(--color-success)",
-                                marginLeft: "0.375rem",
-                                fontWeight: 400,
-                              }}
-                            >
-                              (New)
-                            </span>
-                          )}
                         </span>
                         <div style={{ display: "flex", alignItems: "center", gap: "0.375rem" }}>
-                          {component.isExisting ? (
-                            <>
-                              <span
-                                style={{
-                                  fontSize: "0.75rem",
-                                  color: "var(--color-error)",
-                                  textDecoration: "line-through",
-                                }}
-                              >
-                                {component.version}
-                              </span>
-                              <span style={{ fontSize: "0.75rem", color: "var(--text-secondary)" }}>
-                                →
-                              </span>
-                              <span
-                                style={{
-                                  fontSize: "0.75rem",
-                                  color: "var(--color-success)",
-                                  fontWeight: 500,
-                                }}
-                              >
-                                {newVersion || "Unknown"}
-                              </span>
-                            </>
-                          ) : (
-                            <span
-                              style={{
-                                fontSize: "0.75rem",
-                                color: "var(--color-success)",
-                                fontWeight: 500,
-                              }}
-                            >
-                              {newVersion || "Unknown"}
-                            </span>
-                          )}
+                          <span
+                            style={{
+                              fontSize: "0.75rem",
+                              color: "var(--color-success)",
+                              fontWeight: 500,
+                            }}
+                          >
+                            {newVersion || "Unknown"}
+                          </span>
                         </div>
                       </div>
                     );
@@ -729,33 +686,28 @@ export function FirstRunWizard({ onComplete, ...props }: FirstRunWizardProps) {
                 <div className="setup-actions">
                   <button
                     onClick={handleCancel}
-                    className="btn-secondary"
+                    className="btn-secondary setup-btn-back"
                     style={{ fontSize: "0.875rem", padding: "0.5rem 0.75rem" }}
                   >
                     Back
                   </button>
                   <button
                     onClick={handleSkipToDashboard}
-                    className="btn-secondary"
-                    style={{
-                      fontSize: "0.875rem",
-                      padding: "0.5rem 0.75rem",
-                      borderColor: "var(--color-success)",
-                      color: "var(--color-success)",
-                    }}
+                    className="btn-secondary setup-btn-existing"
+                    style={{ fontSize: "0.875rem", padding: "0.5rem 0.75rem" }}
                   >
                     Use Existing
                   </button>
                   <button
                     onClick={handleSkipExisting}
-                    className="btn-secondary"
+                    className="btn-secondary setup-btn-keep"
                     style={{ fontSize: "0.875rem", padding: "0.5rem 0.75rem" }}
                   >
                     Keep & Install
                   </button>
                   <button
                     onClick={handleOverwriteAll}
-                    className="btn-primary"
+                    className="btn-primary setup-btn-install-all"
                     style={{ fontSize: "0.875rem", padding: "0.5rem 1rem" }}
                   >
                     Install All
@@ -943,7 +895,7 @@ export function FirstRunWizard({ onComplete, ...props }: FirstRunWizardProps) {
                 </div>
                 <button
                   onClick={onComplete}
-                  className="btn-primary"
+                  className="btn-primary setup-btn-next"
                   style={{ fontSize: "0.875rem", padding: "0.5rem 1rem" }}
                 >
                   Continue to Dashboard
