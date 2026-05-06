@@ -20,6 +20,8 @@
 
 CHAMP is a self-contained desktop application that provides a complete local web development environment. Unlike traditional solutions like XAMPP, CHAMP is designed to run **without administrator privileges** by keeping all runtime binaries, configurations, logs, and data in the user's writable app data folder.
 
+> **Note:** This project is a fork of [CAMPP](https://github.com/KarnYong/campp) by KarnYong, with enhancements and modifications by Thirawat27.
+
 **Key Highlights:**
 - 🚀 **No Admin Required** - Runs entirely in user space with non-default ports
 - 📦 **Self-Contained** - All binaries bundled, no external dependencies
@@ -326,6 +328,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ## 🙏 Acknowledgments
 
+- **Original Project**: [CAMPP](https://github.com/KarnYong/campp) by KarnYong - The foundation and inspiration for this project
 - [Tauri](https://tauri.app/) - Desktop app framework
 - [Caddy](https://caddyserver.com/) - Modern web server
 - [PHP](https://www.php.net/) - Server-side scripting
