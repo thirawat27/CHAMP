@@ -316,6 +316,36 @@ button {
   color: #e4fffd;
 }
 
+.btn-quick-action.action-site {
+  background: linear-gradient(135deg, #1d4ed8, #3b82f6);
+  border-color: #93c5fd;
+  color: #eff6ff;
+}
+
+.btn-quick-action.action-database {
+  background: linear-gradient(135deg, #6d28d9, #8b5cf6);
+  border-color: #c4b5fd;
+  color: #faf5ff;
+}
+
+.btn-quick-action.action-projects {
+  background: linear-gradient(135deg, #b45309, #f59e0b);
+  border-color: #fcd34d;
+  color: #fff7ed;
+}
+
+.btn-quick-action.action-logs {
+  background: linear-gradient(135deg, #0f766e, #14b8a6);
+  border-color: #5eead4;
+  color: #f0fdfa;
+}
+
+.btn-quick-action.action-config {
+  background: linear-gradient(135deg, #475569, #64748b);
+  border-color: #cbd5e1;
+  color: #f8fafc;
+}
+
 .btn-quick-action.github {
   background: linear-gradient(135deg, #3f3f46, #71717a);
   border-color: #a1a1aa;

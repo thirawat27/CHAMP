@@ -68,7 +68,7 @@ export function ServiceCard({
       </div>
 
       <div className="service-meta">
-        <span>Port: <strong>{port}</strong></span>
+        <span>Port: {port}</span>
         <span>
           URL:{" "}
           <button

@@ -91,9 +91,19 @@
     "phpmyadmin": {
       "versions": [
         {
+          "id": "phpmyadmin-5.2",
+          "version": "5.2.2",
+          "selected": true,
+          "display_name": "phpMyAdmin 5.2.2 (Default)",
+          "eol": false,
+          "lts": false,
+          "checksum": null,
+          "url": "https://github.com/KarnYong/campp-runtime-binaries/releases/download/phpmyadmin-5.2.2/phpMyAdmin-5.2.2-all-languages.zip"
+        },
+        {
           "id": "adminer-5.4",
           "version": "5.4.1",
-          "selected": true,
+          "selected": false,
           "display_name": "Adminer 5.4.1 (Latest)",
           "eol": false,
           "lts": false,

@@ -13,7 +13,7 @@ import {
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import champLogo from "../assets/CHAMP.png";
-import { ServiceMap, ServiceState, ServiceType } from "../types/services";
+import { AppSettings, ServiceMap, ServiceState, ServiceType } from "../types/services";
 import { ServiceCard } from "./ServiceCard";
 import { SettingsPanel } from "./SettingsPanel";
 import { StatusBar } from "./StatusBar";
@@ -28,6 +28,7 @@ interface AppPaths {
 }
 
 const SOURCE_REPO_URL = "https://github.com/thirawat27/CHAMP";
+const DEFAULT_DATABASE_TOOL_ID = "phpmyadmin-5.2";
 
 function GitHubIcon({ size = 16 }: { size?: number }) {
   return (
@@ -48,12 +49,16 @@ export function Dashboard() {
   const [services, setServices] = useState<Partial<ServiceMap>>({});
   const [showSettings, setShowSettings] = useState(false);
   const [appPaths, setAppPaths] = useState<AppPaths | null>(null);
+  const [settings, setSettings] = useState<AppSettings | null>(null);
   const [installedVersions, setInstalledVersions] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState<string | null>(null);
 
   const caddyPort = services[ServiceType.Caddy]?.port || 8080;
   const webServerUrl = `http://localhost:${caddyPort}`;
-  const adminerUrl = `${webServerUrl}/adminer`;
+  const databaseToolId = settings?.package_selection?.phpmyadmin ?? DEFAULT_DATABASE_TOOL_ID;
+  const isAdminerSelected = databaseToolId.startsWith("adminer");
+  const databaseToolName = isAdminerSelected ? "Adminer" : "phpMyAdmin";
+  const databaseToolUrl = `${webServerUrl}/${isAdminerSelected ? "adminer" : "phpmyadmin"}`;
   const runningCount = Object.values(services).filter(
     (service) => service?.state === ServiceState.Running
   ).length;
@@ -72,12 +77,14 @@ export function Dashboard() {
 
   const refreshMetadata = useCallback(async () => {
     try {
-      const [paths, versions] = await Promise.all([
+      const [paths, versions, loadedSettings] = await Promise.all([
         invoke<AppPaths>("get_app_paths"),
         invoke<Record<string, string>>("get_installed_versions"),
+        invoke<AppSettings>("get_settings"),
       ]);
       setAppPaths(paths);
       setInstalledVersions(versions);
+      setSettings(loadedSettings);
     } catch (error) {
       console.error("Failed to load app metadata:", error);
     }
@@ -135,12 +142,12 @@ export function Dashboard() {
       ["Caddy", installedVersions.caddy],
       ["PHP", installedVersions.php],
       ["MySQL", installedVersions.mysql],
-      ["Adminer", installedVersions.adminer],
+      [databaseToolName, installedVersions.phpmyadmin || installedVersions.adminer],
     ];
     return entries.filter(
       (entry): entry is [string, string] => typeof entry[1] === "string" && entry[1].length > 0
     );
-  }, [installedVersions]);
+  }, [databaseToolName, installedVersions]);
 
   return (
     <div className="app-shell" data-testid="dashboard">
@@ -152,7 +159,7 @@ export function Dashboard() {
           <h1>
             CHAMP <span>v1.0.0</span>
           </h1>
-          <p>CHAMP By Thirawat27 · Caddy + HTTP(S) + Adminer + MySQL + PHP</p>
+          <p>CHAMP By Thirawat27 · Caddy + HTTP(S) + phpMyAdmin/Adminer + MySQL + PHP</p>
         </div>
         <div className="titlebar-actions">
           <button
@@ -209,26 +216,26 @@ export function Dashboard() {
           </div>
           <div className="quick-actions">
             <button
-              className="btn-quick-action"
+              className="btn-quick-action action-site"
               onClick={() => openUrl(webServerUrl)}
               disabled={!isCaddyRunning}
             >
               <Globe size={16} /> Site
             </button>
             <button
-              className="btn-quick-action"
-              onClick={() => openUrl(adminerUrl)}
+              className="btn-quick-action action-database"
+              onClick={() => openUrl(databaseToolUrl)}
               disabled={!isCaddyRunning}
             >
-              <Database size={16} /> Adminer
+              <Database size={16} /> {databaseToolName}
             </button>
-            <button className="btn-quick-action" onClick={() => openFolder(appPaths?.projects_dir)}>
+            <button className="btn-quick-action action-projects" onClick={() => openFolder(appPaths?.projects_dir)}>
               <Folder size={16} /> Projects
             </button>
-            <button className="btn-quick-action" onClick={() => openFolder(appPaths?.logs_dir)}>
+            <button className="btn-quick-action action-logs" onClick={() => openFolder(appPaths?.logs_dir)}>
               <TerminalSquare size={16} /> Logs
             </button>
-            <button className="btn-quick-action" onClick={() => openFolder(appPaths?.config_dir)}>
+            <button className="btn-quick-action action-config" onClick={() => openFolder(appPaths?.config_dir)}>
               <HardDrive size={16} /> Config
             </button>
             <button className="btn-quick-action github" onClick={() => openUrl(SOURCE_REPO_URL)}>

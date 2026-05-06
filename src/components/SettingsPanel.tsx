@@ -24,7 +24,7 @@ export function SettingsPanel({ onClose, onSettingsChanged, ...props }: Settings
   const defaultPackageSelection: PackageSelection = {
     php: "php-8.5",
     mysql: "mysql-8.4",
-    phpmyadmin: "adminer-5.4",
+    phpmyadmin: "phpmyadmin-5.2",
   };
   const [settings, setSettings] = useState<AppSettings>({
     web_port: 8080,
@@ -116,6 +116,16 @@ export function SettingsPanel({ onClose, onSettingsChanged, ...props }: Settings
       package_selection: {
         ...(current.package_selection ?? defaultPackageSelection),
         php: phpId,
+      },
+    }));
+  };
+
+  const updateSelectedDatabaseTool = (toolId: string) => {
+    setSettings((current) => ({
+      ...current,
+      package_selection: {
+        ...(current.package_selection ?? defaultPackageSelection),
+        phpmyadmin: toolId,
       },
     }));
   };
@@ -311,6 +321,25 @@ export function SettingsPanel({ onClose, onSettingsChanged, ...props }: Settings
                     Switch PHP
                   </button>
                 </div>
+              </div>
+
+              <div className="settings-section">
+                <h3>Database Tool</h3>
+                <label className="project-row">
+                  <span>Web database manager</span>
+                  <select
+                    className="input"
+                    value={settings.package_selection?.phpmyadmin ?? defaultPackageSelection.phpmyadmin}
+                    onChange={(event) => updateSelectedDatabaseTool(event.target.value)}
+                  >
+                    {(packages?.phpmyadmin ?? []).map((pkg) => (
+                      <option key={pkg.id} value={pkg.id}>
+                        {pkg.display_name}
+                        {pkg.recommended ? " - default" : ""}
+                      </option>
+                    ))}
+                  </select>
+                </label>
               </div>
 
               <div className="settings-section">

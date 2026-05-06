@@ -45,7 +45,10 @@ const packages = {
     { id: "mysql-8.4", version: "8.4.0" },
     { id: "mysql-8.0", version: "8.0.40" },
   ],
-  phpmyadmin: [{ id: "adminer-5.4", version: "5.4.1" }],
+  phpmyadmin: [
+    { id: "phpmyadmin-5.2", version: "5.2.2", name: "phpMyAdmin" },
+    { id: "adminer-5.4", version: "5.4.1", name: "Adminer" },
+  ],
 };
 
 const SETUP_STEPS = [
@@ -73,7 +76,7 @@ export function FirstRunWizard({ onComplete, ...props }: FirstRunWizardProps) {
   const [packageSelection, setPackageSelection] = useState<PackageSelection>({
     php: "php-8.5",
     mysql: "mysql-8.4",
-    phpmyadmin: "adminer-5.4",
+    phpmyadmin: "phpmyadmin-5.2",
   });
   const [existingComponents, setExistingComponents] = useState<ExistingComponent[]>([]);
   const [hasExistingOnWelcome, setHasExistingOnWelcome] = useState(false);
@@ -178,8 +181,8 @@ export function FirstRunWizard({ onComplete, ...props }: FirstRunWizardProps) {
           isExisting: !!existing.mysql,
         },
         {
-          name: "adminer",
-          displayName: "Adminer",
+          name: packageSelection.phpmyadmin.startsWith("adminer") ? "adminer" : "phpmyadmin",
+          displayName: packageSelection.phpmyadmin.startsWith("adminer") ? "Adminer" : "phpMyAdmin",
           isExisting: !!(existing.adminer || existing.phpmyadmin),
           version: existing.adminer || existing.phpmyadmin || "",
         },
@@ -331,7 +334,7 @@ export function FirstRunWizard({ onComplete, ...props }: FirstRunWizardProps) {
             <img className="setup-brand-logo" src={champLogo} alt="" />
             <h1>CHAMP</h1>
           </div>
-          <p>Caddy + HTTP(S) + Adminer + MySQL + PHP</p>
+          <p>Caddy + HTTP(S) + phpMyAdmin/Adminer + MySQL + PHP</p>
           <div className="setup-steps">
             {SETUP_STEPS.map((setupStep, index) => {
               const stepIndex = index + 1;
@@ -368,7 +371,7 @@ export function FirstRunWizard({ onComplete, ...props }: FirstRunWizardProps) {
                   }}
                 >
                   CHAMP installs Caddy, PHP-FPM, {getDatabaseDisplayName(currentPlatform)}, and
-                  Adminer into your user profile so the stack can run without writing config files
+                  phpMyAdmin or Adminer into your user profile so the stack can run without writing config files
                   into protected system folders.
                 </p>
                 <div className="setup-summary">
@@ -381,8 +384,8 @@ export function FirstRunWizard({ onComplete, ...props }: FirstRunWizardProps) {
                     <span>HTTP 8080, PHP 9000, MySQL 3307.</span>
                   </div>
                   <div className="setup-summary-item">
-                    <strong>Adminer ready</strong>
-                    <span>Database tools open at /adminer.</span>
+                    <strong>phpMyAdmin ready</strong>
+                    <span>Database tools open at /phpmyadmin by default.</span>
                   </div>
                 </div>
                 {hasExistingOnWelcome ? (
@@ -442,7 +445,7 @@ export function FirstRunWizard({ onComplete, ...props }: FirstRunWizardProps) {
               <div>
                 <p style={{ fontSize: "0.875rem", marginBottom: "0.75rem" }}>
                   Select the versions of PHP, {getDatabaseDisplayName(currentPlatform)}, and
-                  Adminer.
+                  phpMyAdmin or Adminer.
                 </p>
                 <PackageSelector
                   onSelectionChange={handlePackageChange}
@@ -615,7 +618,7 @@ export function FirstRunWizard({ onComplete, ...props }: FirstRunWizardProps) {
                         ? packages.php.find((p) => p.id === packageSelection.php)?.version
                         : component.name === "mysql"
                           ? packages.mysql.find((p) => p.id === packageSelection.mysql)?.version
-                          : component.name === "adminer"
+                          : component.name === "adminer" || component.name === "phpmyadmin"
                             ? packages.phpmyadmin.find((p) => p.id === packageSelection.phpmyadmin)
                                 ?.version
                             : component.name === "caddy"
@@ -897,10 +900,12 @@ export function FirstRunWizard({ onComplete, ...props }: FirstRunWizardProps) {
                         "8.4.0",
                     },
                     {
-                      name: "Adminer",
+                      name:
+                        packages.phpmyadmin.find((p) => p.id === packageSelection.phpmyadmin)
+                          ?.name || "phpMyAdmin",
                       version:
                         packages.phpmyadmin.find((p) => p.id === packageSelection.phpmyadmin)
-                          ?.version || "5.4.1",
+                          ?.version || "5.2.2",
                     },
                   ].map((pkg) => (
                     <div

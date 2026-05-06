@@ -160,9 +160,19 @@ fn get_default_config() -> RuntimeConfig {
             phpmyadmin: PhpMyAdminConfig {
                 versions: vec![
                     VersionInfoSingleUrl {
+                        id: "phpmyadmin-5.2".to_string(),
+                        version: "5.2.2".to_string(),
+                        selected: true,
+                        display_name: "phpMyAdmin 5.2.2".to_string(),
+                        eol: false,
+                        lts: false,
+                        checksum: None,
+                        url: "https://github.com/KarnYong/campp-runtime-binaries/releases/download/phpmyadmin-5.2.2/phpMyAdmin-5.2.2-all-languages.zip".to_string(),
+                    },
+                    VersionInfoSingleUrl {
                         id: "adminer-5.4".to_string(),
                         version: "5.4.1".to_string(),
-                        selected: true,
+                        selected: false,
                         display_name: "Adminer 5.4.1".to_string(),
                         eol: false,
                         lts: false,
@@ -190,7 +200,7 @@ impl BinaryComponent {
             BinaryComponent::Caddy => "Caddy",
             BinaryComponent::Php => "PHP",
             BinaryComponent::MySQL => "MySQL",
-            BinaryComponent::PhpMyAdmin => "Adminer",
+            BinaryComponent::PhpMyAdmin => "Database Tool",
         }
     }
 
@@ -1070,7 +1080,10 @@ impl RuntimeDownloader {
 
             // Skip if component is in skip list. PHP is version-aware: only skip it
             // when the requested active PHP version is already present.
-            if skip_list.contains(&component_name)
+            let should_skip_database_tool = *component == BinaryComponent::PhpMyAdmin
+                && (skip_list.contains(&"adminer") || skip_list.contains(&"phpmyadmin"));
+
+            if (skip_list.contains(&component_name) || should_skip_database_tool)
                 && (*component != BinaryComponent::Php
                     || self.is_selected_php_installed(&self.get_runtime_dir()?))
             {
@@ -1208,6 +1221,9 @@ impl RuntimeDownloader {
             self.extract_tar_xz(downloaded_path, &install_dir)?;
         } else if extension == "zip" {
             self.extract_zip(downloaded_path, &install_dir)?;
+            if component == BinaryComponent::PhpMyAdmin {
+                self.normalize_phpmyadmin_install(runtime_dir)?;
+            }
         } else if component == BinaryComponent::PhpMyAdmin && extension == "php" {
             let adminer_dir = runtime_dir.join("adminer");
             fs::create_dir_all(&adminer_dir)
@@ -1241,6 +1257,56 @@ impl RuntimeDownloader {
         self.write_installed_marker(component, runtime_dir)
     }
 
+    fn selected_database_tool_id(&self) -> String {
+        self.package_selection
+            .as_ref()
+            .map(|selection| selection.phpmyadmin.clone())
+            .unwrap_or_else(|| {
+                crate::config::AppSettings::load()
+                    .package_selection
+                    .phpmyadmin
+            })
+    }
+
+    fn normalize_phpmyadmin_install(&self, runtime_dir: &Path) -> Result<(), String> {
+        let target_dir = runtime_dir.join("phpmyadmin");
+        let source_dir = fs::read_dir(runtime_dir)
+            .map_err(|e| format!("Failed to scan runtime directory: {}", e))?
+            .flatten()
+            .map(|entry| entry.path())
+            .find(|path| {
+                path.is_dir()
+                    && path
+                        .file_name()
+                        .and_then(|name| name.to_str())
+                        .map(|name| {
+                            name.eq_ignore_ascii_case("phpmyadmin")
+                                || name.to_ascii_lowercase().starts_with("phpmyadmin-")
+                        })
+                        .unwrap_or(false)
+                    && path.join("index.php").exists()
+            })
+            .ok_or_else(|| "phpMyAdmin archive did not contain an index.php".to_string())?;
+
+        if source_dir == target_dir {
+            return Ok(());
+        }
+
+        if target_dir.exists() {
+            fs::remove_dir_all(&target_dir)
+                .map_err(|e| format!("Failed to replace phpMyAdmin runtime directory: {}", e))?;
+        }
+
+        fs::rename(&source_dir, &target_dir).map_err(|e| {
+            format!(
+                "Failed to move phpMyAdmin from {} to {}: {}",
+                source_dir.display(),
+                target_dir.display(),
+                e
+            )
+        })
+    }
+
     fn write_installed_marker(
         &self,
         component: BinaryComponent,
@@ -1265,7 +1331,14 @@ impl RuntimeDownloader {
             .map_err(|e| format!("Failed to create PHP version marker file: {}", e))?;
         }
 
-        let marker_file = runtime_dir.join(format!("{}_installed.txt", component.binary_name()));
+        let marker_name = if component == BinaryComponent::PhpMyAdmin
+            && self.selected_database_tool_id().starts_with("phpmyadmin")
+        {
+            "phpmyadmin"
+        } else {
+            component.binary_name()
+        };
+        let marker_file = runtime_dir.join(format!("{}_installed.txt", marker_name));
         fs::write(&marker_file, marker_content)
             .map_err(|e| format!("Failed to create marker file: {}", e))
     }
@@ -1313,12 +1386,7 @@ impl RuntimeDownloader {
                 // Parse version from format: "version=1.2.3\ninstalled_at=..."
                 for line in content.lines() {
                     if let Some(version) = line.strip_prefix("version=") {
-                        let key = if component == "phpmyadmin" {
-                            "adminer"
-                        } else {
-                            component
-                        };
-                        installed.insert(key.to_string(), version.to_string());
+                        installed.insert(component.to_string(), version.to_string());
                         break;
                     }
                 }

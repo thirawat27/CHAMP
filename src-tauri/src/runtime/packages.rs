@@ -91,7 +91,7 @@ impl Default for PackageSelection {
         Self {
             php: "php-8.5".to_string(),
             mysql: "mysql-8.4".to_string(),
-            phpmyadmin: "adminer-5.4".to_string(),
+            phpmyadmin: "phpmyadmin-5.2".to_string(),
         }
     }
 }
@@ -352,7 +352,7 @@ pub fn get_selected_package_ids() -> PackageSelection {
                 .iter()
                 .find(|v| v.selected)
                 .map(|v| v.id.clone())
-                .unwrap_or_else(|| "adminer-5.4".to_string()),
+                .unwrap_or_else(|| "phpmyadmin-5.2".to_string()),
         }
     } else {
         PackageSelection::default()
@@ -432,13 +432,22 @@ fn get_default_packages() -> PackagesConfig {
         ],
         phpmyadmin: vec![
             PhpMyAdminPackage {
+                id: "phpmyadmin-5.2".to_string(),
+                version: "5.2.2".to_string(),
+                display_name: "phpMyAdmin 5.2.2 (Default)".to_string(),
+                url: "https://github.com/KarnYong/campp-runtime-binaries/releases/download/phpmyadmin-5.2.2/phpMyAdmin-5.2.2-all-languages.zip".to_string(),
+                eol: false,
+                lts: false,
+                recommended: true,
+            },
+            PhpMyAdminPackage {
                 id: "adminer-5.4".to_string(),
                 version: "5.4.1".to_string(),
                 display_name: "Adminer 5.4.1 (Latest)".to_string(),
                 url: "https://github.com/vrana/adminer/releases/download/v5.4.1/adminer-5.4.1.php".to_string(),
                 eol: false,
                 lts: false,
-                recommended: true,
+                recommended: false,
             },
         ],
     }

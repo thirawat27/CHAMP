@@ -193,6 +193,7 @@ impl ProcessManager {
                 &paths,
                 self.settings.php_port,
                 self.settings.mysql_port,
+                &self.settings.package_selection.phpmyadmin,
             ),
             ServiceType::PhpFpm => start_php_fpm(service_process, &paths),
             ServiceType::MySQL => start_mysql(service_process, &paths),
@@ -368,13 +369,14 @@ fn start_caddy(
     paths: &RuntimePaths,
     php_port: u16,
     mysql_port: u16,
+    database_tool_id: &str,
 ) -> Result<(), String> {
     // Kill any existing Caddy processes to avoid port conflicts
     kill_existing_processes("caddy");
 
-    // Prepare Adminer in the writable config directory. This avoids writing into
+    // Prepare the selected database tool in the writable config directory. This avoids writing into
     // Program Files or any other install directory that may require elevation.
-    ensure_adminer(paths, mysql_port)?;
+    ensure_database_tool(paths, mysql_port, database_tool_id)?;
 
     // Always regenerate Caddyfile with current port settings
     let caddyfile_path = paths.config_dir.join("Caddyfile");
@@ -930,11 +932,17 @@ fn generate_caddyfile(
     // Build the Caddyfile content
     let mut content = String::new();
     content.push_str(&format!(":{} {{\n", port));
-    content.push_str("    # Adminer - must come before project root directives\n");
+    content.push_str("    # Database tools - must come before project root directives\n");
     content.push_str("    redir /adminer /adminer/\n");
-    content.push_str("    redir /phpmyadmin /adminer/\n");
+    content.push_str("    redir /phpmyadmin /phpmyadmin/\n");
     content.push_str("\n");
     content.push_str("    handle_path /adminer/* {\n");
+    content.push_str(&format!("        root * \"{}\"\n", adminer));
+    content.push_str(&format!("        php_fastcgi 127.0.0.1:{}\n", php_port));
+    content.push_str("        file_server\n");
+    content.push_str("    }\n");
+    content.push_str("\n");
+    content.push_str("    handle_path /phpmyadmin/* {\n");
     content.push_str(&format!("        root * \"{}\"\n", adminer));
     content.push_str(&format!("        php_fastcgi 127.0.0.1:{}\n", php_port));
     content.push_str("        file_server\n");
@@ -1136,20 +1144,47 @@ php_value[memory_limit] = 256M
     Ok(())
 }
 
-fn ensure_adminer(paths: &RuntimePaths, mysql_port: u16) -> Result<(), String> {
+fn ensure_database_tool(
+    paths: &RuntimePaths,
+    mysql_port: u16,
+    database_tool_id: &str,
+) -> Result<(), String> {
+    if paths.adminer.exists() {
+        fs::remove_dir_all(&paths.adminer)
+            .map_err(|e| format!("Failed to reset database tool directory: {}", e))?;
+    }
     fs::create_dir_all(&paths.adminer)
-        .map_err(|e| format!("Failed to create Adminer directory: {}", e))?;
+        .map_err(|e| format!("Failed to create database tool directory: {}", e))?;
 
     let index_path = paths.adminer.join("index.php");
-    if let Some(source) = find_adminer_source(paths) {
-        fs::copy(&source, &index_path)
-            .map_err(|e| format!("Failed to install Adminer from {}: {}", source.display(), e))?;
+    if let Some(source) = find_database_tool_source(paths, database_tool_id) {
+        if source.is_file() {
+            fs::copy(&source, &index_path).map_err(|e| {
+                format!(
+                    "Failed to install database tool from {}: {}",
+                    source.display(),
+                    e
+                )
+            })?;
+        } else {
+            copy_dir_contents(&source, &paths.adminer)?;
+        }
+        if database_tool_id.starts_with("phpmyadmin") {
+            write_phpmyadmin_config(&paths.adminer, mysql_port)?;
+        }
         return Ok(());
     }
 
-    if index_path.exists() {
-        return Ok(());
-    }
+    let tool_name = if database_tool_id.starts_with("adminer") {
+        "Adminer"
+    } else {
+        "phpMyAdmin"
+    };
+    let tool_path = if database_tool_id.starts_with("adminer") {
+        "/adminer"
+    } else {
+        "/phpmyadmin"
+    };
 
     let placeholder = format!(
         r#"<?php
@@ -1160,29 +1195,31 @@ header('Content-Type: text/html; charset=utf-8');
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <title>Adminer is not installed</title>
+  <title>{tool_name} is not installed</title>
   <style>
     body {{ font-family: system-ui, -apple-system, Segoe UI, sans-serif; margin: 48px; line-height: 1.5; }}
     code {{ background: #f3f4f6; padding: 2px 6px; border-radius: 4px; }}
   </style>
 </head>
 <body>
-  <h1>Adminer is not installed</h1>
-  <p>Run the CHAMP runtime installer to install Adminer. After installation, open <code>/adminer</code> again.</p>
+  <h1>{tool_name} is not installed</h1>
+  <p>Run the CHAMP runtime installer to install {tool_name}. After installation, open <code>{tool_path}</code> again.</p>
   <p>Default MySQL connection: server <code>127.0.0.1:{}</code>, user <code>root</code>, empty password.</p>
 </body>
 </html>
 "#,
-        mysql_port
+        mysql_port,
+        tool_name = tool_name,
+        tool_path = tool_path
     );
 
     fs::write(&index_path, placeholder)
-        .map_err(|e| format!("Failed to create Adminer placeholder: {}", e))?;
+        .map_err(|e| format!("Failed to create database tool placeholder: {}", e))?;
 
     Ok(())
 }
 
-fn find_adminer_source(paths: &RuntimePaths) -> Option<PathBuf> {
+fn find_database_tool_source(paths: &RuntimePaths, database_tool_id: &str) -> Option<PathBuf> {
     let mut roots = Vec::new();
 
     if let Some(base_dir) = paths.config_dir.parent() {
@@ -1201,13 +1238,17 @@ fn find_adminer_source(paths: &RuntimePaths) -> Option<PathBuf> {
             continue;
         }
 
-        let direct_candidates = [
-            root.join("adminer").join("index.php"),
-            root.join("adminer.php"),
-        ];
+        let direct_candidates = if database_tool_id.starts_with("adminer") {
+            vec![
+                root.join("adminer").join("index.php"),
+                root.join("adminer.php"),
+            ]
+        } else {
+            vec![root.join("phpmyadmin")]
+        };
 
         for candidate in direct_candidates {
-            if candidate.exists() {
+            if candidate.is_file() || candidate.join("index.php").exists() {
                 return Some(candidate);
             }
         }
@@ -1221,7 +1262,19 @@ fn find_adminer_source(paths: &RuntimePaths) -> Option<PathBuf> {
                     .unwrap_or_default()
                     .to_ascii_lowercase();
 
-                if path.is_file() && name.starts_with("adminer") && name.ends_with(".php") {
+                if database_tool_id.starts_with("adminer")
+                    && path.is_file()
+                    && name.starts_with("adminer")
+                    && name.ends_with(".php")
+                {
+                    return Some(path);
+                }
+
+                if database_tool_id.starts_with("phpmyadmin")
+                    && path.is_dir()
+                    && name.starts_with("phpmyadmin")
+                    && path.join("index.php").exists()
+                {
                     return Some(path);
                 }
             }
@@ -1229,6 +1282,69 @@ fn find_adminer_source(paths: &RuntimePaths) -> Option<PathBuf> {
     }
 
     None
+}
+
+fn copy_dir_contents(source: &PathBuf, target: &PathBuf) -> Result<(), String> {
+    fs::create_dir_all(target).map_err(|e| {
+        format!(
+            "Failed to create database tool target {}: {}",
+            target.display(),
+            e
+        )
+    })?;
+
+    for entry in fs::read_dir(source).map_err(|e| {
+        format!(
+            "Failed to read database tool source {}: {}",
+            source.display(),
+            e
+        )
+    })? {
+        let entry = entry.map_err(|e| format!("Failed to read database tool entry: {}", e))?;
+        let source_path = entry.path();
+        let target_path = target.join(entry.file_name());
+
+        if source_path.is_dir() {
+            copy_dir_contents(&source_path, &target_path)?;
+        } else {
+            fs::copy(&source_path, &target_path).map_err(|e| {
+                format!(
+                    "Failed to copy database tool file {} to {}: {}",
+                    source_path.display(),
+                    target_path.display(),
+                    e
+                )
+            })?;
+        }
+    }
+
+    Ok(())
+}
+
+fn write_phpmyadmin_config(target: &PathBuf, mysql_port: u16) -> Result<(), String> {
+    let config = format!(
+        r#"<?php
+$cfg['blowfish_secret'] = 'CHAMP_LOCAL_DEV_BLOWFISH_1234567';
+$i = 0;
+$i++;
+$cfg['Servers'][$i]['auth_type'] = 'cookie';
+$cfg['Servers'][$i]['host'] = '127.0.0.1';
+$cfg['Servers'][$i]['port'] = '{}';
+$cfg['Servers'][$i]['AllowNoPassword'] = true;
+$cfg['TempDir'] = __DIR__ . '/tmp';
+"#,
+        mysql_port
+    );
+
+    fs::create_dir_all(target.join("tmp")).map_err(|e| {
+        format!(
+            "Failed to create phpMyAdmin temp directory {}: {}",
+            target.join("tmp").display(),
+            e
+        )
+    })?;
+    fs::write(target.join("config.inc.php"), config)
+        .map_err(|e| format!("Failed to write phpMyAdmin config: {}", e))
 }
 
 impl Default for ProcessManager {

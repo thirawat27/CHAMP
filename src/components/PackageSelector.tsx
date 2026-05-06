@@ -21,9 +21,9 @@ export function PackageSelector({ onSelectionChange, initialSelection }: Package
   const [currentPlatform, setCurrentPlatform] = useState<string>("");
   const [selection, setSelection] = useState<PackageSelection>(
     initialSelection || {
-      php: "php-8.4",
+      php: "php-8.5",
       mysql: "mysql-8.4",
-      phpmyadmin: "adminer-5.4",
+      phpmyadmin: "phpmyadmin-5.2",
     }
   );
 
@@ -58,7 +58,7 @@ export function PackageSelector({ onSelectionChange, initialSelection }: Package
     setSelection({ ...selection, mysql: value });
   };
 
-  const handleAdminerChange = (value: string) => {
+  const handleDatabaseToolChange = (value: string) => {
     setSelection({ ...selection, phpmyadmin: value });
   };
 
@@ -122,14 +122,14 @@ export function PackageSelector({ onSelectionChange, initialSelection }: Package
         </select>
       </div>
 
-      {/* Adminer Version Selector */}
+      {/* Database Tool Selector */}
       <div style={{ display: "flex", flexDirection: "column", gap: "0.25rem" }}>
         <label style={{ fontSize: "0.875rem", fontWeight: 500, color: "var(--text-primary)" }}>
-          Adminer Version
+          Database Tool
         </label>
         <select
           value={selection.phpmyadmin}
-          onChange={(e) => handleAdminerChange(e.target.value)}
+          onChange={(e) => handleDatabaseToolChange(e.target.value)}
           className="input"
           style={{ cursor: "pointer", padding: "0.375rem 0.5rem", fontSize: "0.875rem", width: "100%" }}
         >
@@ -145,7 +145,7 @@ export function PackageSelector({ onSelectionChange, initialSelection }: Package
       {/* Package Info Box */}
       <div className="info-box" style={{ padding: "0.5rem", fontSize: "0.875rem" }}>
         <p style={{ fontSize: "0.875rem", color: "var(--text-secondary)", margin: "0 0 0.375rem 0" }}>
-          <strong>Recommended:</strong> PHP 8.5, {getDatabaseDisplayName(currentPlatform)} 8.4 (LTS), Adminer 5.4
+          <strong>Recommended:</strong> PHP 8.5, {getDatabaseDisplayName(currentPlatform)} 8.4 (LTS), phpMyAdmin 5.2
         </p>
         <p style={{ fontSize: "0.875rem", color: "var(--text-secondary)", margin: 0 }}>
           <strong>Note:</strong> EOL versions may have security vulnerabilities.

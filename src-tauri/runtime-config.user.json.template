@@ -97,6 +97,15 @@
           "eol": false,
           "lts": false,
           "url": "https://github.com/KarnYong/campp-runtime-binaries/releases/download/phpmyadmin-5.2.2/phpMyAdmin-5.2.2-all-languages.zip"
+        },
+        {
+          "id": "adminer-5.4",
+          "version": "5.4.1",
+          "selected": false,
+          "display_name": "Adminer 5.4.1 (Alternative)",
+          "eol": false,
+          "lts": false,
+          "url": "https://github.com/vrana/adminer/releases/download/v5.4.1/adminer-5.4.1.php"
         }
       ]
     }

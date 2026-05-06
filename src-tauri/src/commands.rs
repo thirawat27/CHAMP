@@ -166,12 +166,14 @@ impl SystemMetricsMonitor {
 }
 
 fn aggregate_network_totals(networks: &Networks) -> (u64, u64) {
-    networks.iter().fold((0, 0), |(received, transmitted), (_, data)| {
-        (
-            received.saturating_add(data.total_received()),
-            transmitted.saturating_add(data.total_transmitted()),
-        )
-    })
+    networks
+        .iter()
+        .fold((0, 0), |(received, transmitted), (_, data)| {
+            (
+                received.saturating_add(data.total_received()),
+                transmitted.saturating_add(data.total_transmitted()),
+            )
+        })
 }
 
 static SYSTEM_METRICS_MONITOR: OnceLock<Mutex<SystemMetricsMonitor>> = OnceLock::new();
@@ -690,12 +692,7 @@ pub async fn get_installed_versions() -> Result<std::collections::HashMap<String
             // Parse version from format: "version=1.2.3\ninstalled_at=..."
             for line in content.lines() {
                 if let Some(version) = line.strip_prefix("version=") {
-                    let key = if component == "phpmyadmin" {
-                        "adminer"
-                    } else {
-                        component
-                    };
-                    versions.insert(key.to_string(), version.to_string());
+                    versions.insert(component.to_string(), version.to_string());
                     break;
                 }
             }
