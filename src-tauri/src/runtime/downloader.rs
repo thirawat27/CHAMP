@@ -47,17 +47,28 @@ pub fn load_runtime_config() -> RuntimeConfig {
 
 /// Try to load config content from various locations
 fn load_config_content() -> Option<String> {
-    // 1. Try current directory (for development)
+    // 1. Try user-refreshed runtime manifest first.
+    if let Some(local_app_data) = dirs::data_local_dir().or_else(dirs::home_dir) {
+        let config_path = local_app_data
+            .join("CHAMP")
+            .join("config")
+            .join("runtime-config.json");
+        if let Ok(content) = fs::read_to_string(&config_path) {
+            return Some(content);
+        }
+    }
+
+    // 2. Try current directory (for development)
     if let Ok(content) = fs::read_to_string("runtime-config.json") {
         return Some(content);
     }
 
-    // 2. Try src-tauri directory (for development)
+    // 3. Try src-tauri directory (for development)
     if let Ok(content) = fs::read_to_string("src-tauri/runtime-config.json") {
         return Some(content);
     }
 
-    // 3. Try alongside the executable (for production)
+    // 4. Try alongside the executable (for production)
     if let Ok(exe_path) = std::env::current_exe() {
         if let Some(exe_dir) = exe_path.parent() {
             let config_path = exe_dir.join("runtime-config.json");
@@ -67,7 +78,7 @@ fn load_config_content() -> Option<String> {
         }
     }
 
-    // 4. Try AppData/resources (Windows)
+    // 5. Try AppData/resources (Windows)
     #[cfg(target_os = "windows")]
     {
         if let Some(local_app_data) = dirs::data_local_dir() {

@@ -5,6 +5,8 @@ use std::fs::{self, File, OpenOptions};
 use std::io::Write;
 use std::path::PathBuf;
 use std::process::{Child, Command, Stdio};
+use std::thread;
+use std::time::Duration;
 
 // Windows-specific: Constant to hide console window
 #[cfg(target_os = "windows")]
@@ -47,7 +49,7 @@ fn open_log_file_with_retry(log_path: &PathBuf, service_name: &str) -> Result<Fi
                 if e.raw_os_error() == Some(32) && attempt < max_retries - 1 {
                     // Windows error 32: file is being used by another process
                     // Wait and retry
-                    std::thread::sleep(std::time::Duration::from_millis(retry_delay_ms));
+                    thread::sleep(Duration::from_millis(retry_delay_ms));
                 } else {
                     return Err(format!(
                         "Failed to create {} log file after {} attempts: {}",
@@ -236,9 +238,6 @@ impl ProcessManager {
                 .stdout(Stdio::null())
                 .stderr(Stdio::null())
                 .output();
-
-            // Give the process time to terminate
-            std::thread::sleep(std::time::Duration::from_millis(500));
         }
 
         // Terminate the child process if it exists
@@ -397,11 +396,7 @@ fn start_caddy(
         .spawn()
         .map_err(|e| format!("Failed to start Caddy: {}", e))?;
 
-    // Give it a moment to start
-    std::thread::sleep(std::time::Duration::from_millis(500));
-
-    // Check if process is still running
-    match child.try_wait() {
+    match verify_spawned_process(&mut child, Duration::from_millis(35)) {
         Ok(Some(status)) => Err(format!(
             "Caddy exited immediately with status: {:?}",
             status
@@ -474,11 +469,7 @@ fn start_php_fpm(service_process: &mut ServiceProcess, paths: &RuntimePaths) -> 
             .map_err(|e| format!("Failed to start PHP-CGI: {}", e))?
     };
 
-    // Give it a moment to start
-    std::thread::sleep(std::time::Duration::from_millis(500));
-
-    // Check if process is still running
-    match child.try_wait() {
+    match verify_spawned_process(&mut child, Duration::from_millis(35)) {
         Ok(Some(status)) => Err(format!("PHP exited immediately with status: {:?}", status)),
         Ok(None) => {
             service_process.child = Some(child);
@@ -571,11 +562,7 @@ fn start_mysql(service_process: &mut ServiceProcess, paths: &RuntimePaths) -> Re
             )
         })?;
 
-    // Give MariaDB more time to start (it's slower than other services)
-    std::thread::sleep(std::time::Duration::from_secs(3));
-
-    // Check if process is still running
-    match child.try_wait() {
+    match verify_spawned_process(&mut child, Duration::from_millis(75)) {
         Ok(Some(status)) => {
             // Clean up init file if it exists
             if let Some(init_file) = init_file_path {
@@ -875,9 +862,6 @@ fn kill_existing_processes(process_name: &str) {
             .stdout(Stdio::null())
             .stderr(Stdio::null())
             .output();
-
-        // Give the process time to terminate and release ports
-        std::thread::sleep(std::time::Duration::from_millis(500));
     }
 
     #[cfg(unix)]
@@ -898,10 +882,22 @@ fn kill_existing_processes(process_name: &str) {
                 .stderr(Stdio::null())
                 .output();
         }
-
-        // Give the process time to terminate and release ports
-        std::thread::sleep(std::time::Duration::from_millis(500));
     }
+}
+
+fn verify_spawned_process(
+    child: &mut Child,
+    grace_period: Duration,
+) -> Result<Option<std::process::ExitStatus>, std::io::Error> {
+    if let Some(status) = child.try_wait()? {
+        return Ok(Some(status));
+    }
+
+    if !grace_period.is_zero() {
+        thread::sleep(grace_period);
+    }
+
+    child.try_wait()
 }
 
 /// Generate a basic Caddyfile

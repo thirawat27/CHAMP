@@ -33,6 +33,9 @@ export function SettingsPanel({ onClose, onSettingsChanged, ...props }: Settings
     mysql_port: 3307,
     project_root: "",
     auto_start_services: false,
+    disable_devtools_shortcuts: true,
+    auto_check_updates: true,
+    auto_update_runtime_manifest: true,
     package_selection: defaultPackageSelection,
   });
   const [packages, setPackages] = useState<PackagesConfig | null>(null);
@@ -56,6 +59,9 @@ export function SettingsPanel({ onClose, onSettingsChanged, ...props }: Settings
       setSettings({
         ...loaded,
         auto_start_services: loaded.auto_start_services ?? false,
+        disable_devtools_shortcuts: loaded.disable_devtools_shortcuts ?? true,
+        auto_check_updates: loaded.auto_check_updates ?? true,
+        auto_update_runtime_manifest: loaded.auto_update_runtime_manifest ?? true,
         package_selection: packageSelection,
       });
       setPackages(availablePackages);
@@ -170,6 +176,43 @@ export function SettingsPanel({ onClose, onSettingsChanged, ...props }: Settings
     await invoke("open_folder", { path: settings.project_root });
   };
 
+  const refreshRuntimeManifest = async () => {
+    setPhpBusy(true);
+    setError(null);
+    setMessage(null);
+
+    try {
+      const refreshedPackages = await invoke<PackagesConfig>(
+        "refresh_runtime_manifest_from_github"
+      );
+      setPackages(refreshedPackages);
+      await reloadPhpVersions();
+      setMessage("Runtime version list refreshed from GitHub");
+      onSettingsChanged?.();
+    } catch (e) {
+      setError(`Failed to refresh runtime manifest: ${e}`);
+    } finally {
+      setPhpBusy(false);
+    }
+  };
+
+  const updateRuntimeComponents = async () => {
+    setPhpBusy(true);
+    setError(null);
+    setMessage(null);
+
+    try {
+      await invoke("update_runtime_components");
+      await reloadPhpVersions();
+      setMessage("Runtime components updated. Restart running services to use new binaries.");
+      onSettingsChanged?.();
+    } catch (e) {
+      setError(`Failed to update runtime components: ${e}`);
+    } finally {
+      setPhpBusy(false);
+    }
+  };
+
   return (
     <div className="modal-backdrop" onClick={onClose} {...props}>
       <section
@@ -265,6 +308,22 @@ export function SettingsPanel({ onClose, onSettingsChanged, ...props }: Settings
 
               <div className="settings-section">
                 <h3>PHP Versions</h3>
+                <div className="settings-inline-actions">
+                  <button
+                    className="btn-secondary"
+                    onClick={refreshRuntimeManifest}
+                    disabled={phpBusy}
+                  >
+                    Refresh Version List
+                  </button>
+                  <button
+                    className="btn-primary success"
+                    onClick={updateRuntimeComponents}
+                    disabled={phpBusy}
+                  >
+                    Update Runtime
+                  </button>
+                </div>
                 <label className="project-row">
                   <span>Active PHP runtime</span>
                   <select
@@ -330,7 +389,9 @@ export function SettingsPanel({ onClose, onSettingsChanged, ...props }: Settings
                   <span>Web database manager</span>
                   <select
                     className="input"
-                    value={settings.package_selection?.phpmyadmin ?? defaultPackageSelection.phpmyadmin}
+                    value={
+                      settings.package_selection?.phpmyadmin ?? defaultPackageSelection.phpmyadmin
+                    }
                     onChange={(event) => updateSelectedDatabaseTool(event.target.value)}
                   >
                     {(packages?.phpmyadmin ?? []).map((pkg) => (
@@ -381,6 +442,45 @@ export function SettingsPanel({ onClose, onSettingsChanged, ...props }: Settings
                     }
                   />
                   <span>Start stack when CHAMP opens</span>
+                </label>
+                <label className="toggle-row">
+                  <input
+                    type="checkbox"
+                    checked={settings.disable_devtools_shortcuts ?? true}
+                    onChange={(e) =>
+                      setSettings((current) => ({
+                        ...current,
+                        disable_devtools_shortcuts: e.target.checked,
+                      }))
+                    }
+                  />
+                  <span>Block F12 and inspect shortcuts</span>
+                </label>
+                <label className="toggle-row">
+                  <input
+                    type="checkbox"
+                    checked={settings.auto_check_updates ?? true}
+                    onChange={(e) =>
+                      setSettings((current) => ({
+                        ...current,
+                        auto_check_updates: e.target.checked,
+                      }))
+                    }
+                  />
+                  <span>Check GitHub for updates on launch</span>
+                </label>
+                <label className="toggle-row">
+                  <input
+                    type="checkbox"
+                    checked={settings.auto_update_runtime_manifest ?? true}
+                    onChange={(e) =>
+                      setSettings((current) => ({
+                        ...current,
+                        auto_update_runtime_manifest: e.target.checked,
+                      }))
+                    }
+                  />
+                  <span>Refresh service/software version list automatically</span>
                 </label>
               </div>
             </>

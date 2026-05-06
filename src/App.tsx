@@ -3,17 +3,32 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { Dashboard } from "./components/Dashboard";
 import { FirstRunWizard } from "./components/FirstRunWizard";
+import { AppSettings } from "./types/services";
 import "./App.css";
 
 function App() {
   const [isFirstRun, setIsFirstRun] = useState<boolean | null>(null);
   const [showDebugMenu, setShowDebugMenu] = useState(false);
+  const [disableDevtoolsShortcuts, setDisableDevtoolsShortcuts] = useState(true);
 
   useEffect(() => {
     checkRuntimeInstalled();
+    invoke<AppSettings>("get_settings")
+      .then((settings) => setDisableDevtoolsShortcuts(settings.disable_devtools_shortcuts ?? true))
+      .catch(() => setDisableDevtoolsShortcuts(true));
 
     // Debug mode: press Ctrl+Shift+D to toggle debug menu
     const handleKeyPress = (e: KeyboardEvent) => {
+      const isDevtoolsShortcut =
+        e.key === "F12" ||
+        ((e.ctrlKey || e.metaKey) && e.shiftKey && ["I", "J", "C"].includes(e.key.toUpperCase()));
+
+      if (isDevtoolsShortcut && disableDevtoolsShortcuts) {
+        e.preventDefault();
+        e.stopPropagation();
+        return;
+      }
+
       if (e.ctrlKey && e.shiftKey && e.key === "D") {
         setShowDebugMenu((prev) => !prev);
       }
@@ -40,7 +55,7 @@ function App() {
       window.removeEventListener("beforeunload", handleBeforeUnload);
       unlisten.then((fn) => fn());
     };
-  }, []);
+  }, [disableDevtoolsShortcuts]);
 
   const checkRuntimeInstalled = async () => {
     try {
@@ -153,7 +168,9 @@ function App() {
               ×
             </button>
           </div>
-          <div style={{ display: "flex", flexDirection: "column", padding: "0.5rem", gap: "0.5rem" }}>
+          <div
+            style={{ display: "flex", flexDirection: "column", padding: "0.5rem", gap: "0.5rem" }}
+          >
             <button
               onClick={handleOpenRuntimeFolder}
               style={{
@@ -166,8 +183,12 @@ function App() {
                 fontSize: "0.875rem",
                 color: "var(--text-primary)",
               }}
-              onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = "var(--bg-card)"; }}
-              onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = "var(--bg-card-secondary)"; }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.backgroundColor = "var(--bg-card)";
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.backgroundColor = "var(--bg-card-secondary)";
+              }}
             >
               Open Runtime Folder
             </button>
@@ -183,8 +204,12 @@ function App() {
                 fontSize: "0.875rem",
                 color: "var(--text-primary)",
               }}
-              onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = "var(--bg-card)"; }}
-              onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = "var(--bg-card-secondary)"; }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.backgroundColor = "var(--bg-card)";
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.backgroundColor = "var(--bg-card-secondary)";
+              }}
             >
               View Download Folder
             </button>
@@ -200,8 +225,12 @@ function App() {
                 fontSize: "0.875rem",
                 color: "var(--text-primary)",
               }}
-              onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = "var(--bg-card)"; }}
-              onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = "var(--bg-card-secondary)"; }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.backgroundColor = "var(--bg-card)";
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.backgroundColor = "var(--bg-card-secondary)";
+              }}
             >
               Reset Installation
             </button>
@@ -217,8 +246,12 @@ function App() {
                 fontSize: "0.875rem",
                 color: "var(--text-primary)",
               }}
-              onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = "var(--bg-card)"; }}
-              onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = "var(--bg-card-secondary)"; }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.backgroundColor = "var(--bg-card)";
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.backgroundColor = "var(--bg-card-secondary)";
+              }}
             >
               Show First-Run Wizard
             </button>

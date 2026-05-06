@@ -2,9 +2,9 @@
  * Test helper utilities for CAMPP UI testing
  */
 
-import { render, screen, waitFor, fireEvent } from '@testing-library/react';
-import { invoke } from '@tauri-apps/api/core';
-import { vi, expect } from 'vitest';
+import { render, screen, waitFor, fireEvent } from "@testing-library/react";
+import { invoke } from "@tauri-apps/api/core";
+import { vi, expect } from "vitest";
 
 /**
  * Render a component with default Tauri mocks
@@ -70,7 +70,7 @@ export async function waitForServiceState(
  */
 export async function clickServiceButton(
   serviceName: string,
-  buttonType: 'start' | 'stop' | 'restart'
+  buttonType: "start" | "stop" | "restart"
 ) {
   const buttonMap = {
     start: () => findStartButton(serviceName),
@@ -106,24 +106,24 @@ export function mockServiceStatus(serviceName: string, state: string) {
 export function mockAllServiceStatuses(statuses: Record<string, string>) {
   vi.mocked(invoke).mockResolvedValue({
     Caddy: {
-      name: 'Caddy',
-      displayName: 'Caddy',
+      name: "Caddy",
+      displayName: "Caddy",
       port: 8080,
-      state: statuses.Caddy || 'Stopped',
+      state: statuses.Caddy || "Stopped",
       error_message: null,
     },
     PhpFpm: {
-      name: 'PhpFpm',
-      displayName: 'PHP-FPM',
+      name: "PhpFpm",
+      displayName: "PHP-FPM",
       port: 9000,
-      state: statuses.PhpFpm || 'Stopped',
+      state: statuses.PhpFpm || "Stopped",
       error_message: null,
     },
     MySQL: {
-      name: 'MySQL',
-      displayName: 'MySQL',
+      name: "MySQL",
+      displayName: "MySQL",
       port: 3307,
-      state: statuses.MySQL || 'Stopped',
+      state: statuses.MySQL || "Stopped",
       error_message: null,
     },
   });
@@ -132,13 +132,9 @@ export function mockAllServiceStatuses(statuses: Record<string, string>) {
 /**
  * Helper to simulate service state transition
  */
-export async function simulateServiceTransition(
-  _fromState: string,
-  toState: string,
-  delay = 100
-) {
+export async function simulateServiceTransition(_fromState: string, toState: string, delay = 100) {
   // Reset mock to return intermediate state
-  await new Promise(resolve => setTimeout(resolve, delay / 2));
+  await new Promise((resolve) => setTimeout(resolve, delay / 2));
 
   // Return final state
   return toState;

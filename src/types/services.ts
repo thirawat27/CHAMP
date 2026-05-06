@@ -31,6 +31,9 @@ export interface AppSettings {
   php_port: number;
   project_root: string;
   auto_start_services?: boolean;
+  disable_devtools_shortcuts?: boolean;
+  auto_check_updates?: boolean;
+  auto_update_runtime_manifest?: boolean;
   package_selection?: PackageSelection;
 }
 
@@ -108,6 +111,25 @@ export interface InstalledPhpVersion {
   lts: boolean;
   recommended: boolean;
   path?: string;
+}
+
+export interface AppUpdateInfo {
+  current_version: string;
+  latest_version?: string;
+  available: boolean;
+  asset_name?: string;
+  download_url?: string;
+  release_url?: string;
+  published_at?: string;
+  notes?: string;
+}
+
+export interface RuntimeComponentUpdate {
+  component: string;
+  display_name: string;
+  installed_version?: string;
+  latest_version: string;
+  update_available: boolean;
 }
 
 export const DEFAULT_PORTS = {

@@ -3,6 +3,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import {
   DownloadProgress as DownloadProgressType,
+  PackagesConfig,
   PackageSelection,
   DependencyCheckResult,
   getDatabaseDisplayName,
@@ -83,6 +84,7 @@ export function FirstRunWizard({ onComplete, ...props }: FirstRunWizardProps) {
   const [dependencyCheckResult, setDependencyCheckResult] = useState<DependencyCheckResult | null>(
     null
   );
+  const [availablePackages, setAvailablePackages] = useState<PackagesConfig | null>(null);
 
   // Check for existing components when welcome step loads
   useEffect(() => {
@@ -105,6 +107,9 @@ export function FirstRunWizard({ onComplete, ...props }: FirstRunWizardProps) {
   // Detect platform on mount
   useEffect(() => {
     setCurrentPlatform(detectPlatform());
+    invoke<PackagesConfig>("get_available_packages_cmd")
+      .then(setAvailablePackages)
+      .catch((err) => console.error("Failed to load package catalog:", err));
   }, []);
 
   // Listen for download progress events
@@ -282,6 +287,30 @@ export function FirstRunWizard({ onComplete, ...props }: FirstRunWizardProps) {
     setPackageSelection(selection);
   };
 
+  const getPackageVersion = (group: keyof typeof packages, id: string) => {
+    if (group === "php") {
+      return (
+        availablePackages?.php.find((pkg) => pkg.id === id)?.version ??
+        packages.php.find((pkg) => pkg.id === id)?.version
+      );
+    }
+    if (group === "mysql") {
+      return (
+        availablePackages?.mysql.find((pkg) => pkg.id === id)?.version ??
+        packages.mysql.find((pkg) => pkg.id === id)?.version
+      );
+    }
+    return (
+      availablePackages?.phpmyadmin.find((pkg) => pkg.id === id)?.version ??
+      packages.phpmyadmin.find((pkg) => pkg.id === id)?.version
+    );
+  };
+
+  const getDatabaseToolName = (id: string) =>
+    availablePackages?.phpmyadmin.find((pkg) => pkg.id === id)?.display_name.split(" ")[0] ??
+    packages.phpmyadmin.find((pkg) => pkg.id === id)?.name ??
+    "phpMyAdmin";
+
   const getStepLabel = () => {
     switch (progress.step) {
       case "downloading":
@@ -376,8 +405,8 @@ export function FirstRunWizard({ onComplete, ...props }: FirstRunWizardProps) {
                   }}
                 >
                   CHAMP installs Caddy, PHP-FPM, {getDatabaseDisplayName(currentPlatform)}, and
-                  phpMyAdmin or Adminer into your user profile so the stack can run without writing config files
-                  into protected system folders.
+                  phpMyAdmin or Adminer into your user profile so the stack can run without writing
+                  config files into protected system folders.
                 </p>
                 <div className="setup-summary">
                   <div className="setup-summary-item">
@@ -615,12 +644,11 @@ export function FirstRunWizard({ onComplete, ...props }: FirstRunWizardProps) {
                   {existingComponents.map((component) => {
                     const newVersion =
                       component.name === "php"
-                        ? packages.php.find((p) => p.id === packageSelection.php)?.version
+                        ? getPackageVersion("php", packageSelection.php)
                         : component.name === "mysql"
-                          ? packages.mysql.find((p) => p.id === packageSelection.mysql)?.version
+                          ? getPackageVersion("mysql", packageSelection.mysql)
                           : component.name === "adminer" || component.name === "phpmyadmin"
-                            ? packages.phpmyadmin.find((p) => p.id === packageSelection.phpmyadmin)
-                                ?.version
+                            ? getPackageVersion("phpmyadmin", packageSelection.phpmyadmin)
                             : component.name === "caddy"
                               ? "2.11.2"
                               : component.version;
@@ -641,9 +669,7 @@ export function FirstRunWizard({ onComplete, ...props }: FirstRunWizardProps) {
                             : "1px solid transparent",
                         }}
                       >
-                        <span style={{ fontWeight: 500 }}>
-                          {component.displayName}
-                        </span>
+                        <span style={{ fontWeight: 500 }}>{component.displayName}</span>
                         <div style={{ display: "flex", alignItems: "center", gap: "0.375rem" }}>
                           <span
                             style={{
@@ -847,22 +873,16 @@ export function FirstRunWizard({ onComplete, ...props }: FirstRunWizardProps) {
                     { name: "Caddy", version: "2.11.2" },
                     {
                       name: "PHP",
-                      version:
-                        packages.php.find((p) => p.id === packageSelection.php)?.version || "8.5.1",
+                      version: getPackageVersion("php", packageSelection.php) || "8.5.1",
                     },
                     {
                       name: getDatabaseDisplayName(currentPlatform),
-                      version:
-                        packages.mysql.find((p) => p.id === packageSelection.mysql)?.version ||
-                        "8.4.0",
+                      version: getPackageVersion("mysql", packageSelection.mysql) || "8.4.0",
                     },
                     {
-                      name:
-                        packages.phpmyadmin.find((p) => p.id === packageSelection.phpmyadmin)
-                          ?.name || "phpMyAdmin",
+                      name: getDatabaseToolName(packageSelection.phpmyadmin),
                       version:
-                        packages.phpmyadmin.find((p) => p.id === packageSelection.phpmyadmin)
-                          ?.version || "5.2.2",
+                        getPackageVersion("phpmyadmin", packageSelection.phpmyadmin) || "5.2.2",
                     },
                   ].map((pkg) => (
                     <div

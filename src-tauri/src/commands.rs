@@ -9,8 +9,9 @@ use crate::runtime::downloader::{DownloadProgress, RuntimeDownloader};
 use crate::runtime::locator::get_app_data_paths;
 use crate::runtime::packages::{PackageSelection, PackagesConfig};
 use crate::AppState;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use std::fs;
+use std::io::Write;
 use std::path::Path;
 use std::sync::{Mutex, OnceLock};
 use std::time::Instant;
@@ -178,11 +179,134 @@ fn aggregate_network_totals(networks: &Networks) -> (u64, u64) {
 
 static SYSTEM_METRICS_MONITOR: OnceLock<Mutex<SystemMetricsMonitor>> = OnceLock::new();
 
+const APP_RELEASE_API_URL: &str = "https://api.github.com/repos/thirawat27/CHAMP/releases/latest";
+const RUNTIME_CONFIG_URL: &str =
+    "https://raw.githubusercontent.com/thirawat27/CHAMP/main/src-tauri/runtime-config.json";
+
+#[derive(Debug, Serialize)]
+pub struct AppUpdateDto {
+    pub current_version: String,
+    pub latest_version: Option<String>,
+    pub available: bool,
+    pub asset_name: Option<String>,
+    pub download_url: Option<String>,
+    pub release_url: Option<String>,
+    pub published_at: Option<String>,
+    pub notes: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct RuntimeComponentUpdateDto {
+    pub component: String,
+    pub display_name: String,
+    pub installed_version: Option<String>,
+    pub latest_version: String,
+    pub update_available: bool,
+}
+
+#[derive(Debug, Serialize)]
+pub struct AppUpdateDownloadDto {
+    pub file_path: String,
+    pub asset_name: String,
+    pub version: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct GitHubRelease {
+    tag_name: String,
+    html_url: String,
+    body: Option<String>,
+    published_at: Option<String>,
+    assets: Vec<GitHubAsset>,
+}
+
+#[derive(Debug, Deserialize)]
+struct GitHubAsset {
+    name: String,
+    browser_download_url: String,
+}
+
 fn marker_version(path: &Path) -> Option<String> {
     let content = fs::read_to_string(path).ok()?;
     content
         .lines()
         .find_map(|line| line.strip_prefix("version=").map(str::to_string))
+}
+
+fn user_runtime_config_path() -> Result<std::path::PathBuf, String> {
+    dirs::data_local_dir()
+        .or_else(dirs::home_dir)
+        .map(|p| p.join("CHAMP").join("config").join("runtime-config.json"))
+        .ok_or_else(|| "Cannot determine writable config directory".to_string())
+}
+
+fn normalize_version(version: &str) -> Vec<u64> {
+    version
+        .trim_start_matches('v')
+        .split(|ch: char| !ch.is_ascii_digit())
+        .filter(|part| !part.is_empty())
+        .map(|part| part.parse::<u64>().unwrap_or(0))
+        .collect()
+}
+
+fn is_version_newer(latest: &str, current: &str) -> bool {
+    let mut latest_parts = normalize_version(latest);
+    let mut current_parts = normalize_version(current);
+    let max_len = latest_parts.len().max(current_parts.len());
+    latest_parts.resize(max_len, 0);
+    current_parts.resize(max_len, 0);
+    latest_parts > current_parts
+}
+
+fn selected_caddy_version() -> Option<String> {
+    crate::runtime::packages::get_config().and_then(|config| {
+        config
+            .binaries
+            .caddy
+            .versions
+            .iter()
+            .find(|version| version.selected)
+            .or_else(|| config.binaries.caddy.versions.first())
+            .map(|version| version.version.clone())
+    })
+}
+
+fn current_platform_release_asset<'a>(release: &'a GitHubRelease) -> Option<&'a GitHubAsset> {
+    let platform = if cfg!(target_os = "windows") {
+        "windows"
+    } else if cfg!(target_os = "macos") {
+        "macos"
+    } else {
+        "linux"
+    };
+
+    release
+        .assets
+        .iter()
+        .find(|asset| {
+            let name = asset.name.to_ascii_lowercase();
+            name.contains(platform) && (name.ends_with(".zip") || name.ends_with(".tar.gz"))
+        })
+        .or_else(|| {
+            release.assets.iter().find(|asset| {
+                let name = asset.name.to_ascii_lowercase();
+                name.contains(platform)
+            })
+        })
+}
+
+async fn fetch_latest_release() -> Result<GitHubRelease, String> {
+    reqwest::Client::new()
+        .get(APP_RELEASE_API_URL)
+        .header("User-Agent", "CHAMP-Updater")
+        .send()
+        .await
+        .map_err(|e| format!("Failed to check GitHub releases: {}", e))?
+        .error_for_status()
+        .map_err(|e| format!("GitHub release request failed: {}", e))?
+        .json::<GitHubRelease>()
+        .await
+        .map_err(|e| format!("Failed to parse GitHub release: {}", e))
 }
 
 /// Start a service
@@ -441,6 +565,234 @@ pub async fn get_system_metrics() -> Result<SystemMetricsDto, String> {
     Ok(monitor.collect())
 }
 
+#[tauri::command]
+pub async fn check_app_update() -> Result<AppUpdateDto, String> {
+    let current_version = env!("CARGO_PKG_VERSION").to_string();
+    let release = fetch_latest_release().await?;
+    let latest_version = release.tag_name.trim_start_matches('v').to_string();
+    let asset = current_platform_release_asset(&release);
+
+    Ok(AppUpdateDto {
+        available: is_version_newer(&latest_version, &current_version),
+        current_version,
+        latest_version: Some(latest_version),
+        asset_name: asset.map(|asset| asset.name.clone()),
+        download_url: asset.map(|asset| asset.browser_download_url.clone()),
+        release_url: Some(release.html_url),
+        published_at: release.published_at,
+        notes: release.body,
+    })
+}
+
+#[tauri::command]
+pub async fn download_app_update(app: tauri::AppHandle) -> Result<AppUpdateDownloadDto, String> {
+    let update = check_app_update().await?;
+    if !update.available {
+        return Err("No newer CHAMP release is available.".to_string());
+    }
+
+    let download_url = update
+        .download_url
+        .clone()
+        .ok_or_else(|| "No release asset matches this platform.".to_string())?;
+    let asset_name = update
+        .asset_name
+        .clone()
+        .ok_or_else(|| "No release asset name was provided by GitHub.".to_string())?;
+    let latest_version = update
+        .latest_version
+        .clone()
+        .unwrap_or_else(|| "latest".to_string());
+
+    let paths = get_app_data_paths()?;
+    let updates_dir = paths.base_dir.join("updates");
+    fs::create_dir_all(&updates_dir)
+        .map_err(|e| format!("Failed to create update directory: {}", e))?;
+    let target_path = updates_dir.join(&asset_name);
+
+    let mut response = reqwest::Client::new()
+        .get(&download_url)
+        .header("User-Agent", "CHAMP-Updater")
+        .send()
+        .await
+        .map_err(|e| format!("Failed to download update: {}", e))?
+        .error_for_status()
+        .map_err(|e| format!("Update download failed: {}", e))?;
+
+    let total_bytes = response.content_length().unwrap_or(0);
+    let mut downloaded_bytes = 0_u64;
+    let mut file = fs::File::create(&target_path)
+        .map_err(|e| format!("Failed to create update file: {}", e))?;
+
+    while let Some(chunk) = response
+        .chunk()
+        .await
+        .map_err(|e| format!("Failed while reading update download: {}", e))?
+    {
+        file.write_all(&chunk)
+            .map_err(|e| format!("Failed to write update file: {}", e))?;
+        downloaded_bytes = downloaded_bytes.saturating_add(chunk.len() as u64);
+        let percent = if total_bytes > 0 {
+            ((downloaded_bytes as f64 / total_bytes as f64) * 100.0).round() as u8
+        } else {
+            0
+        };
+        let _ = app.emit(
+            "app-update-progress",
+            serde_json::json!({
+                "percent": percent,
+                "downloadedBytes": downloaded_bytes,
+                "totalBytes": total_bytes,
+                "assetName": asset_name,
+                "version": latest_version,
+            }),
+        );
+    }
+
+    Ok(AppUpdateDownloadDto {
+        file_path: target_path.to_string_lossy().to_string(),
+        asset_name,
+        version: latest_version,
+    })
+}
+
+#[tauri::command]
+pub async fn refresh_runtime_manifest_from_github() -> Result<PackagesConfig, String> {
+    let content = reqwest::Client::new()
+        .get(RUNTIME_CONFIG_URL)
+        .header("User-Agent", "CHAMP-Updater")
+        .send()
+        .await
+        .map_err(|e| format!("Failed to fetch runtime manifest: {}", e))?
+        .error_for_status()
+        .map_err(|e| format!("Runtime manifest request failed: {}", e))?
+        .text()
+        .await
+        .map_err(|e| format!("Failed to read runtime manifest: {}", e))?;
+
+    serde_json::from_str::<crate::runtime::packages::RuntimeConfig>(&content)
+        .map_err(|e| format!("GitHub runtime manifest is invalid: {}", e))?;
+
+    let path = user_runtime_config_path()?;
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent)
+            .map_err(|e| format!("Failed to create runtime manifest directory: {}", e))?;
+    }
+    fs::write(&path, content).map_err(|e| format!("Failed to save runtime manifest: {}", e))?;
+
+    crate::runtime::packages::reload_runtime_config();
+    Ok(crate::runtime::packages::get_available_packages())
+}
+
+#[tauri::command]
+pub async fn check_runtime_updates() -> Result<Vec<RuntimeComponentUpdateDto>, String> {
+    let settings = AppSettings::load();
+    let installed = get_installed_versions().await?;
+    let packages = crate::runtime::packages::get_available_packages();
+
+    let selected_php = crate::runtime::packages::get_php_package(&settings.package_selection.php)
+        .or_else(|| packages.php.first().cloned());
+    let selected_mysql =
+        crate::runtime::packages::get_mysql_package(&settings.package_selection.mysql)
+            .or_else(|| packages.mysql.first().cloned());
+    let selected_tool =
+        crate::runtime::packages::get_phpmyadmin_package(&settings.package_selection.phpmyadmin)
+            .or_else(|| packages.phpmyadmin.first().cloned());
+
+    let mut updates = Vec::new();
+    if let Some(version) = selected_caddy_version() {
+        let installed_version = installed.get("caddy").cloned();
+        updates.push(RuntimeComponentUpdateDto {
+            component: "caddy".to_string(),
+            display_name: "Caddy".to_string(),
+            update_available: installed_version
+                .as_ref()
+                .map(|installed| installed != &version)
+                .unwrap_or(true),
+            installed_version,
+            latest_version: version,
+        });
+    }
+
+    if let Some(package) = selected_php {
+        let installed_version = installed.get("php").cloned();
+        updates.push(RuntimeComponentUpdateDto {
+            component: "php".to_string(),
+            display_name: package.display_name,
+            update_available: installed_version
+                .as_ref()
+                .map(|installed| installed != &package.version)
+                .unwrap_or(true),
+            installed_version,
+            latest_version: package.version,
+        });
+    }
+
+    if let Some(package) = selected_mysql {
+        let installed_version = installed.get("mysql").cloned();
+        updates.push(RuntimeComponentUpdateDto {
+            component: "mysql".to_string(),
+            display_name: package.display_name,
+            update_available: installed_version
+                .as_ref()
+                .map(|installed| installed != &package.version)
+                .unwrap_or(true),
+            installed_version,
+            latest_version: package.version,
+        });
+    }
+
+    if let Some(package) = selected_tool {
+        let component = if package.id.starts_with("adminer") {
+            "adminer"
+        } else {
+            "phpmyadmin"
+        };
+        let installed_version = installed.get(component).cloned();
+        updates.push(RuntimeComponentUpdateDto {
+            component: component.to_string(),
+            display_name: package.display_name,
+            update_available: installed_version
+                .as_ref()
+                .map(|installed| installed != &package.version)
+                .unwrap_or(true),
+            installed_version,
+            latest_version: package.version,
+        });
+    }
+
+    Ok(updates)
+}
+
+#[tauri::command]
+pub async fn update_runtime_components(app: tauri::AppHandle) -> Result<String, String> {
+    let settings = AppSettings::load();
+    let updates = check_runtime_updates().await?;
+    let skip_list: Vec<String> = updates
+        .iter()
+        .filter(|update| !update.update_available)
+        .map(|update| update.component.clone())
+        .collect();
+
+    let downloader = RuntimeDownloader::with_packages(settings.package_selection);
+    let app_clone = app.clone();
+    let skip_refs: Vec<&str> = skip_list.iter().map(|item| item.as_str()).collect();
+
+    downloader
+        .download_all_with_skip(
+            Box::new(move |progress| {
+                let _ = app_clone.emit("download-progress", &progress);
+                if let Ok(mut p) = DOWNLOAD_PROGRESS.lock() {
+                    *p = Some(progress);
+                }
+            }),
+            &skip_refs,
+        )
+        .await?;
+
+    Ok("Runtime components are up to date.".to_string())
+}
+
 /// Get the download directory path (where ZIP files are stored)
 #[tauri::command]
 pub async fn get_download_dir() -> Result<String, String> {
@@ -682,6 +1034,7 @@ pub async fn reload_runtime_config() -> Result<String, String> {
 pub async fn get_installed_versions() -> Result<std::collections::HashMap<String, String>, String> {
     let downloader = RuntimeDownloader::new();
     let runtime_dir = downloader.get_runtime_dir()?;
+    let settings = AppSettings::load();
 
     let mut versions = std::collections::HashMap::new();
 
@@ -699,9 +1052,19 @@ pub async fn get_installed_versions() -> Result<std::collections::HashMap<String
         }
     }
 
+    let active_php_marker = runtime_dir
+        .join("php_versions")
+        .join(format!("{}_installed.txt", settings.package_selection.php));
+    if let Some(version) = marker_version(&active_php_marker) {
+        versions.insert("php".to_string(), version);
+    }
+
     // Add Caddy version from default config (not in packages)
     if !versions.contains_key("caddy") {
-        versions.insert("caddy".to_string(), "2.11.2".to_string());
+        versions.insert(
+            "caddy".to_string(),
+            selected_caddy_version().unwrap_or_else(|| "2.11.2".to_string()),
+        );
     }
 
     Ok(versions)

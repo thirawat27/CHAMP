@@ -26,8 +26,18 @@ pub struct AppSettings {
     pub project_root: String,
     #[serde(default)]
     pub auto_start_services: bool,
+    #[serde(default = "default_true")]
+    pub disable_devtools_shortcuts: bool,
+    #[serde(default = "default_true")]
+    pub auto_check_updates: bool,
+    #[serde(default = "default_true")]
+    pub auto_update_runtime_manifest: bool,
     #[serde(default)]
     pub package_selection: PackageSelection,
+}
+
+fn default_true() -> bool {
+    true
 }
 
 impl Default for AppSettings {
@@ -43,6 +53,9 @@ impl Default for AppSettings {
                 .to_string_lossy()
                 .to_string(),
             auto_start_services: false,
+            disable_devtools_shortcuts: true,
+            auto_check_updates: true,
+            auto_update_runtime_manifest: true,
             package_selection: PackageSelection::default(),
         }
     }
