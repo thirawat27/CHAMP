@@ -1,5 +1,3 @@
-# CHAMP
-
 <div align="center">
 
 <img src="src/assets/CHAMP.png" alt="CHAMP Logo" width="250"/>
