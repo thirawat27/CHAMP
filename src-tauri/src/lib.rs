@@ -109,16 +109,10 @@ pub fn run() {
             Ok(())
         })
         .on_window_event(|window, event| {
-            // Closing the main window quits the local stack instead of leaving service processes behind.
+            // Closing the main window keeps CHAMP available from the system tray.
             if let tauri::WindowEvent::CloseRequested { api, .. } = event {
-                if let Some(state) = window.app_handle().try_state::<AppState>() {
-                    if let Ok(mut manager) = state.process_manager.lock() {
-                        let _ = manager.stop_all();
-                    }
-                }
                 let _ = window.hide();
                 api.prevent_close();
-                std::process::exit(0);
             }
         })
         .invoke_handler(tauri::generate_handler![
