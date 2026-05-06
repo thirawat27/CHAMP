@@ -4,7 +4,7 @@ use std::collections::HashMap;
 use std::fs::{self, File, OpenOptions};
 use std::io::Write;
 use std::path::{Path, PathBuf};
-use std::process::{Child, Command, Stdio};
+use std::process::{Child, Command, ExitStatus, Stdio};
 
 // Windows-specific: Constant to hide console window
 #[cfg(target_os = "windows")]
@@ -60,6 +60,46 @@ fn open_log_file_with_retry(log_path: &PathBuf, service_name: &str) -> Result<Fi
         "Failed to create {} log file: maximum retries exceeded",
         service_name
     ))
+}
+
+fn format_exit_status(status: ExitStatus) -> String {
+    if let Some(code) = status.code() {
+        return format!("exit code {}", code);
+    }
+
+    #[cfg(unix)]
+    {
+        use std::os::unix::process::ExitStatusExt;
+        if let Some(signal) = status.signal() {
+            return format!("signal {}", signal);
+        }
+    }
+
+    format!("{:?}", status)
+}
+
+fn read_log_tail(log_path: &Path, max_lines: usize) -> Option<String> {
+    let content = fs::read_to_string(log_path).ok()?;
+    let mut lines: Vec<&str> = content.lines().rev().take(max_lines).collect();
+    lines.reverse();
+    let tail = lines.join("\n").trim().to_string();
+    if tail.is_empty() {
+        None
+    } else {
+        Some(tail)
+    }
+}
+
+fn format_process_exit_error(summary: &str, status: ExitStatus, log_path: Option<&Path>) -> String {
+    let mut message = format!("{} ({})", summary, format_exit_status(status));
+    if let Some(path) = log_path {
+        message.push_str(&format!("\nLog file: {}", path.display()));
+        if let Some(tail) = read_log_tail(path, 40) {
+            message.push_str("\nLast log lines:\n");
+            message.push_str(&tail);
+        }
+    }
+    message
 }
 
 /// A running service process with its handle and configuration
@@ -300,9 +340,13 @@ impl ProcessManager {
                     Ok(Some(status)) => {
                         // Process has exited
                         service_process.state = ServiceState::Error;
-                        service_process.error_message = Some(format!(
-                            "Process exited unexpectedly with status: {:?}",
-                            status
+                        service_process.error_message = Some(format_process_exit_error(
+                            &format!(
+                                "{} process exited unexpectedly",
+                                service_process.name.display_name()
+                            ),
+                            status,
+                            service_process.log_file.as_deref(),
                         ));
                         service_process.child = None;
                     }
@@ -504,9 +548,10 @@ fn start_mysql(service_process: &mut ServiceProcess, paths: &RuntimePaths) -> Re
             if let Some(init_file) = init_file_path {
                 let _ = fs::remove_file(&init_file);
             }
-            Err(format!(
-                "MariaDB exited immediately with status: {:?}\n\nCheck logs at: {:?}",
-                status, log_path
+            Err(format_process_exit_error(
+                "MariaDB exited immediately",
+                status,
+                Some(&log_path),
             ))
         }
         Ok(None) => {
@@ -546,9 +591,10 @@ fn attach_started_process(
     service_label: &str,
 ) -> Result<(), String> {
     match child.try_wait() {
-        Ok(Some(status)) => Err(format!(
-            "{} exited immediately with status: {:?}",
-            service_label, status
+        Ok(Some(status)) => Err(format_process_exit_error(
+            &format!("{} exited immediately", service_label),
+            status,
+            Some(&log_path),
         )),
         Ok(None) => {
             service_process.child = Some(child);
@@ -1331,6 +1377,58 @@ impl Default for ProcessManager {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[cfg(windows)]
+    fn nonzero_exit_status() -> ExitStatus {
+        Command::new("cmd")
+            .args(["/C", "exit 7"])
+            .status()
+            .expect("failed to create nonzero exit status")
+    }
+
+    #[cfg(not(windows))]
+    fn nonzero_exit_status() -> ExitStatus {
+        Command::new("sh")
+            .args(["-c", "exit 7"])
+            .status()
+            .expect("failed to create nonzero exit status")
+    }
+
+    #[test]
+    fn test_format_exit_status_human_readable() {
+        let status = nonzero_exit_status();
+        let formatted = format_exit_status(status);
+        assert!(formatted.contains("7"), "unexpected format: {}", formatted);
+        assert!(
+            !formatted.contains("ExitStatus("),
+            "status should be user-friendly: {}",
+            formatted
+        );
+    }
+
+    #[test]
+    fn test_format_process_exit_error_includes_log_tail() {
+        let unique = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .expect("system time before UNIX_EPOCH")
+            .as_nanos();
+        let log_path = std::env::temp_dir().join(format!("champ-process-error-{}.log", unique));
+        std::fs::write(
+            &log_path,
+            "line 1\nline 2\nline 3\nfatal startup error on line 4\n",
+        )
+        .expect("failed to write temp log");
+
+        let status = nonzero_exit_status();
+        let message =
+            format_process_exit_error("Service exited unexpectedly", status, Some(log_path.as_path()));
+
+        assert!(message.contains("exit code 7"));
+        assert!(message.contains("Log file:"));
+        assert!(message.contains("fatal startup error on line 4"));
+
+        let _ = std::fs::remove_file(log_path);
+    }
 
     #[test]
     fn test_process_manager_new() {
