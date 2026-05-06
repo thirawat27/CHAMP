@@ -1,6 +1,14 @@
 import { useState, useEffect } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { PackagesConfig, PackageSelection, PhpPackage, MySQLPackage, PhpMyAdminPackage, getDatabaseDisplayName } from "../types/services";
+import {
+  PackagesConfig,
+  PackageSelection,
+  PhpPackage,
+  MySQLPackage,
+  PhpMyAdminPackage,
+  getDatabaseDisplayName,
+  hasPackageUrlForPlatform,
+} from "../types/services";
 
 // Helper to detect platform
 const detectPlatform = (): string => {
@@ -19,6 +27,7 @@ export function PackageSelector({ onSelectionChange, initialSelection }: Package
   const [packages, setPackages] = useState<PackagesConfig | null>(null);
   const [loading, setLoading] = useState(true);
   const [currentPlatform, setCurrentPlatform] = useState<string>("");
+  const [runtimePlatformKey, setRuntimePlatformKey] = useState<string>("");
   const [selection, setSelection] = useState<PackageSelection>(
     initialSelection || {
       php: "php-8.5",
@@ -34,15 +43,39 @@ export function PackageSelector({ onSelectionChange, initialSelection }: Package
   }, []);
 
   useEffect(() => {
-    if (packages) {
-      onSelectionChange(selection);
+    if (!packages || !runtimePlatformKey) return;
+
+    const availablePhp = packages.php.filter((pkg) =>
+      hasPackageUrlForPlatform(pkg, runtimePlatformKey)
+    );
+    const availableMysql = packages.mysql.filter((pkg) =>
+      hasPackageUrlForPlatform(pkg, runtimePlatformKey)
+    );
+    const nextSelection = { ...selection };
+
+    if (!availablePhp.some((pkg) => pkg.id === nextSelection.php) && availablePhp[0]) {
+      nextSelection.php = availablePhp[0].id;
     }
-  }, [selection, packages, onSelectionChange]);
+    if (!availableMysql.some((pkg) => pkg.id === nextSelection.mysql) && availableMysql[0]) {
+      nextSelection.mysql = availableMysql[0].id;
+    }
+
+    if (nextSelection.php !== selection.php || nextSelection.mysql !== selection.mysql) {
+      setSelection(nextSelection);
+      return;
+    }
+
+    onSelectionChange(selection);
+  }, [selection, packages, runtimePlatformKey, onSelectionChange]);
 
   const loadPackages = async () => {
     try {
-      const data = await invoke<PackagesConfig>("get_available_packages_cmd");
+      const [data, platformKey] = await Promise.all([
+        invoke<PackagesConfig>("get_available_packages_cmd"),
+        invoke<string>("get_runtime_platform"),
+      ]);
       setPackages(data);
+      setRuntimePlatformKey(platformKey);
     } catch (err) {
       console.error("Failed to load packages:", err);
     } finally {
@@ -78,6 +111,13 @@ export function PackageSelector({ onSelectionChange, initialSelection }: Package
     );
   }
 
+  const availablePhpPackages = packages.php.filter((pkg) =>
+    hasPackageUrlForPlatform(pkg, runtimePlatformKey)
+  );
+  const availableMysqlPackages = packages.mysql.filter((pkg) =>
+    hasPackageUrlForPlatform(pkg, runtimePlatformKey)
+  );
+
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
       {/* PHP Version Selector */}
@@ -91,7 +131,7 @@ export function PackageSelector({ onSelectionChange, initialSelection }: Package
           className="input"
           style={{ cursor: "pointer", padding: "0.375rem 0.5rem", fontSize: "0.875rem", width: "100%" }}
         >
-          {packages.php.map((pkg: PhpPackage) => (
+          {availablePhpPackages.map((pkg: PhpPackage) => (
             <option key={pkg.id} value={pkg.id}>
               {pkg.display_name}
               {pkg.eol && " (EOL)"}
@@ -111,7 +151,7 @@ export function PackageSelector({ onSelectionChange, initialSelection }: Package
           className="input"
           style={{ cursor: "pointer", padding: "0.375rem 0.5rem", fontSize: "0.875rem", width: "100%" }}
         >
-          {packages.mysql.map((pkg: MySQLPackage) => (
+          {availableMysqlPackages.map((pkg: MySQLPackage) => (
             <option key={pkg.id} value={pkg.id}>
               {pkg.display_name}
             </option>

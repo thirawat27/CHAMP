@@ -25,20 +25,15 @@
       "versions": [
         {
           "id": "php-8.5",
-          "version": "8.5.6",
+          "version": "8.5.5",
           "selected": true,
           "display_name": "PHP 8.5",
           "eol": false,
           "lts": false,
-          "checksums": {
-            "windowsX64": "0fc5958e332c35a7860aed3afc02295ae409f7b0b8f0f7d48fa0f784f81071e6",
-            "windowsArm64": "0fc5958e332c35a7860aed3afc02295ae409f7b0b8f0f7d48fa0f784f81071e6"
-          },
+          "checksums": {},
           "urls": {
-            "windowsX64": "https://downloads.php.net/~windows/releases/archives/php-8.5.6-nts-Win32-vs17-x64.zip",
-            "windowsArm64": "https://downloads.php.net/~windows/releases/archives/php-8.5.6-nts-Win32-vs17-x64.zip",
+            "windowsX64": "https://downloads.php.net/~windows/releases/archives/php-8.5.5-nts-Win32-vs17-x64.zip",
             "linuxX64": "https://dl.static-php.dev/static-php-cli/bulk/php-8.5.5-fpm-linux-x86_64.tar.gz",
-            "linuxArm64": "https://dl.static-php.dev/static-php-cli/bulk/php-8.5.5-fpm-linux-aarch64.tar.gz",
             "macOSX64": "https://dl.static-php.dev/static-php-cli/bulk/php-8.5.5-fpm-macos-x86_64.tar.gz",
             "macOSArm64": "https://dl.static-php.dev/static-php-cli/bulk/php-8.5.5-fpm-macos-aarch64.tar.gz"
           }
@@ -71,7 +66,6 @@
           "checksums": {},
           "urls": {
             "windowsX64": "https://cdn.mysql.com/Downloads/MySQL-9.7/mysql-9.7.0-winx64.zip",
-            "windowsArm64": "https://cdn.mysql.com/Downloads/MySQL-9.7/mysql-9.7.0-winx64.zip",
             "linuxX64": "https://cdn.mysql.com/Downloads/MySQL-9.7/mysql-9.7.0-linux-glibc2.28-x86_64.tar.xz",
             "linuxArm64": "https://cdn.mysql.com/Downloads/MySQL-9.7/mysql-9.7.0-linux-glibc2.28-aarch64.tar.xz",
             "macOSX64": "https://cdn.mysql.com/Downloads/MySQL-9.7/mysql-9.7.0-macos15-x86_64.tar.gz",

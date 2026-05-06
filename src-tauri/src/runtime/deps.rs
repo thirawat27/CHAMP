@@ -46,8 +46,8 @@ pub fn check_system_dependencies() -> DependencyCheckResult {
 
     #[cfg(target_os = "linux")]
     {
-        // Using MariaDB systemd tarball which doesn't require libaio
-        // No additional dependency checks needed
+        // Using the official MySQL generic package. Additional dependency checks are
+        // handled by process startup errors until CHAMP has per-distro runtime packages.
     }
 
     #[cfg(target_os = "windows")]
@@ -205,7 +205,7 @@ fn check_library(lib_name: &str) -> bool {
 fn get_platform_notes() -> String {
     #[cfg(target_os = "linux")]
     {
-        "Using MariaDB systemd tarball - no additional dependencies required.".to_string()
+        "Using the official MySQL generic package. If startup fails, check the MySQL log for missing system libraries.".to_string()
     }
 
     #[cfg(target_os = "windows")]

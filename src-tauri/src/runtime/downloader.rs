@@ -131,17 +131,17 @@ fn get_default_config() -> RuntimeConfig {
                 versions: vec![
                     VersionInfo {
                         id: "php-8.5".to_string(),
-                        version: "8.5.6".to_string(),
+                        version: "8.5.5".to_string(),
                         selected: true,
                         display_name: "PHP 8.5".to_string(),
                         eol: false,
                         lts: false,
                         checksums: Checksums::default(),
                         urls: Urls {
-                            windows_x64: Some("https://downloads.php.net/~windows/releases/archives/php-8.5.6-nts-Win32-vs17-x64.zip".to_string()),
-                            windows_arm64: Some("https://downloads.php.net/~windows/releases/archives/php-8.5.6-nts-Win32-vs17-x64.zip".to_string()),
+                            windows_x64: Some("https://downloads.php.net/~windows/releases/archives/php-8.5.5-nts-Win32-vs17-x64.zip".to_string()),
+                            windows_arm64: None,
                             linux_x64: Some("https://dl.static-php.dev/static-php-cli/bulk/php-8.5.5-fpm-linux-x86_64.tar.gz".to_string()),
-                            linux_arm64: Some("https://dl.static-php.dev/static-php-cli/bulk/php-8.5.5-fpm-linux-aarch64.tar.gz".to_string()),
+                            linux_arm64: None,
                             macos_x64: Some("https://dl.static-php.dev/static-php-cli/bulk/php-8.5.5-fpm-macos-x86_64.tar.gz".to_string()),
                             macos_arm64: Some("https://dl.static-php.dev/static-php-cli/bulk/php-8.5.5-fpm-macos-aarch64.tar.gz".to_string()),
                         },
@@ -160,7 +160,7 @@ fn get_default_config() -> RuntimeConfig {
                         checksums: Checksums::default(),
                         urls: Urls {
                             windows_x64: Some("https://cdn.mysql.com/Downloads/MySQL-9.7/mysql-9.7.0-winx64.zip".to_string()),
-                            windows_arm64: Some("https://cdn.mysql.com/Downloads/MySQL-9.7/mysql-9.7.0-winx64.zip".to_string()),
+                            windows_arm64: None,
                             linux_x64: Some("https://cdn.mysql.com/Downloads/MySQL-9.7/mysql-9.7.0-linux-glibc2.28-x86_64.tar.xz".to_string()),
                             linux_arm64: Some("https://cdn.mysql.com/Downloads/MySQL-9.7/mysql-9.7.0-linux-glibc2.28-aarch64.tar.xz".to_string()),
                             macos_x64: Some("https://cdn.mysql.com/Downloads/MySQL-9.7/mysql-9.7.0-macos15-x86_64.tar.gz".to_string()),

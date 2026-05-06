@@ -8,6 +8,7 @@ import {
   InstalledPhpVersion,
   PackagesConfig,
   PackageSelection,
+  hasPackageUrlForPlatform,
 } from "../types/services";
 
 interface SettingsPanelProps {
@@ -38,6 +39,7 @@ export function SettingsPanel({ onClose, onSettingsChanged, ...props }: Settings
     package_selection: defaultPackageSelection,
   });
   const [packages, setPackages] = useState<PackagesConfig | null>(null);
+  const [runtimePlatformKey, setRuntimePlatformKey] = useState("");
   const [phpVersions, setPhpVersions] = useState<InstalledPhpVersion[]>([]);
   const [selectedPhpId, setSelectedPhpId] = useState(defaultPackageSelection.php);
   const [phpBusy, setPhpBusy] = useState(false);
@@ -50,20 +52,32 @@ export function SettingsPanel({ onClose, onSettingsChanged, ...props }: Settings
 
   const loadSettings = useCallback(async () => {
     try {
-      const [loaded, availablePackages, installedPhp] = await Promise.all([
+      const [loaded, availablePackages, installedPhp, platformKey] = await Promise.all([
         invoke<AppSettings>("get_settings"),
         invoke<PackagesConfig>("get_available_packages_cmd"),
         invoke<InstalledPhpVersion[]>("get_installed_php_versions"),
+        invoke<string>("get_runtime_platform"),
       ]);
       const packageSelection = loaded.package_selection ?? defaultPackageSelection;
+      const availablePhpPackages = availablePackages.php.filter((pkg) =>
+        hasPackageUrlForPlatform(pkg, platformKey)
+      );
+      const normalizedPackageSelection = { ...packageSelection };
+      if (
+        !availablePhpPackages.some((pkg) => pkg.id === normalizedPackageSelection.php) &&
+        availablePhpPackages[0]
+      ) {
+        normalizedPackageSelection.php = availablePhpPackages[0].id;
+      }
       setSettings({
         ...loaded,
         auto_start_services: loaded.auto_start_services ?? false,
-        package_selection: packageSelection,
+        package_selection: normalizedPackageSelection,
       });
       setPackages(availablePackages);
+      setRuntimePlatformKey(platformKey);
       setPhpVersions(installedPhp);
-      setSelectedPhpId(packageSelection.php);
+      setSelectedPhpId(normalizedPackageSelection.php);
     } catch (e) {
       setError(`Failed to load settings: ${e}`);
     } finally {
@@ -185,6 +199,12 @@ export function SettingsPanel({ onClose, onSettingsChanged, ...props }: Settings
     await invoke("open_folder", { path: settings.project_root });
   };
 
+  const availablePhpPackages = (packages?.php ?? []).filter((pkg) =>
+    hasPackageUrlForPlatform(pkg, runtimePlatformKey)
+  );
+  const availablePhpIds = new Set(availablePhpPackages.map((pkg) => pkg.id));
+  const visiblePhpVersions = phpVersions.filter((php) => availablePhpIds.has(php.id));
+
   return (
     <div className="modal-backdrop" onClick={onClose} {...props}>
       <section
@@ -287,7 +307,7 @@ export function SettingsPanel({ onClose, onSettingsChanged, ...props }: Settings
                     value={selectedPhpId}
                     onChange={(event) => updateSelectedPhpSetting(event.target.value)}
                   >
-                    {(packages?.php ?? []).map((pkg) => {
+                    {availablePhpPackages.map((pkg) => {
                       const installed = phpVersions.find((php) => php.id === pkg.id)?.installed;
                       return (
                         <option key={pkg.id} value={pkg.id}>
@@ -299,7 +319,7 @@ export function SettingsPanel({ onClose, onSettingsChanged, ...props }: Settings
                   </select>
                 </label>
                 <div className="php-version-grid">
-                  {phpVersions.map((php) => (
+                  {visiblePhpVersions.map((php) => (
                     <button
                       key={php.id}
                       type="button"

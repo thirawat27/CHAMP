@@ -605,7 +605,6 @@ version = "1.0.0"
 dependencies = [
  "dirs 5.0.1",
  "flate2",
- "futures-util",
  "hex",
  "image",
  "reqwest 0.12.28",

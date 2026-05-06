@@ -222,18 +222,6 @@ impl ProcessManager {
 
         service_process.state = ServiceState::Stopping;
 
-        // For MySQL/MariaDB on Windows, use taskkill to ensure the process is terminated
-        // This is necessary because mysqld may spawn additional processes or the
-        // child handle may not properly refer to the actual mysqld.exe process
-        #[cfg(target_os = "windows")]
-        if service == ServiceType::MySQL {
-            let _ = Command::new("taskkill")
-                .args(["/F", "/IM", "mysqld.exe"])
-                .stdout(Stdio::null())
-                .stderr(Stdio::null())
-                .output();
-        }
-
         // Terminate the child process if it exists
         if let Some(ref mut child) = service_process.child {
             #[cfg(unix)]
@@ -245,11 +233,7 @@ impl ProcessManager {
 
             #[cfg(windows)]
             {
-                // On Windows (for non-MySQL services), kill the process
-                // For MySQL, we already used taskkill above
-                if service != ServiceType::MySQL {
-                    let _ = child.kill();
-                }
+                let _ = child.kill();
             }
 
             // Wait for the process to exit (with timeout for safety)
@@ -364,9 +348,6 @@ fn start_caddy(
     mysql_port: u16,
     database_tool_id: &str,
 ) -> Result<(), String> {
-    // Kill any existing Caddy processes to avoid port conflicts
-    kill_existing_processes("caddy");
-
     // Prepare the selected database tool in the writable config directory. This avoids writing into
     // Program Files or any other install directory that may require elevation.
     ensure_database_tool(paths, service_process.port, mysql_port, database_tool_id)?;
@@ -395,10 +376,6 @@ fn start_caddy(
 
 /// Start PHP-FPM (using PHP-CGI for simplicity in MVP)
 fn start_php_fpm(service_process: &mut ServiceProcess, paths: &RuntimePaths) -> Result<(), String> {
-    // Kill any existing PHP processes to avoid port conflicts
-    kill_existing_processes("php-fpm");
-    kill_existing_processes("php-cgi");
-
     // Regenerate php.ini on each start because it depends on the selected PHP runtime.
     generate_php_ini(&paths.php_ini, paths)?;
 
@@ -462,21 +439,6 @@ fn start_php_fpm(service_process: &mut ServiceProcess, paths: &RuntimePaths) -> 
 /// These are drop-in replacements for each other, but have different
 /// initialization requirements and binary names.
 fn start_mysql(service_process: &mut ServiceProcess, paths: &RuntimePaths) -> Result<(), String> {
-    // Kill any existing database server processes to avoid port conflicts
-    #[cfg(target_os = "linux")]
-    {
-        // Linux: Kill MariaDB processes (mariadbd)
-        // Also kill mysqld in case of mixed installations
-        kill_existing_processes("mariadbd");
-        kill_existing_processes("mysqld");
-    }
-
-    #[cfg(not(target_os = "linux"))]
-    {
-        // Windows/macOS: Kill MySQL processes (mysqld)
-        kill_existing_processes("mysqld");
-    }
-
     // Initialize MySQL data directory if needed
     initialize_mysql_data_dir(paths)?;
 
@@ -552,19 +514,12 @@ fn start_mysql(service_process: &mut ServiceProcess, paths: &RuntimePaths) -> Re
                 let marker_path = user_created_flag.clone();
                 let init_cleanup_path = init_file_path.clone();
                 let mysql_port = service_process.port;
+                let mysql_client = database_client_binary(&paths.mysql);
                 std::thread::spawn(move || {
                     for _ in 0..20 {
-                        let addr = format!("127.0.0.1:{}", mysql_port);
-                        if let Ok(socket_addr) = addr.parse() {
-                            if std::net::TcpStream::connect_timeout(
-                                &socket_addr,
-                                std::time::Duration::from_millis(100),
-                            )
-                            .is_ok()
-                            {
-                                let _ = fs::write(marker_path, "done");
-                                break;
-                            }
+                        if mysql_root_tcp_login_works(&mysql_client, mysql_port) {
+                            let _ = fs::write(marker_path, "done");
+                            break;
                         }
                         std::thread::sleep(std::time::Duration::from_millis(500));
                     }
@@ -602,6 +557,46 @@ fn attach_started_process(
         }
         Err(e) => Err(format!("Failed to check {} process: {}", service_label, e)),
     }
+}
+
+fn database_client_binary(server_binary: &Path) -> PathBuf {
+    let client_name = if cfg!(target_os = "windows") {
+        "mysql.exe"
+    } else {
+        "mysql"
+    };
+
+    server_binary
+        .parent()
+        .map(|bin_dir| bin_dir.join(client_name))
+        .unwrap_or_else(|| PathBuf::from(client_name))
+}
+
+fn mysql_root_tcp_login_works(mysql_client: &Path, port: u16) -> bool {
+    if !mysql_client.exists() {
+        return false;
+    }
+
+    let port_arg = port.to_string();
+    Command::new(mysql_client)
+        .args([
+            "--protocol=TCP",
+            "-h",
+            "127.0.0.1",
+            "-P",
+            &port_arg,
+            "-u",
+            "root",
+            "--password=",
+            "--connect-timeout=2",
+            "-e",
+            "SELECT 1",
+        ])
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status()
+        .map(|status| status.success())
+        .unwrap_or(false)
 }
 
 /// Initialize MySQL/MariaDB data directory
@@ -867,39 +862,6 @@ fn initialize_mysqld_data_dir(
     }
 
     Ok(())
-}
-
-/// Kill any existing processes with the given name to avoid port conflicts
-fn kill_existing_processes(process_name: &str) {
-    #[cfg(windows)]
-    {
-        // Use taskkill on Windows to forcefully terminate processes by name
-        let _ = Command::new("taskkill")
-            .args(["/F", "/IM", &format!("{}.exe", process_name)])
-            .stdout(Stdio::null())
-            .stderr(Stdio::null())
-            .output();
-    }
-
-    #[cfg(unix)]
-    {
-        // Try multiple approaches to kill processes on Unix
-        // 1. First try pkill (most common on Linux)
-        let pkill_result = Command::new("pkill")
-            .args(["-9", process_name])
-            .stdout(Stdio::null())
-            .stderr(Stdio::null())
-            .output();
-
-        // If pkill failed (not found), try killall (more common on macOS)
-        if pkill_result.is_err() {
-            let _ = Command::new("killall")
-                .args(["-9", process_name])
-                .stdout(Stdio::null())
-                .stderr(Stdio::null())
-                .output();
-        }
-    }
 }
 
 /// Generate a basic Caddyfile

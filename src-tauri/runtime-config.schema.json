@@ -6,6 +6,10 @@
   "additionalProperties": false,
   "required": ["version", "binaries"],
   "properties": {
+    "$schema": {
+      "type": "string",
+      "description": "Optional JSON schema reference"
+    },
     "version": {
       "type": "string",
       "description": "Configuration format version"
@@ -66,7 +70,6 @@
     "versionInfo": {
       "type": "object",
       "description": "Version information for a binary package",
-      "additionalProperties": false,
       "required": ["id", "version", "selected", "display_name"],
       "properties": {
         "id": {
@@ -94,6 +97,38 @@
           "type": "boolean",
           "description": "Whether this is a long-term support version",
           "default": false
+        },
+        "checksums": {
+          "$ref": "#/definitions/checksums"
+        },
+        "checksum": {
+          "type": ["string", "null"],
+          "description": "SHA-256 checksum for platform-independent downloads"
+        }
+      }
+    },
+    "checksums": {
+      "type": "object",
+      "description": "Optional SHA-256 checksums for platform-specific downloads",
+      "additionalProperties": false,
+      "properties": {
+        "windowsX64": {
+          "type": "string"
+        },
+        "windowsArm64": {
+          "type": "string"
+        },
+        "linuxX64": {
+          "type": "string"
+        },
+        "linuxArm64": {
+          "type": "string"
+        },
+        "macOSX64": {
+          "type": "string"
+        },
+        "macOSArm64": {
+          "type": "string"
         }
       }
     },

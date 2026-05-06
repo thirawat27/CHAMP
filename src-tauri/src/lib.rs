@@ -136,6 +136,7 @@ pub fn run() {
             commands::download_runtime_with_packages,
             commands::download_runtime_with_skip,
             commands::get_available_packages_cmd,
+            commands::get_runtime_platform,
             commands::get_package_selection,
             commands::update_package_selection,
             commands::get_installed_php_versions,
@@ -179,7 +180,12 @@ fn handle_menu_event(app: &AppHandle, event: MenuEvent) {
         "reset-installation" => {
             let app = app.clone();
             tauri::async_runtime::spawn(async move {
-                if commands::reset_installation().await.is_ok() {
+                if let Some(state) = app.try_state::<AppState>() {
+                    if let Ok(mut manager) = state.process_manager.lock() {
+                        let _ = manager.stop_all();
+                    }
+                }
+                if commands::reset_runtime_dir().await.is_ok() {
                     let _ = app.emit("show-wizard", ());
                 }
             });

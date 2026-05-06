@@ -1,8 +1,8 @@
 {
   "name": "champ",
   "private": true,
-  "version": "1.0.0",
-  "author": "Thirawat Sinlapasomsak",
+  "version": "1.1.0",
+  "author": "Thirawat27",
   "repository": {
     "type": "git",
     "url": "https://github.com/thirawat27/CHAMP.git"
@@ -27,28 +27,21 @@
     "@tailwindcss/postcss": "^4.2.4",
     "@tauri-apps/api": "^2.11.0",
     "@tauri-apps/plugin-opener": "^2.5.4",
-    "clsx": "^2.1.1",
     "lucide-react": "^1.14.0",
     "react": "^19.2.5",
-    "react-dom": "^19.2.5",
-    "skills": "^1.5.3",
-    "tailwind-merge": "^3.5.0"
+    "react-dom": "^19.2.5"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.4",
     "@tauri-apps/cli": "^2.11.0",
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.2",
-    "@testing-library/user-event": "^14.6.1",
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
     "@typescript-eslint/eslint-plugin": "^8.59.2",
     "@typescript-eslint/parser": "^8.59.2",
     "@vitejs/plugin-react": "^6.0.1",
-    "autoprefixer": "^10.5.0",
     "eslint": "^9.39.4",
-    "eslint-config-prettier": "^10.1.8",
-    "eslint-plugin-prettier": "^5.5.5",
     "eslint-plugin-react": "^7.37.5",
     "eslint-plugin-react-hooks": "^7.1.1",
     "jsdom": "^29.1.1",

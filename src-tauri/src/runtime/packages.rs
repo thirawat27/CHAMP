@@ -227,17 +227,9 @@ pub fn load_runtime_config_from_file() -> Option<RuntimeConfig> {
     None
 }
 
-/// Get the platform-appropriate database display name
+/// Get the platform-appropriate database display name.
 fn get_database_display_name(display_name: &str) -> String {
-    // On Linux, show "MariaDB", on Windows/macOS show "MySQL"
-    #[cfg(target_os = "linux")]
-    {
-        display_name.replace("MySQL", "MariaDB")
-    }
-    #[cfg(not(target_os = "linux"))]
-    {
-        display_name.replace("MariaDB", "MySQL")
-    }
+    display_name.replace("MariaDB", "MySQL")
 }
 
 /// Get all available packages from config file or defaults
@@ -388,12 +380,12 @@ fn get_default_packages() -> PackagesConfig {
         php: vec![
             PhpPackage {
                 id: "php-8.5".to_string(),
-                version: "8.5.6".to_string(),
+                version: "8.5.5".to_string(),
                 display_name: "PHP 8.5".to_string(),
-                windows_x64: "https://downloads.php.net/~windows/releases/archives/php-8.5.6-nts-Win32-vs17-x64.zip".to_string(),
-                windows_arm64: "https://downloads.php.net/~windows/releases/archives/php-8.5.6-nts-Win32-vs17-x64.zip".to_string(),
+                windows_x64: "https://downloads.php.net/~windows/releases/archives/php-8.5.5-nts-Win32-vs17-x64.zip".to_string(),
+                windows_arm64: String::new(),
                 linux_x64: "https://dl.static-php.dev/static-php-cli/bulk/php-8.5.5-fpm-linux-x86_64.tar.gz".to_string(),
-                linux_arm64: "https://dl.static-php.dev/static-php-cli/bulk/php-8.5.5-fpm-linux-aarch64.tar.gz".to_string(),
+                linux_arm64: String::new(),
                 macos_x64: "https://dl.static-php.dev/static-php-cli/bulk/php-8.5.5-fpm-macos-x86_64.tar.gz".to_string(),
                 macos_arm64: "https://dl.static-php.dev/static-php-cli/bulk/php-8.5.5-fpm-macos-aarch64.tar.gz".to_string(),
                 eol: false,
@@ -407,7 +399,7 @@ fn get_default_packages() -> PackagesConfig {
                 version: "9.7.0".to_string(),
                 display_name: "MySQL 9.7.0".to_string(),
                 windows_x64: "https://cdn.mysql.com/Downloads/MySQL-9.7/mysql-9.7.0-winx64.zip".to_string(),
-                windows_arm64: "https://cdn.mysql.com/Downloads/MySQL-9.7/mysql-9.7.0-winx64.zip".to_string(),
+                windows_arm64: String::new(),
                 linux_x64: "https://cdn.mysql.com/Downloads/MySQL-9.7/mysql-9.7.0-linux-glibc2.28-x86_64.tar.xz".to_string(),
                 linux_arm64: "https://cdn.mysql.com/Downloads/MySQL-9.7/mysql-9.7.0-linux-glibc2.28-aarch64.tar.xz".to_string(),
                 macos_x64: "https://cdn.mysql.com/Downloads/MySQL-9.7/mysql-9.7.0-macos15-x86_64.tar.gz".to_string(),

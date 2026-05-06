@@ -5,6 +5,7 @@ import {
   DownloadProgress as DownloadProgressType,
   PackageSelection,
   DependencyCheckResult,
+  PackagesConfig,
   getDatabaseDisplayName,
 } from "../types/services";
 import { CheckCircle2 } from "lucide-react";
@@ -31,24 +32,6 @@ interface ExistingComponent {
   displayName: string;
   isExisting: boolean;
 }
-
-// Package versions for display
-const packages = {
-  php: [
-    { id: "php-8.5", version: "8.5.x" },
-    { id: "php-8.4", version: "8.4.16" },
-    { id: "php-8.3", version: "8.3.29" },
-    { id: "php-8.2", version: "8.2.30" },
-    { id: "php-7.4", version: "7.4.33" },
-  ],
-  mysql: [
-    { id: "mysql-9.7", version: "9.7.0" },
-  ],
-  phpmyadmin: [
-    { id: "phpmyadmin-5.2", version: "5.2.3", name: "phpMyAdmin" },
-    { id: "adminer-5.4", version: "5.4.2", name: "Adminer" },
-  ],
-};
 
 const SETUP_STEPS = [
   { title: "Welcome", copy: "Runtime overview" },
@@ -79,6 +62,7 @@ export function FirstRunWizard({ onComplete, ...props }: FirstRunWizardProps) {
   });
   const [existingComponents, setExistingComponents] = useState<ExistingComponent[]>([]);
   const [hasExistingOnWelcome, setHasExistingOnWelcome] = useState(false);
+  const [availablePackages, setAvailablePackages] = useState<PackagesConfig | null>(null);
   const [dependencyCheckResult, setDependencyCheckResult] = useState<DependencyCheckResult | null>(
     null
   );
@@ -104,6 +88,9 @@ export function FirstRunWizard({ onComplete, ...props }: FirstRunWizardProps) {
   // Detect platform on mount
   useEffect(() => {
     setCurrentPlatform(detectPlatform());
+    invoke<PackagesConfig>("get_available_packages_cmd")
+      .then(setAvailablePackages)
+      .catch((err) => console.error("Failed to load package metadata:", err));
   }, []);
 
   // Listen for download progress events
@@ -329,6 +316,11 @@ export function FirstRunWizard({ onComplete, ...props }: FirstRunWizardProps) {
 
   const currentStepNum = getStepNumber();
   const currentStep = SETUP_STEPS[currentStepNum - 1];
+  const selectedPhp = availablePackages?.php.find((pkg) => pkg.id === packageSelection.php);
+  const selectedMysql = availablePackages?.mysql.find((pkg) => pkg.id === packageSelection.mysql);
+  const selectedDatabaseTool = availablePackages?.phpmyadmin.find(
+    (pkg) => pkg.id === packageSelection.phpmyadmin
+  );
   const shownPercent = Math.max(0, Math.min(100, progress.percent));
   const isProgressIndeterminate =
     (progress.step === "downloading" && (shownPercent === 0 || progress.totalBytes === 0)) ||
@@ -406,7 +398,7 @@ export function FirstRunWizard({ onComplete, ...props }: FirstRunWizardProps) {
                     className="info-box"
                     style={{ marginBottom: "0.75rem", padding: "0.5rem", fontSize: "0.875rem" }}
                   >
-                    <strong>Estimated download size:</strong> ~150 MB
+                    <strong>Estimated download size:</strong> varies by platform
                   </div>
                 )}
                 <div className="setup-actions">
@@ -619,12 +611,11 @@ export function FirstRunWizard({ onComplete, ...props }: FirstRunWizardProps) {
                   {existingComponents.map((component) => {
                     const newVersion =
                       component.name === "php"
-                        ? packages.php.find((p) => p.id === packageSelection.php)?.version
+                        ? selectedPhp?.version
                         : component.name === "mysql"
-                          ? packages.mysql.find((p) => p.id === packageSelection.mysql)?.version
+                          ? selectedMysql?.version
                           : component.name === "adminer" || component.name === "phpmyadmin"
-                            ? packages.phpmyadmin.find((p) => p.id === packageSelection.phpmyadmin)
-                                ?.version
+                            ? selectedDatabaseTool?.version
                             : component.name === "caddy"
                               ? "2.11.2"
                               : component.version;
@@ -829,22 +820,15 @@ export function FirstRunWizard({ onComplete, ...props }: FirstRunWizardProps) {
                     { name: "Caddy", version: "2.11.2" },
                     {
                       name: "PHP",
-                      version:
-                        packages.php.find((p) => p.id === packageSelection.php)?.version || "8.5.x",
+                      version: selectedPhp?.version || packageSelection.php,
                     },
                     {
                       name: getDatabaseDisplayName(currentPlatform),
-                      version:
-                        packages.mysql.find((p) => p.id === packageSelection.mysql)?.version ||
-                        "9.7.0",
+                      version: selectedMysql?.version || packageSelection.mysql,
                     },
                     {
-                      name:
-                        packages.phpmyadmin.find((p) => p.id === packageSelection.phpmyadmin)
-                          ?.name || "phpMyAdmin",
-                      version:
-                        packages.phpmyadmin.find((p) => p.id === packageSelection.phpmyadmin)
-                        ?.version || "5.2.3",
+                      name: selectedDatabaseTool?.display_name.split(" ")[0] || "phpMyAdmin",
+                      version: selectedDatabaseTool?.version || packageSelection.phpmyadmin,
                     },
                   ].map((pkg) => (
                     <div key={pkg.name} className="setup-complete-package">

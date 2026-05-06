@@ -98,6 +98,47 @@ export interface PackageSelection {
   phpmyadmin: string;
 }
 
+export type RuntimePlatformKey =
+  | "windowsX64"
+  | "windowsArm64"
+  | "linuxX64"
+  | "linuxArm64"
+  | "macOSX64"
+  | "macOSArm64";
+
+export const getPackageUrlForPlatform = (
+  pkg: Pick<
+    PhpPackage,
+    "windowsX64" | "windowsArm64" | "linuxX64" | "linuxArm64" | "macOSX64" | "macOSArm64"
+  >,
+  platformKey: string
+): string => {
+  switch (platformKey) {
+    case "windowsX64":
+      return pkg.windowsX64;
+    case "windowsArm64":
+      return pkg.windowsArm64;
+    case "linuxX64":
+      return pkg.linuxX64;
+    case "linuxArm64":
+      return pkg.linuxArm64;
+    case "macOSX64":
+      return pkg.macOSX64;
+    case "macOSArm64":
+      return pkg.macOSArm64;
+    default:
+      return "";
+  }
+};
+
+export const hasPackageUrlForPlatform = (
+  pkg: Pick<
+    PhpPackage,
+    "windowsX64" | "windowsArm64" | "linuxX64" | "linuxArm64" | "macOSX64" | "macOSArm64"
+  >,
+  platformKey: string
+): boolean => getPackageUrlForPlatform(pkg, platformKey).trim().length > 0;
+
 export interface InstalledPhpVersion {
   id: string;
   version: string;
@@ -122,13 +163,10 @@ export const SERVICE_DISPLAY_NAMES = {
   [ServiceType.MySQL]: "MySQL",
 } as const;
 
-// Platform-specific display name for MySQL/MariaDB
+// CHAMP currently ships official MySQL portable packages for supported platforms.
 export const getDatabaseDisplayName = (platform?: string): string => {
-  // Show "MySQL" for Windows and macOS, "MariaDB" for Linux
-  if (platform === "windows" || platform === "darwin") {
-    return "MySQL";
-  }
-  return "MariaDB";
+  void platform;
+  return "MySQL";
 };
 
 export const SERVICE_DESCRIPTIONS = {

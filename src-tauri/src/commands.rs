@@ -5,6 +5,7 @@
 use crate::config::AppSettings;
 use crate::process::{ServiceMap, ServiceState, ServiceType};
 use crate::runtime::deps::DependencyCheckResult;
+use crate::runtime::downloader::Platform;
 use crate::runtime::downloader::{DownloadProgress, RuntimeDownloader};
 use crate::runtime::locator::get_app_data_paths;
 use crate::runtime::packages::{PackageSelection, PackagesConfig};
@@ -457,7 +458,19 @@ pub async fn check_runtime_installed() -> Result<bool, String> {
 
 /// Reset installation (for testing/debug - deletes runtime directory)
 #[tauri::command]
-pub async fn reset_installation() -> Result<String, String> {
+pub async fn reset_installation(state: State<'_, AppState>) -> Result<String, String> {
+    {
+        let mut manager = state
+            .process_manager
+            .lock()
+            .map_err(|e| format!("Failed to acquire process manager lock: {}", e))?;
+        manager.stop_all()?;
+    }
+
+    reset_runtime_dir().await
+}
+
+pub async fn reset_runtime_dir() -> Result<String, String> {
     let downloader = RuntimeDownloader::new();
     let runtime_dir = downloader.get_runtime_dir().map_err(|e| e.to_string())?;
 
@@ -552,6 +565,11 @@ pub async fn cleanup_all_services(state: State<'_, AppState>) -> Result<String, 
 #[tauri::command]
 pub async fn get_available_packages_cmd() -> Result<PackagesConfig, String> {
     Ok(crate::runtime::packages::get_available_packages())
+}
+
+#[tauri::command]
+pub async fn get_runtime_platform() -> String {
+    Platform::current().url_key()
 }
 
 /// Download and install runtime binaries with custom package selection
