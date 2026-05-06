@@ -2,7 +2,7 @@
 
 <div align="center">
 
-![CHAMP Logo](src/assets/CHAMP.png)
+<img src="src/assets/CHAMP.png" alt="CHAMP Logo" width="250"/>
 
 **CHAMP By Thirawat27**
 
