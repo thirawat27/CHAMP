@@ -358,10 +358,10 @@ export function SettingsPanel({ onClose, onSettingsChanged, ...props }: Settings
         </div>
 
         <footer className="settings-footer">
-          <button className="btn-secondary" onClick={onClose} disabled={saving}>
+          <button className="btn-secondary danger" onClick={onClose} disabled={saving}>
             Cancel
           </button>
-          <button className="btn-primary" onClick={handleSave} disabled={saving || loading}>
+          <button className="btn-primary success" onClick={handleSave} disabled={saving || loading}>
             {saving ? "Saving..." : "Save"}
           </button>
         </footer>

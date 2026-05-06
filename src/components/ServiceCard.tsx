@@ -1,3 +1,4 @@
+import { openUrl } from "@tauri-apps/plugin-opener";
 import { Database, Globe2, Play, RefreshCw, Square, Terminal } from "lucide-react";
 import { DEFAULT_PORTS, SERVICE_DESCRIPTIONS, SERVICE_DISPLAY_NAMES, ServiceState, ServiceType } from "../types/services";
 
@@ -19,6 +20,14 @@ const SERVICE_ICONS = {
   [ServiceType.MySQL]: Database,
 };
 
+function getServiceUrl(serviceType: ServiceType, port: number) {
+  return {
+    [ServiceType.Caddy]: `http://localhost:${port}`,
+    [ServiceType.PhpFpm]: `tcp://127.0.0.1:${port}`,
+    [ServiceType.MySQL]: `mysql://127.0.0.1:${port}`,
+  }[serviceType];
+}
+
 export function ServiceCard({
   serviceType,
   state,
@@ -33,6 +42,7 @@ export function ServiceCard({
   const Icon = SERVICE_ICONS[serviceType];
   const displayName = SERVICE_DISPLAY_NAMES[serviceType];
   const description = SERVICE_DESCRIPTIONS[serviceType];
+  const serviceUrl = getServiceUrl(serviceType, port);
   const isRunning = state === ServiceState.Running;
   const isTransitioning = busy || state === ServiceState.Starting || state === ServiceState.Stopping;
   const isError = state === ServiceState.Error;
@@ -58,7 +68,17 @@ export function ServiceCard({
       </div>
 
       <div className="service-meta">
-        <span>Port: {port}</span>
+        <span>Port: <strong>{port}</strong></span>
+        <span>
+          URL:{" "}
+          <button
+            type="button"
+            className="service-url-button"
+            onClick={() => openUrl(serviceUrl).catch((openError) => console.error("Failed to open service URL:", openError))}
+          >
+            {serviceUrl}
+          </button>
+        </span>
       </div>
 
       {isError && error && (

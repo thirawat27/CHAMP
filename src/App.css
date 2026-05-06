@@ -16,16 +16,16 @@
   --text-secondary: #755849;
   --border-color: #e8d2c2;
   --shadow-panel: 0 12px 34px rgba(119, 72, 45, 0.1);
-  --status-stopped-bg: #eee5df;
-  --status-stopped-text: #6d5b52;
-  --status-running-bg: #f3dfcf;
-  --status-running-text: #9a5735;
-  --status-starting-bg: #f4ead0;
-  --status-starting-text: #93692b;
-  --status-stopping-bg: #efd7c4;
-  --status-stopping-text: #8e5639;
-  --status-error-bg: #f4dddd;
-  --status-error-text: #8f3b37;
+  --status-stopped-bg: #fee2e2;
+  --status-stopped-text: #991b1b;
+  --status-running-bg: #dcfce7;
+  --status-running-text: #166534;
+  --status-starting-bg: #fef3c7;
+  --status-starting-text: #92400e;
+  --status-stopping-bg: #ffedd5;
+  --status-stopping-text: #9a3412;
+  --status-error-bg: #fee2e2;
+  --status-error-text: #991b1b;
   color-scheme: light;
 }
 
@@ -38,16 +38,16 @@
     --text-secondary: #d0a894;
     --border-color: #4d3830;
     --shadow-panel: 0 14px 34px rgba(0, 0, 0, 0.36);
-    --status-stopped-bg: #342925;
-    --status-stopped-text: #d6bbae;
-    --status-running-bg: #563427;
-    --status-running-text: #efc6ad;
-    --status-starting-bg: #4f3b24;
-    --status-starting-text: #e5c98f;
-    --status-stopping-bg: #60402e;
-    --status-stopping-text: #efd1bd;
-    --status-error-bg: #5a2d2c;
-    --status-error-text: #e7b9b7;
+    --status-stopped-bg: #7f1d1d;
+    --status-stopped-text: #fecaca;
+    --status-running-bg: #14532d;
+    --status-running-text: #bbf7d0;
+    --status-starting-bg: #78350f;
+    --status-starting-text: #fde68a;
+    --status-stopping-bg: #7c2d12;
+    --status-stopping-text: #fed7aa;
+    --status-error-bg: #7f1d1d;
+    --status-error-text: #fecaca;
     color-scheme: dark;
   }
 }
@@ -264,26 +264,43 @@ button {
   font-weight: 650;
 }
 
-.btn-command.primary,
-.btn-primary,
-.btn-start {
+.btn-primary {
   background: linear-gradient(135deg, #cb5a2c, #f08f3f);
   border: 1px solid #ffc387;
   color: #fffdf9;
 }
 
+.btn-primary.success {
+  background: linear-gradient(135deg, #15803d, #22c55e);
+  border-color: #86efac;
+  color: #f0fdf4;
+}
+
+.btn-secondary.danger {
+  background: linear-gradient(135deg, #991b1b, #dc2626);
+  border-color: #fca5a5;
+  color: #fff7f7;
+}
+
+.btn-command.primary,
+.btn-start {
+  background: linear-gradient(135deg, #15803d, #22c55e);
+  border: 1px solid #86efac;
+  color: #f0fdf4;
+}
+
 .btn-command:not(.primary):not(.danger),
 .btn-restart {
-  background: linear-gradient(135deg, #8a532f, #af6b3b);
-  border: 1px solid #e0a26a;
-  color: #fff7ef;
+  background: linear-gradient(135deg, #ca8a04, #facc15);
+  border: 1px solid #fde047;
+  color: #1f1600;
 }
 
 .btn-command.danger,
 .btn-stop {
-  background: linear-gradient(135deg, #aa3c3d, #cf5250);
-  border: 1px solid #f19790;
-  color: #fff7f6;
+  background: linear-gradient(135deg, #b91c1c, #ef4444);
+  border: 1px solid #fca5a5;
+  color: #fff7f7;
 }
 
 .btn-quick-action {
@@ -297,6 +314,18 @@ button {
   background: linear-gradient(135deg, #1f5f5e, #2f7f7d);
   border-color: #63b8b3;
   color: #e4fffd;
+}
+
+.btn-quick-action.github {
+  background: linear-gradient(135deg, #3f3f46, #71717a);
+  border-color: #a1a1aa;
+  color: #f4f4f5;
+}
+
+.icon-button.github {
+  background: linear-gradient(135deg, #3f3f46, #71717a);
+  border-color: #a1a1aa;
+  color: #f4f4f5;
 }
 
 .icon-button {
@@ -426,13 +455,41 @@ button:disabled {
 }
 
 .service-meta {
-  justify-content: space-between;
+  align-items: flex-start;
+  flex-direction: column;
+  gap: 5px;
   padding: 12px;
   background: var(--bg-card-secondary);
   border: 1px solid var(--border-color);
   border-radius: 7px;
   color: var(--text-secondary);
   font-size: 13px;
+}
+
+.service-meta span {
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
+
+.service-url-button {
+  display: inline;
+  min-height: 0;
+  padding: 0;
+  background: transparent;
+  border: 0;
+  color: var(--text-primary);
+  font-weight: 700;
+  text-align: left;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  box-shadow: none;
+  white-space: normal;
+}
+
+.service-url-button:hover:not(:disabled) {
+  transform: none;
+  filter: none;
+  box-shadow: none;
 }
 
 .service-meta strong {
