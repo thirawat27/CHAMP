@@ -4,7 +4,7 @@
 
 <img src="src/assets/CHAMP.png" alt="CHAMP Logo" width="250"/>
 
-**CHAMP By Thirawat27**
+## **CHAMP By Thirawat27**
 
 *A modern, cross-platform local web development stack*
 
