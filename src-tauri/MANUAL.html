@@ -503,7 +503,7 @@
           </div>
           <div class="hero-point">
             <strong>Database</strong>
-            <span>127.0.0.1:3307</span>
+            <span>127.0.0.1:3306</span>
           </div>
           <div class="hero-point">
             <strong>Default Tool</strong>
@@ -531,7 +531,7 @@
       <div class="grid">
         <div class="stat"><strong>Caddy 2.11.2</strong><span>Web server หลัก เปิดเว็บผ่านพอร์ต 8080</span></div>
         <div class="stat"><strong>PHP-FPM 8.5.x</strong><span>PHP runtime ค่าเริ่มต้น ใช้ official Windows NTS และ portable FPM สำหรับ Linux/macOS</span></div>
-        <div class="stat"><strong>MySQL 9.7.0</strong><span>Database service ค่าเริ่มต้น ใช้พอร์ต 3307</span></div>
+        <div class="stat"><strong>MySQL 9.7.0</strong><span>Database service ค่าเริ่มต้น ใช้พอร์ต 3306</span></div>
         <div class="stat"><strong>Adminer 5.4.2</strong><span>เครื่องมือจัดการฐานข้อมูลค่าเริ่มต้น โหลดเร็วกว่า และยังเลือก phpMyAdmin 5.2.3 ได้</span></div>
       </div>
       <div class="callout">
@@ -629,7 +629,7 @@
         </tr>
         <tr>
           <td>MySQL</td>
-          <td><code>127.0.0.1:3307</code></td>
+          <td><code>127.0.0.1:3306</code></td>
           <td>ใช้ต่อจาก PHP app หรือ database client</td>
         </tr>
       </table>
@@ -644,14 +644,14 @@
       <table>
         <tr><th>Setting</th><th>Value</th></tr>
         <tr><td>Host</td><td><code>127.0.0.1</code> หรือ <code>localhost</code></td></tr>
-        <tr><td>Port</td><td><code>3307</code></td></tr>
+        <tr><td>Port</td><td><code>3306</code></td></tr>
         <tr><td>User</td><td><code>root</code></td></tr>
         <tr><td>Password</td><td>เว้นว่าง</td></tr>
       </table>
       <h3>ตัวอย่าง PHP PDO</h3>
       <pre><code>&lt;?php
 $pdo = new PDO(
-    'mysql:host=127.0.0.1;port=3307;charset=utf8mb4',
+    'mysql:host=127.0.0.1;port=3306;charset=utf8mb4',
     'root',
     ''
 );</code></pre>
@@ -683,7 +683,7 @@ $pdo = new PDO(
       <ul>
         <li>Web Server Port ค่าเริ่มต้น <code>8080</code></li>
         <li>PHP-FPM Port ค่าเริ่มต้น <code>9000</code></li>
-        <li>Database Port ค่าเริ่มต้น <code>3307</code></li>
+        <li>Database Port ค่าเริ่มต้น <code>3306</code></li>
         <li>Project Root Directory สำหรับเก็บเว็บของคุณ</li>
         <li>Database Tool เลือกได้ระหว่าง phpMyAdmin และ Adminer โดย phpMyAdmin เป็นค่าเริ่มต้น</li>
         <li>PHP Versions ใช้ติดตั้งหรือสลับ PHP version ที่มีใน runtime config</li>

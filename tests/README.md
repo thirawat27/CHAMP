@@ -154,7 +154,7 @@ const mockServiceMap: ServiceMap = {
     name: 'MariaDB',
     displayName: 'MariaDB',
     description: 'Database',
-    port: 3307,
+    port: 3306,
     state: 'Stopped',
     error_message: null,
   },

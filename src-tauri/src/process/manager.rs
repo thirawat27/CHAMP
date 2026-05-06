@@ -3,8 +3,10 @@ use crate::runtime::locator::{locate_runtime_binaries, RuntimePaths};
 use std::collections::HashMap;
 use std::fs::{self, File, OpenOptions};
 use std::io::Write;
+use std::net::TcpStream;
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, ExitStatus, Stdio};
+use std::thread;
 
 // Windows-specific: Constant to hide console window
 #[cfg(target_os = "windows")]
@@ -113,6 +115,7 @@ pub struct ServiceProcess {
     pub log_file: Option<PathBuf>,
     /// Error message if the service is in error state
     pub error_message: Option<String>,
+    external_pid: Option<u32>,
 }
 
 /// Process manager for CHAMP services
@@ -140,6 +143,7 @@ impl ProcessManager {
                     port: Self::port_for_service(service_type, &settings),
                     log_file: None,
                     error_message: None,
+                    external_pid: None,
                 },
             );
         }
@@ -231,7 +235,12 @@ impl ProcessManager {
                 self.settings.mysql_port,
                 &self.settings.package_selection.phpmyadmin,
             ),
-            ServiceType::PhpFpm => start_php_fpm(service_process, &paths),
+            ServiceType::PhpFpm => start_php_fpm(
+                service_process,
+                &paths,
+                self.settings.web_port,
+                self.settings.mysql_port,
+            ),
             ServiceType::MySQL => start_mysql(service_process, &paths),
         };
 
@@ -267,7 +276,6 @@ impl ProcessManager {
             #[cfg(unix)]
             {
                 // On Unix, send SIGTERM
-                use std::os::unix::process::CommandExt;
                 let _ = child.kill();
             }
 
@@ -278,6 +286,10 @@ impl ProcessManager {
 
             // Wait for the process to exit (with timeout for safety)
             let _ = child.wait();
+        }
+
+        if let Some(pid) = service_process.external_pid.take() {
+            let _ = terminate_process_by_pid(pid);
         }
 
         service_process.child = None;
@@ -362,6 +374,19 @@ impl ProcessManager {
                             Some("Failed to check process status".to_string());
                     }
                 }
+            } else if let Some(pid) = service_process.external_pid {
+                if process_exists(pid) {
+                    service_process.state = ServiceState::Running;
+                    service_process.error_message = None;
+                } else {
+                    service_process.state = ServiceState::Error;
+                    service_process.error_message = Some(format!(
+                        "{} process exited unexpectedly (pid {})",
+                        service_process.name.display_name(),
+                        pid
+                    ));
+                    service_process.external_pid = None;
+                }
             }
         }
     }
@@ -419,9 +444,14 @@ fn start_caddy(
 }
 
 /// Start PHP-FPM (using PHP-CGI for simplicity in MVP)
-fn start_php_fpm(service_process: &mut ServiceProcess, paths: &RuntimePaths) -> Result<(), String> {
+fn start_php_fpm(
+    service_process: &mut ServiceProcess,
+    paths: &RuntimePaths,
+    web_port: u16,
+    mysql_port: u16,
+) -> Result<(), String> {
     // Regenerate php.ini on each start because it depends on the selected PHP runtime.
-    generate_php_ini(&paths.php_ini, paths)?;
+    generate_php_ini(&paths.php_ini, paths, web_port, mysql_port)?;
 
     // Open log file with retry logic
     let log_path = paths.logs_dir.join("php-fpm.log");
@@ -446,28 +476,30 @@ fn start_php_fpm(service_process: &mut ServiceProcess, paths: &RuntimePaths) -> 
         }
 
         // PHP-FPM requires -F to run in foreground and -y for config
-        configure_no_window(Command::new(&paths.php_cgi))
-            .arg("-F") // Don't daemonize
+        let mut cmd = configure_no_window(Command::new(&paths.php_cgi));
+        apply_php_database_env(&mut cmd, web_port, mysql_port);
+        cmd.arg("-F") // Don't daemonize
             .arg("-y")
             .arg(&fpm_conf_path)
             .arg("-c")
             .arg(&paths.php_ini)
             .current_dir(&paths.config_dir)
             .stdout(Stdio::from(log_file.try_clone().unwrap()))
-            .stderr(Stdio::from(log_file))
-            .spawn()
+            .stderr(Stdio::from(log_file));
+        cmd.spawn()
             .map_err(|e| format!("Failed to start PHP-FPM: {}", e))?
     } else {
         // PHP-CGI (Windows) uses -b for FastCGI mode
-        configure_no_window(Command::new(&paths.php_cgi))
-            .arg("-b")
+        let mut cmd = configure_no_window(Command::new(&paths.php_cgi));
+        apply_php_database_env(&mut cmd, web_port, mysql_port);
+        cmd.arg("-b")
             .arg(format!("127.0.0.1:{}", service_process.port))
             .arg("-c")
             .arg(&paths.php_ini)
             .current_dir(&paths.config_dir)
             .stdout(Stdio::from(log_file.try_clone().unwrap()))
-            .stderr(Stdio::from(log_file))
-            .spawn()
+            .stderr(Stdio::from(log_file));
+        cmd.spawn()
             .map_err(|e| format!("Failed to start PHP-CGI: {}", e))?
     };
 
@@ -485,6 +517,19 @@ fn start_php_fpm(service_process: &mut ServiceProcess, paths: &RuntimePaths) -> 
 fn start_mysql(service_process: &mut ServiceProcess, paths: &RuntimePaths) -> Result<(), String> {
     // Initialize MySQL data directory if needed
     initialize_mysql_data_dir(paths)?;
+
+    if let Some(pid) = find_running_mysql_pid(paths, service_process.port) {
+        let log_path = paths.logs_dir.join("mysql.log");
+        append_log_line(
+            &log_path,
+            &format!(
+                "CHAMP found an existing MySQL process (pid {}) on 127.0.0.1:{} and will reuse it.",
+                pid, service_process.port
+            ),
+        );
+        attach_existing_mysql_process(service_process, pid, log_path.clone());
+        return Ok(());
+    }
 
     // Clean path and use proper Windows format for MySQL
     let data_dir_str = paths.mysql_data_dir.to_string_lossy().to_string();
@@ -573,7 +618,8 @@ fn start_mysql(service_process: &mut ServiceProcess, paths: &RuntimePaths) -> Re
                     }
                 });
             }
-            attach_started_process(service_process, child, log_path, "MariaDB")
+            attach_started_process(service_process, child, log_path.clone(), "MariaDB")?;
+            Ok(())
         }
         Err(e) => {
             if let Some(init_file) = init_file_path {
@@ -581,6 +627,125 @@ fn start_mysql(service_process: &mut ServiceProcess, paths: &RuntimePaths) -> Re
             }
             Err(format!("Failed to check MariaDB process: {}", e))
         }
+    }
+}
+
+fn attach_existing_mysql_process(
+    service_process: &mut ServiceProcess,
+    pid: u32,
+    log_path: PathBuf,
+) {
+    service_process.child = None;
+    service_process.external_pid = Some(pid);
+    service_process.log_file = Some(log_path);
+}
+
+fn find_running_mysql_pid(paths: &RuntimePaths, port: u16) -> Option<u32> {
+    let pid = read_mysql_pid_file(&paths.mysql_data_dir)?;
+    if !process_exists(pid) {
+        return None;
+    }
+
+    for _ in 0..20 {
+        if tcp_port_accepts(port) {
+            return Some(pid);
+        }
+        thread::sleep(std::time::Duration::from_millis(250));
+    }
+
+    None
+}
+
+fn read_mysql_pid_file(data_dir: &Path) -> Option<u32> {
+    let entries = fs::read_dir(data_dir).ok()?;
+    for entry in entries.flatten() {
+        let path = entry.path();
+        let is_pid = path
+            .extension()
+            .and_then(|value| value.to_str())
+            .map(|value| value.eq_ignore_ascii_case("pid"))
+            .unwrap_or(false);
+        if !is_pid {
+            continue;
+        }
+
+        let content = fs::read_to_string(path).ok()?;
+        if let Ok(pid) = content.trim().parse::<u32>() {
+            return Some(pid);
+        }
+    }
+
+    None
+}
+
+fn tcp_port_accepts(port: u16) -> bool {
+    TcpStream::connect_timeout(
+        &std::net::SocketAddr::from(([127, 0, 0, 1], port)),
+        std::time::Duration::from_millis(300),
+    )
+    .is_ok()
+}
+
+#[cfg(target_os = "windows")]
+fn process_exists(pid: u32) -> bool {
+    let mut cmd = configure_no_window(Command::new("tasklist"));
+    cmd.args(["/FI", &format!("PID eq {}", pid), "/FO", "CSV", "/NH"])
+        .output()
+        .map(|output| {
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            stdout.contains(&format!("\"{}\"", pid))
+        })
+        .unwrap_or(false)
+}
+
+#[cfg(not(target_os = "windows"))]
+fn process_exists(pid: u32) -> bool {
+    Command::new("kill")
+        .args(["-0", &pid.to_string()])
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status()
+        .map(|status| status.success())
+        .unwrap_or(false)
+}
+
+#[cfg(target_os = "windows")]
+fn terminate_process_by_pid(pid: u32) -> Result<(), String> {
+    let mut cmd = configure_no_window(Command::new("taskkill"));
+    cmd.args(["/PID", &pid.to_string(), "/T", "/F"])
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status()
+        .map_err(|e| format!("Failed to stop MySQL pid {}: {}", pid, e))
+        .and_then(|status| {
+            if status.success() {
+                Ok(())
+            } else {
+                Err(format!("taskkill failed for MySQL pid {}", pid))
+            }
+        })
+}
+
+#[cfg(not(target_os = "windows"))]
+fn terminate_process_by_pid(pid: u32) -> Result<(), String> {
+    Command::new("kill")
+        .arg(pid.to_string())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status()
+        .map_err(|e| format!("Failed to stop MySQL pid {}: {}", pid, e))
+        .and_then(|status| {
+            if status.success() {
+                Ok(())
+            } else {
+                Err(format!("kill failed for MySQL pid {}", pid))
+            }
+        })
+}
+
+fn append_log_line(log_path: &Path, message: &str) {
+    if let Ok(mut file) = OpenOptions::new().create(true).append(true).open(log_path) {
+        let _ = writeln!(file, "{}", message);
     }
 }
 
@@ -624,25 +789,25 @@ fn mysql_root_tcp_login_works(mysql_client: &Path, port: u16) -> bool {
     }
 
     let port_arg = port.to_string();
-    Command::new(mysql_client)
-        .args([
-            "--protocol=TCP",
-            "-h",
-            "127.0.0.1",
-            "-P",
-            &port_arg,
-            "-u",
-            "root",
-            "--password=",
-            "--connect-timeout=2",
-            "-e",
-            "SELECT 1",
-        ])
-        .stdout(Stdio::null())
-        .stderr(Stdio::null())
-        .status()
-        .map(|status| status.success())
-        .unwrap_or(false)
+    let mut cmd = configure_no_window(Command::new(mysql_client));
+    cmd.args([
+        "--protocol=TCP",
+        "-h",
+        "127.0.0.1",
+        "-P",
+        &port_arg,
+        "-u",
+        "root",
+        "--password=",
+        "--connect-timeout=2",
+        "-e",
+        "SELECT 1",
+    ])
+    .stdout(Stdio::null())
+    .stderr(Stdio::null())
+    .status()
+    .map(|status| status.success())
+    .unwrap_or(false)
 }
 
 /// Initialize MySQL/MariaDB data directory
@@ -937,6 +1102,9 @@ fn generate_caddyfile(
 
     // Build the Caddyfile content
     let mut content = String::new();
+    content.push_str("{\n");
+    content.push_str("    admin off\n");
+    content.push_str("}\n\n");
     content.push_str(&format!(":{} {{\n", port));
     content.push_str("    # Database tools - must come before project root directives\n");
     content.push_str("    redir /adminer /adminer/\n");
@@ -957,8 +1125,25 @@ fn generate_caddyfile(
     content.push_str("    # Root directory for serving files (default project root)\n");
     content.push_str(&format!("    root * \"{}\"\n", projects));
     content.push('\n');
-    content.push_str("    # Enable PHP for all other requests\n");
-    content.push_str(&format!("    php_fastcgi 127.0.0.1:{}\n", php_port));
+    content.push_str("    # Execute PHP files only when the target script exists\n");
+    content.push_str("    @phpFile {\n");
+    content.push_str("        path *.php\n");
+    content.push_str("        file {path}\n");
+    content.push_str("    }\n");
+    content.push_str(&format!(
+        "    php_fastcgi @phpFile 127.0.0.1:{}\n",
+        php_port
+    ));
+    content.push('\n');
+    content.push_str("    # Execute directory indexes only when index.php exists\n");
+    content.push_str("    @phpIndex {\n");
+    content.push_str("        path */\n");
+    content.push_str("        file {path}/index.php\n");
+    content.push_str("    }\n");
+    content.push_str(&format!(
+        "    php_fastcgi @phpIndex 127.0.0.1:{}\n",
+        php_port
+    ));
     content.push('\n');
     content.push_str("    # File server for project files\n");
     content.push_str("    file_server browse\n");
@@ -988,7 +1173,12 @@ fn generate_caddyfile(
 }
 
 /// Generate a basic php.ini
-fn generate_php_ini(path: &PathBuf, paths: &RuntimePaths) -> Result<(), String> {
+fn generate_php_ini(
+    path: &PathBuf,
+    paths: &RuntimePaths,
+    web_port: u16,
+    mysql_port: u16,
+) -> Result<(), String> {
     // Get the PHP directory (parent of php_cgi binary) to find the ext folder
     let php_dir = paths
         .php_cgi
@@ -1017,6 +1207,8 @@ fn generate_php_ini(path: &PathBuf, paths: &RuntimePaths) -> Result<(), String> 
     let session_path = session_dir.to_string_lossy().replace('\\', "/");
 
     let extension_lines = php_ini_extension_lines(&ext_dir);
+    let env_file = generate_php_env_file(paths, web_port, mysql_port)?;
+    let env_file_path = env_file.to_string_lossy().replace('\\', "/");
 
     let php_ini_content = format!(
         r#"; CHAMP PHP Configuration
@@ -1050,6 +1242,11 @@ date.timezone = UTC
 extension_dir = "{}"
 {}
 
+; CHAMP database defaults for projects that do not specify a MySQL port.
+auto_prepend_file = "{}"
+mysqli.default_host = 127.0.0.1
+mysqli.default_port = {}
+
 ; Session settings - use absolute path for Windows compatibility
 session.save_path = "{}"
 session.cookie_httponly = 1
@@ -1077,7 +1274,13 @@ opcache.jit_buffer_size=0
 realpath_cache_size=8192K
 realpath_cache_ttl=300
 "#,
-        error_log, ext_dir_str, extension_lines, session_path, session_path
+        error_log,
+        ext_dir_str,
+        extension_lines,
+        env_file_path,
+        mysql_port,
+        session_path,
+        session_path
     );
 
     let mut file = File::create(path).map_err(|e| format!("Failed to create php.ini: {}", e))?;
@@ -1085,6 +1288,63 @@ realpath_cache_ttl=300
         .map_err(|e| format!("Failed to write php.ini: {}", e))?;
 
     Ok(())
+}
+
+fn generate_php_env_file(
+    paths: &RuntimePaths,
+    web_port: u16,
+    mysql_port: u16,
+) -> Result<PathBuf, String> {
+    let env_file = paths.config_dir.join("champ-env.php");
+    let content = format!(
+        r#"<?php
+// Generated by CHAMP. This file is loaded before project PHP scripts.
+$champMysqlHost = '127.0.0.1';
+$champMysqlPort = '{}';
+$champWebPort = '{}';
+
+putenv('CHAMP_MYSQL_HOST=' . $champMysqlHost);
+putenv('CHAMP_MYSQL_PORT=' . $champMysqlPort);
+putenv('CHAMP_MYSQL_USER=root');
+putenv('CHAMP_MYSQL_PASSWORD=');
+putenv('CHAMP_WEB_PORT=' . $champWebPort);
+putenv('MYSQL_TCP_PORT=' . $champMysqlPort);
+
+$_SERVER['CHAMP_MYSQL_HOST'] = $champMysqlHost;
+$_SERVER['CHAMP_MYSQL_PORT'] = $champMysqlPort;
+$_SERVER['CHAMP_MYSQL_USER'] = 'root';
+$_SERVER['CHAMP_MYSQL_PASSWORD'] = '';
+$_SERVER['CHAMP_WEB_PORT'] = $champWebPort;
+
+defined('CHAMP_MYSQL_HOST') || define('CHAMP_MYSQL_HOST', $champMysqlHost);
+defined('CHAMP_MYSQL_PORT') || define('CHAMP_MYSQL_PORT', (int) $champMysqlPort);
+defined('CHAMP_MYSQL_USER') || define('CHAMP_MYSQL_USER', 'root');
+defined('CHAMP_MYSQL_PASSWORD') || define('CHAMP_MYSQL_PASSWORD', '');
+defined('CHAMP_WEB_PORT') || define('CHAMP_WEB_PORT', (int) $champWebPort);
+"#,
+        mysql_port, web_port
+    );
+
+    fs::write(&env_file, content).map_err(|e| {
+        format!(
+            "Failed to write CHAMP PHP environment file {}: {}",
+            env_file.display(),
+            e
+        )
+    })?;
+
+    Ok(env_file)
+}
+
+fn apply_php_database_env(command: &mut Command, web_port: u16, mysql_port: u16) {
+    let mysql_port = mysql_port.to_string();
+    command
+        .env("CHAMP_MYSQL_HOST", "127.0.0.1")
+        .env("CHAMP_MYSQL_PORT", &mysql_port)
+        .env("CHAMP_MYSQL_USER", "root")
+        .env("CHAMP_MYSQL_PASSWORD", "")
+        .env("CHAMP_WEB_PORT", web_port.to_string())
+        .env("MYSQL_TCP_PORT", mysql_port);
 }
 
 fn php_ini_extension_lines(ext_dir: &Path) -> String {
@@ -1420,8 +1680,11 @@ mod tests {
         .expect("failed to write temp log");
 
         let status = nonzero_exit_status();
-        let message =
-            format_process_exit_error("Service exited unexpectedly", status, Some(log_path.as_path()));
+        let message = format_process_exit_error(
+            "Service exited unexpectedly",
+            status,
+            Some(log_path.as_path()),
+        );
 
         assert!(message.contains("exit code 7"));
         assert!(message.contains("Log file:"));
@@ -1519,7 +1782,7 @@ mod tests {
         assert_eq!(php.port, 9000);
 
         let mysql = manager.services.get(&ServiceType::MySQL).unwrap();
-        assert_eq!(mysql.port, 3307);
+        assert_eq!(mysql.port, 3306);
     }
 
     #[test]
@@ -1579,7 +1842,7 @@ mod integration_tests {
 
     /// Check if all required ports are available
     fn are_ports_available() -> bool {
-        is_port_available(8080) && is_port_available(9000) && is_port_available(3307)
+        is_port_available(8080) && is_port_available(9000) && is_port_available(3306)
     }
 
     /// Wait for a service to reach a specific state, with timeout
@@ -1652,7 +1915,7 @@ mod integration_tests {
         std::thread::sleep(std::time::Duration::from_millis(500));
 
         if !are_ports_available() {
-            return Err("Required ports (8080, 9000, 3307) are not available. \
+            return Err("Required ports (8080, 9000, 3306) are not available. \
                        Please stop any services using these ports."
                 .to_string());
         }

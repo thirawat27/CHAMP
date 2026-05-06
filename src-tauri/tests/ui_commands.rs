@@ -44,7 +44,7 @@ mod ui_command_tests {
     fn test_service_type_ports() {
         assert_eq!(ServiceType::Caddy.default_port(), 8080);
         assert_eq!(ServiceType::PhpFpm.default_port(), 9000);
-        assert_eq!(ServiceType::MySQL.default_port(), 3307);
+        assert_eq!(ServiceType::MySQL.default_port(), 3306);
     }
 
     /// Test that service type has correct descriptions
@@ -159,7 +159,7 @@ mod ui_command_tests {
 
         assert_eq!(statuses[&ServiceType::Caddy].port, 8080);
         assert_eq!(statuses[&ServiceType::PhpFpm].port, 9000);
-        assert_eq!(statuses[&ServiceType::MySQL].port, 3307);
+        assert_eq!(statuses[&ServiceType::MySQL].port, 3306);
     }
 
     /// Test ServiceMap operations

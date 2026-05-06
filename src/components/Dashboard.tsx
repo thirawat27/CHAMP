@@ -157,7 +157,7 @@ export function Dashboard() {
         </div>
         <div className="titlebar-copy">
           <h1>
-            CHAMP <span>v1.0.0</span>
+            CHAMP <span>v1.1.0</span>
           </h1>
           <p>CHAMP By Thirawat27 · Caddy + HTTP(S) + phpMyAdmin/Adminer + MySQL + PHP</p>
         </div>

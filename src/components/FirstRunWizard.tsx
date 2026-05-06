@@ -382,7 +382,7 @@ export function FirstRunWizard({ onComplete, ...props }: FirstRunWizardProps) {
                   </div>
                   <div className="setup-summary-item">
                     <strong>Dev-first ports</strong>
-                    <span>HTTP 8080, PHP 9000, MySQL 3307.</span>
+                    <span>HTTP 8080, PHP 9000, MySQL 3306.</span>
                   </div>
                   <div className="setup-summary-item">
                     <strong>phpMyAdmin ready</strong>

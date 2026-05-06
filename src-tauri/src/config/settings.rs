@@ -8,7 +8,7 @@ const APP_DIR_NAME: &str = "CHAMP";
 pub const DEFAULT_PORTS: Ports = Ports {
     web: 8080,
     php: 9000,
-    mysql: 3307,
+    mysql: 3306,
 };
 
 #[derive(Debug, Clone, Copy)]
@@ -68,7 +68,7 @@ impl AppSettings {
         }
 
         match fs::read_to_string(&path) {
-            Ok(content) => match serde_json::from_str(&content) {
+            Ok(content) => match serde_json::from_str::<Self>(&content) {
                 Ok(settings) => settings,
                 Err(e) => {
                     eprintln!("Failed to parse settings file: {}, using defaults", e);

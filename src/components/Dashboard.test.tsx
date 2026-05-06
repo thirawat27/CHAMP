@@ -31,7 +31,7 @@ describe("Dashboard Component", () => {
     [ServiceType.MySQL]: {
       service_type: ServiceType.MySQL,
       state: ServiceState.Stopped,
-      port: 3307,
+      port: 3306,
       error_message: null,
     },
   };
@@ -287,7 +287,7 @@ describe("Dashboard Component", () => {
       render(<Dashboard />);
 
       await waitFor(() => {
-        expect(screen.getByText("CHAMP v1.0.0")).toBeInTheDocument();
+        expect(screen.getByText("CHAMP v1.1.0")).toBeInTheDocument();
       });
     });
   });

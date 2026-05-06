@@ -154,7 +154,7 @@ export interface InstalledPhpVersion {
 export const DEFAULT_PORTS = {
   [ServiceType.Caddy]: 8080,
   [ServiceType.PhpFpm]: 9000,
-  [ServiceType.MySQL]: 3307,
+  [ServiceType.MySQL]: 3306,
 } as const;
 
 export const SERVICE_DISPLAY_NAMES = {

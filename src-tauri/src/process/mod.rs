@@ -16,7 +16,7 @@ impl ServiceType {
         match self {
             ServiceType::Caddy => 8080,
             ServiceType::PhpFpm => 9000,
-            ServiceType::MySQL => 3307,
+            ServiceType::MySQL => 3306,
         }
     }
 
@@ -95,7 +95,7 @@ mod tests {
     fn test_service_type_default_ports() {
         assert_eq!(ServiceType::Caddy.default_port(), 8080);
         assert_eq!(ServiceType::PhpFpm.default_port(), 9000);
-        assert_eq!(ServiceType::MySQL.default_port(), 3307);
+        assert_eq!(ServiceType::MySQL.default_port(), 3306);
     }
 
     #[test]

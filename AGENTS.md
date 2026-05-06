@@ -82,7 +82,7 @@ src-tauri/src/
 
 - Caddy (web server) - port 8080
 - PHP-FPM - port 9000 (internal)
-- MariaDB - port 3307
+- MariaDB - port 3306
 
 **Config Generation**: Mustache templates in `templates/` are rendered by `config/generator.rs` to produce service configs.
 
@@ -105,7 +105,7 @@ Ports are chosen to avoid conflicts with system services:
 
 - Web Server: 8080
 - PHP-FPM: 9000
-- MariaDB: 3307
+- MariaDB: 3306
 - phpMyAdmin: 8080/phpmyadmin
 
 ## Implementation Phases (from DEVELOPMENT_PLAN.md)

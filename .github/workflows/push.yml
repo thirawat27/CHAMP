@@ -21,14 +21,17 @@ jobs:
             os: windows-latest
             artifact_name: champ-windows
             bundle_path: src-tauri/target/release/bundle
+            bundle_args: ""
           - name: macOS
             os: macos-latest
             artifact_name: champ-macos
             bundle_path: src-tauri/target/release/bundle
+            bundle_args: ""
           - name: Linux
             os: ubuntu-latest
             artifact_name: champ-linux
             bundle_path: src-tauri/target/release/bundle
+            bundle_args: "--bundles deb,rpm"
 
     steps:
       - name: Checkout
@@ -75,7 +78,7 @@ jobs:
       - name: Build Tauri app
         env:
           APPLE_SIGNING_IDENTITY: "-"
-        run: pnpm tauri build ${{ runner.os == 'Linux' && '--bundles deb,rpm' || '' }}
+        run: pnpm tauri build ${{ matrix.bundle_args }}
 
       - name: Upload app bundle
         uses: actions/upload-artifact@v4

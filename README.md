@@ -75,7 +75,7 @@ CHAMP is a self-contained desktop application that provides a complete local web
 | **Web Server**   | http://localhost:8080                |
 | **phpMyAdmin**   | http://localhost:8080/phpmyadmin     |
 | **Adminer**      | http://localhost:8080/adminer        |
-| **MySQL**        | 127.0.0.1:3307                       |
+| **MySQL**        | 127.0.0.1:3306                       |
 | **PHP-FPM**      | 127.0.0.1:9000 (internal)            |
 
 > **Note:** All ports can be customized in the Settings panel to avoid conflicts with other services.

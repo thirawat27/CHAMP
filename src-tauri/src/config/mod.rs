@@ -14,7 +14,7 @@ mod tests {
     fn test_default_ports() {
         assert_eq!(DEFAULT_PORTS.web, 8080);
         assert_eq!(DEFAULT_PORTS.php, 9000);
-        assert_eq!(DEFAULT_PORTS.mysql, 3307);
+        assert_eq!(DEFAULT_PORTS.mysql, 3306);
     }
 
     #[test]
@@ -22,7 +22,7 @@ mod tests {
         let settings = AppSettings::default();
         assert_eq!(settings.web_port, 8080);
         assert_eq!(settings.php_port, 9000);
-        assert_eq!(settings.mysql_port, 3307);
+        assert_eq!(settings.mysql_port, 3306);
     }
 
     #[test]

@@ -33,7 +33,7 @@ export function SettingsPanel({ onClose, onSettingsChanged, ...props }: Settings
   const [settings, setSettings] = useState<AppSettings>({
     web_port: 8080,
     php_port: 9000,
-    mysql_port: 3307,
+    mysql_port: 3306,
     project_root: "",
     auto_start_services: false,
     package_selection: defaultPackageSelection,

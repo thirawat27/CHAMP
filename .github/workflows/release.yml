@@ -37,16 +37,19 @@ jobs:
             artifact_name: champ-windows
             bundle_path: src-tauri/target/release/bundle
             package_ext: zip
+            bundle_args: ""
           - name: macOS
             os: macos-latest
             artifact_name: champ-macos
             bundle_path: src-tauri/target/release/bundle
             package_ext: tar.gz
+            bundle_args: ""
           - name: Linux
             os: ubuntu-latest
             artifact_name: champ-linux
             bundle_path: src-tauri/target/release/bundle
             package_ext: tar.gz
+            bundle_args: "--bundles deb,rpm"
 
     env:
       RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag_name || github.ref_name }}
@@ -96,7 +99,7 @@ jobs:
       - name: Build Tauri app
         env:
           APPLE_SIGNING_IDENTITY: "-"
-        run: pnpm tauri build ${{ runner.os == 'Linux' && '--bundles deb,rpm' || '' }}
+        run: pnpm tauri build ${{ matrix.bundle_args }}
 
       - name: Package bundle (Windows)
         if: runner.os == 'Windows'

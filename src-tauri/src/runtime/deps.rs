@@ -74,6 +74,7 @@ pub fn check_system_dependencies() -> DependencyCheckResult {
 
 /// Check for libaio library on Linux
 #[cfg(target_os = "linux")]
+#[allow(dead_code)]
 fn check_libaio() -> Dependency {
     // Check for libaio.so.1 specifically (what MySQL needs)
     let has_symlink = check_library("libaio.so.1");
@@ -136,6 +137,7 @@ fn check_libaio() -> Dependency {
 
 /// Find the path to the libaio library file
 #[cfg(target_os = "linux")]
+#[allow(dead_code)]
 fn find_libaio_path() -> Option<String> {
     let paths = [
         "/usr/lib/x86_64-linux-gnu/libaio.so.1.0.1",
@@ -159,6 +161,7 @@ fn find_libaio_path() -> Option<String> {
 
 /// Get the target path for the symlink based on the library path
 #[cfg(target_os = "linux")]
+#[allow(dead_code)]
 fn get_symlink_target(lib_path: &str) -> String {
     // Extract the directory and create the symlink path
     if let Some(parent) = Path::new(lib_path).parent() {
@@ -172,6 +175,7 @@ fn get_symlink_target(lib_path: &str) -> String {
 
 /// Check if a shared library is available on the system
 #[cfg(target_os = "linux")]
+#[allow(dead_code)]
 fn check_library(lib_name: &str) -> bool {
     // Try to find the library using common paths
     let paths = [

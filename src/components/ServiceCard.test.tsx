@@ -354,13 +354,13 @@ describe('ServiceCard Component', () => {
         <ServiceCard
           serviceType={ServiceType.MySQL}
           state={ServiceState.Stopped}
-          port={3307}
+          port={3306}
           {...mockHandlers}
         />
       );
 
       expect(screen.getByText('MySQL')).toBeInTheDocument();
-      expect(screen.getByText('Port: 3307')).toBeInTheDocument();
+      expect(screen.getByText('Port: 3306')).toBeInTheDocument();
       expect(screen.getByText('Database Server')).toBeInTheDocument();
     });
   });

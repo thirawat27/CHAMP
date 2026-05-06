@@ -109,10 +109,16 @@ pub fn run() {
             Ok(())
         })
         .on_window_event(|window, event| {
-            // Handle window close event - minimize to tray instead of closing
+            // Closing the main window quits the local stack instead of leaving service processes behind.
             if let tauri::WindowEvent::CloseRequested { api, .. } = event {
-                window.hide().unwrap();
+                if let Some(state) = window.app_handle().try_state::<AppState>() {
+                    if let Ok(mut manager) = state.process_manager.lock() {
+                        let _ = manager.stop_all();
+                    }
+                }
+                let _ = window.hide();
                 api.prevent_close();
+                std::process::exit(0);
             }
         })
         .invoke_handler(tauri::generate_handler![
