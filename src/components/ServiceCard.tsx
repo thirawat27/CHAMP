@@ -1,5 +1,5 @@
 import { openUrl } from "@tauri-apps/plugin-opener";
-import { Database, Globe2, Play, RefreshCw, Square, Terminal } from "lucide-react";
+import { Database, Globe2, LoaderCircle, Play, RefreshCw, Square, Terminal } from "lucide-react";
 import { DEFAULT_PORTS, SERVICE_DESCRIPTIONS, SERVICE_DISPLAY_NAMES, ServiceState, ServiceType } from "../types/services";
 
 interface ServiceCardProps {
@@ -8,6 +8,7 @@ interface ServiceCardProps {
   port?: number;
   error?: string;
   busy?: boolean;
+  busyLabel?: string;
   onStart: () => void;
   onStop: () => void;
   onRestart: () => void;
@@ -34,6 +35,7 @@ export function ServiceCard({
   port = DEFAULT_PORTS[serviceType],
   error,
   busy = false,
+  busyLabel,
   onStart,
   onStop,
   onRestart,
@@ -46,6 +48,7 @@ export function ServiceCard({
   const isRunning = state === ServiceState.Running;
   const isTransitioning = busy || state === ServiceState.Starting || state === ServiceState.Stopping;
   const isError = state === ServiceState.Error;
+  const actionLabel = busyLabel || (state === ServiceState.Stopping ? "Stopping..." : "Starting...");
   const statusClass = {
     [ServiceState.Stopped]: "status-gray",
     [ServiceState.Starting]: "status-blue",
@@ -90,15 +93,18 @@ export function ServiceCard({
       <div className="service-actions">
         {!isRunning ? (
           <button onClick={onStart} disabled={isTransitioning} className="btn-start" data-testid={`start-button-${serviceType}`}>
-            <Play size={15} /> Start
+            {isTransitioning ? <LoaderCircle size={15} className="spin-icon" /> : <Play size={15} />}
+            {isTransitioning ? actionLabel : "Start"}
           </button>
         ) : (
           <>
             <button onClick={onStop} disabled={isTransitioning} className="btn-stop" data-testid={`stop-button-${serviceType}`}>
-              <Square size={14} /> Stop
+              {isTransitioning ? <LoaderCircle size={14} className="spin-icon" /> : <Square size={14} />}
+              {isTransitioning ? actionLabel : "Stop"}
             </button>
             <button onClick={onRestart} disabled={isTransitioning} className="btn-restart" data-testid={`restart-button-${serviceType}`}>
-              <RefreshCw size={15} /> Restart
+              {busy ? <LoaderCircle size={15} className="spin-icon" /> : <RefreshCw size={15} />}
+              {busy ? "Restarting..." : "Restart"}
             </button>
           </>
         )}

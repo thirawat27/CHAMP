@@ -3,7 +3,7 @@ use crate::runtime::locator::{locate_runtime_binaries, RuntimePaths};
 use std::collections::HashMap;
 use std::fs::{self, File, OpenOptions};
 use std::io::Write;
-use std::net::TcpStream;
+use std::net::{TcpListener, TcpStream};
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, ExitStatus, Stdio};
 use std::thread;
@@ -163,6 +163,46 @@ impl ProcessManager {
         }
     }
 
+    fn set_runtime_port(&mut self, service_type: ServiceType, port: u16) {
+        match service_type {
+            ServiceType::Caddy => self.settings.web_port = port,
+            ServiceType::PhpFpm => self.settings.php_port = port,
+            ServiceType::MySQL => self.settings.mysql_port = port,
+        }
+
+        if let Some(service_process) = self.services.get_mut(&service_type) {
+            service_process.port = port;
+        }
+    }
+
+    fn reserved_ports_except(&self, service_type: ServiceType) -> Vec<u16> {
+        self.services
+            .iter()
+            .filter_map(|(ty, service)| (*ty != service_type).then_some(service.port))
+            .collect()
+    }
+
+    fn web_port(&self) -> u16 {
+        self.services
+            .get(&ServiceType::Caddy)
+            .map(|service| service.port)
+            .unwrap_or(self.settings.web_port)
+    }
+
+    fn php_port(&self) -> u16 {
+        self.services
+            .get(&ServiceType::PhpFpm)
+            .map(|service| service.port)
+            .unwrap_or(self.settings.php_port)
+    }
+
+    fn mysql_port(&self) -> u16 {
+        self.services
+            .get(&ServiceType::MySQL)
+            .map(|service| service.port)
+            .unwrap_or(self.settings.mysql_port)
+    }
+
     pub fn update_ports(&mut self, settings: &crate::config::AppSettings) {
         self.settings = settings.clone();
         for (service_type, service_process) in self.services.iter_mut() {
@@ -214,15 +254,51 @@ impl ProcessManager {
             .ok_or("Runtime paths not initialized")?
             .clone();
 
+        let current_port = self
+            .services
+            .get(&service)
+            .ok_or_else(|| format!("Service {:?} not found", service))
+            .and_then(|service_process| {
+                if service_process.state.is_running() {
+                    Err("already-running".to_string())
+                } else {
+                    Ok(service_process.port)
+                }
+            });
+        let current_port = match current_port {
+            Ok(port) => port,
+            Err(message) if message == "already-running" => return Ok(()),
+            Err(message) => return Err(message),
+        };
+        let reserved_ports = self.reserved_ports_except(service);
+        let selected_port = match service {
+            ServiceType::Caddy => select_caddy_port(current_port, &paths.caddy, &reserved_ports)?,
+            ServiceType::PhpFpm | ServiceType::MySQL => {
+                select_available_port(service, current_port, &reserved_ports)?
+            }
+        };
+        if selected_port != current_port {
+            let message = format!(
+                "{} port {} is in use; using fallback port {}.",
+                service.display_name(),
+                current_port,
+                selected_port
+            );
+            let log_path = paths.logs_dir.join("port-fallback.log");
+            append_log_line(&log_path, &message);
+            self.set_runtime_port(service, selected_port);
+            if let Some(service_process) = self.services.get_mut(&service) {
+                service_process.error_message = Some(message);
+            }
+        }
+
+        let web_port = self.web_port();
+        let php_port = self.php_port();
+        let mysql_port = self.mysql_port();
         let service_process = self
             .services
             .get_mut(&service)
             .ok_or_else(|| format!("Service {:?} not found", service))?;
-
-        // Check if already running
-        if service_process.state.is_running() {
-            return Ok(());
-        }
 
         service_process.state = ServiceState::Starting;
 
@@ -231,16 +307,11 @@ impl ProcessManager {
             ServiceType::Caddy => start_caddy(
                 service_process,
                 &paths,
-                self.settings.php_port,
-                self.settings.mysql_port,
+                php_port,
+                mysql_port,
                 &self.settings.package_selection.phpmyadmin,
             ),
-            ServiceType::PhpFpm => start_php_fpm(
-                service_process,
-                &paths,
-                self.settings.web_port,
-                self.settings.mysql_port,
-            ),
+            ServiceType::PhpFpm => start_php_fpm(service_process, &paths, web_port, mysql_port),
             ServiceType::MySQL => start_mysql(service_process, &paths),
         };
 
@@ -291,6 +362,8 @@ impl ProcessManager {
         if let Some(pid) = service_process.external_pid.take() {
             let _ = terminate_process_by_pid(pid);
         }
+
+        let _ = wait_for_port_release(service_process.port, std::time::Duration::from_secs(4));
 
         service_process.child = None;
         service_process.state = ServiceState::Stopped;
@@ -417,6 +490,20 @@ fn start_caddy(
     mysql_port: u16,
     database_tool_id: &str,
 ) -> Result<(), String> {
+    if !wait_for_port_release(service_process.port, std::time::Duration::from_millis(300)) {
+        let stopped = stop_runtime_processes_by_executable(&paths.caddy, "Caddy")?;
+        if stopped > 0 {
+            let _ = wait_for_port_release(service_process.port, std::time::Duration::from_secs(5));
+        }
+    }
+
+    if !wait_for_port_release(service_process.port, std::time::Duration::from_millis(300)) {
+        return Err(format!(
+            "Port {} is still in use. Stop the existing web server on this port and try again.",
+            service_process.port
+        ));
+    }
+
     // Prepare the selected database tool in the writable config directory. This avoids writing into
     // Program Files or any other install directory that may require elevation.
     ensure_database_tool(paths, service_process.port, mysql_port, database_tool_id)?;
@@ -686,6 +773,151 @@ fn tcp_port_accepts(port: u16) -> bool {
     .is_ok()
 }
 
+fn port_can_bind(port: u16) -> bool {
+    TcpListener::bind(("127.0.0.1", port)).is_ok()
+}
+
+fn select_available_port(
+    service_type: ServiceType,
+    preferred_port: u16,
+    reserved_ports: &[u16],
+) -> Result<u16, String> {
+    find_available_port_excluding(service_type, preferred_port, reserved_ports).ok_or_else(|| {
+        format!(
+            "No available fallback port found for {} near {}.",
+            service_type.display_name(),
+            preferred_port
+        )
+    })
+}
+
+fn select_caddy_port(
+    preferred_port: u16,
+    caddy_executable: &Path,
+    reserved_ports: &[u16],
+) -> Result<u16, String> {
+    if !reserved_ports.contains(&preferred_port) && port_can_bind(preferred_port) {
+        return Ok(preferred_port);
+    }
+
+    let stopped = stop_runtime_processes_by_executable(caddy_executable, "Caddy")?;
+    if stopped > 0 {
+        let _ = wait_for_port_release(preferred_port, std::time::Duration::from_secs(5));
+        if !reserved_ports.contains(&preferred_port) && port_can_bind(preferred_port) {
+            return Ok(preferred_port);
+        }
+    }
+
+    select_available_port(ServiceType::Caddy, preferred_port, reserved_ports)
+}
+
+fn find_available_port_excluding(
+    service_type: ServiceType,
+    preferred_port: u16,
+    reserved_ports: &[u16],
+) -> Option<u16> {
+    if preferred_port > 0 && !reserved_ports.contains(&preferred_port) && port_can_bind(preferred_port)
+    {
+        return Some(preferred_port);
+    }
+
+    let first_fallback = first_fallback_port(service_type, preferred_port);
+    for port in first_fallback..=preferred_port.saturating_add(100).max(first_fallback) {
+        if port > 0 && !reserved_ports.contains(&port) && port_can_bind(port) {
+            return Some(port);
+        }
+    }
+
+    for port in 49152..=65535 {
+        if !reserved_ports.contains(&port) && port_can_bind(port) {
+            return Some(port);
+        }
+    }
+
+    None
+}
+
+fn first_fallback_port(service_type: ServiceType, preferred_port: u16) -> u16 {
+    if service_type == ServiceType::MySQL && preferred_port == crate::config::DEFAULT_PORTS.mysql {
+        preferred_port.saturating_add(2)
+    } else {
+        preferred_port.saturating_add(1)
+    }
+}
+
+fn wait_for_port_release(port: u16, timeout: std::time::Duration) -> bool {
+    let start = std::time::Instant::now();
+    while start.elapsed() < timeout {
+        if port_can_bind(port) {
+            return true;
+        }
+        thread::sleep(std::time::Duration::from_millis(150));
+    }
+    false
+}
+
+fn stop_runtime_processes_by_executable(
+    executable: &Path,
+    service_label: &str,
+) -> Result<usize, String> {
+    let pids = find_process_ids_by_executable(executable)?;
+    let mut stopped = 0;
+    for pid in pids {
+        if terminate_process_by_pid(pid).is_ok() {
+            stopped += 1;
+        }
+    }
+    if stopped > 0 {
+        thread::sleep(std::time::Duration::from_millis(250));
+    }
+    eprintln!(
+        "Stopped {} stale {} process(es) for {}",
+        stopped,
+        service_label,
+        executable.display()
+    );
+    Ok(stopped)
+}
+
+#[cfg(target_os = "windows")]
+fn find_process_ids_by_executable(executable: &Path) -> Result<Vec<u32>, String> {
+    let executable = executable
+        .canonicalize()
+        .unwrap_or_else(|_| executable.to_path_buf())
+        .to_string_lossy()
+        .replace('\'', "''");
+    let script = format!(
+        "$target = '{}'; \
+         Get-CimInstance Win32_Process -Filter \"Name = 'caddy.exe'\" | \
+         Where-Object {{ $_.ExecutablePath -and ([System.IO.Path]::GetFullPath($_.ExecutablePath) -ieq $target) }} | \
+         ForEach-Object {{ $_.ProcessId }}",
+        executable
+    );
+
+    let mut cmd = configure_no_window(Command::new("powershell"));
+    let output = cmd
+        .args(["-NoProfile", "-NonInteractive", "-Command", &script])
+        .output()
+        .map_err(|e| format!("Failed to inspect Caddy processes: {}", e))?;
+
+    if !output.status.success() {
+        return Err(format!(
+            "Failed to inspect Caddy processes: {}",
+            String::from_utf8_lossy(&output.stderr).trim()
+        ));
+    }
+
+    Ok(String::from_utf8_lossy(&output.stdout)
+        .lines()
+        .filter_map(|line| line.trim().parse::<u32>().ok())
+        .collect())
+}
+
+#[cfg(not(target_os = "windows"))]
+fn find_process_ids_by_executable(_executable: &Path) -> Result<Vec<u32>, String> {
+    Ok(Vec::new())
+}
+
 #[cfg(target_os = "windows")]
 fn process_exists(pid: u32) -> bool {
     let mut cmd = configure_no_window(Command::new("tasklist"));
@@ -716,12 +948,12 @@ fn terminate_process_by_pid(pid: u32) -> Result<(), String> {
         .stdout(Stdio::null())
         .stderr(Stdio::null())
         .status()
-        .map_err(|e| format!("Failed to stop MySQL pid {}: {}", pid, e))
+        .map_err(|e| format!("Failed to stop process pid {}: {}", pid, e))
         .and_then(|status| {
             if status.success() {
                 Ok(())
             } else {
-                Err(format!("taskkill failed for MySQL pid {}", pid))
+                Err(format!("taskkill failed for process pid {}", pid))
             }
         })
 }
@@ -733,12 +965,12 @@ fn terminate_process_by_pid(pid: u32) -> Result<(), String> {
         .stdout(Stdio::null())
         .stderr(Stdio::null())
         .status()
-        .map_err(|e| format!("Failed to stop MySQL pid {}: {}", pid, e))
+        .map_err(|e| format!("Failed to stop process pid {}: {}", pid, e))
         .and_then(|status| {
             if status.success() {
                 Ok(())
             } else {
-                Err(format!("kill failed for MySQL pid {}", pid))
+                Err(format!("kill failed for process pid {}", pid))
             }
         })
 }

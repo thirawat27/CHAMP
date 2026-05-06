@@ -320,4 +320,113 @@ describe("Dashboard Component", () => {
       });
     });
   });
+
+  describe("Stack command feedback", () => {
+    it("should show immediate feedback when Start Stack is clicked", async () => {
+      const allRunningMap = {
+        [ServiceType.Caddy]: {
+          ...mockServiceMap[ServiceType.Caddy],
+          state: ServiceState.Running,
+        },
+        [ServiceType.PhpFpm]: {
+          ...mockServiceMap[ServiceType.PhpFpm],
+          state: ServiceState.Running,
+        },
+        [ServiceType.MySQL]: {
+          ...mockServiceMap[ServiceType.MySQL],
+          state: ServiceState.Running,
+        },
+      };
+      let resolveStart: (value: typeof allRunningMap) => void = () => {};
+
+      vi.mocked(invoke).mockImplementation(async (cmd: string) => {
+        switch (cmd) {
+          case "get_all_statuses":
+            return mockServiceMap;
+          case "start_all_services":
+            return new Promise((resolve) => {
+              resolveStart = resolve;
+            });
+          case "get_app_paths":
+            return mockAppPaths;
+          case "get_installed_versions":
+            return {};
+          case "get_settings":
+            return {};
+          case "get_system_metrics":
+            return mockSystemMetrics;
+          default:
+            return {};
+        }
+      });
+
+      render(<Dashboard />);
+
+      const startButton = await screen.findByRole("button", { name: /start stack/i });
+      fireEvent.click(startButton);
+
+      expect(await screen.findByText("Starting stack")).toBeInTheDocument();
+      expect(screen.getAllByRole("button", { name: /starting/i })[0]).toBeDisabled();
+
+      resolveStart(allRunningMap);
+
+      await waitFor(() => {
+        expect(screen.getByText("Stack started")).toBeInTheDocument();
+      });
+    });
+
+    it("should show immediate feedback when Restart is clicked", async () => {
+      const runningMap = {
+        [ServiceType.Caddy]: {
+          ...mockServiceMap[ServiceType.Caddy],
+          state: ServiceState.Running,
+        },
+        [ServiceType.PhpFpm]: {
+          ...mockServiceMap[ServiceType.PhpFpm],
+          state: ServiceState.Running,
+        },
+        [ServiceType.MySQL]: {
+          ...mockServiceMap[ServiceType.MySQL],
+          state: ServiceState.Running,
+        },
+      };
+      let resolveRestart: (value: typeof runningMap) => void = () => {};
+
+      vi.mocked(invoke).mockImplementation(async (cmd: string) => {
+        switch (cmd) {
+          case "get_all_statuses":
+            return runningMap;
+          case "restart_all_services":
+            return new Promise((resolve) => {
+              resolveRestart = resolve;
+            });
+          case "get_app_paths":
+            return mockAppPaths;
+          case "get_installed_versions":
+            return {};
+          case "get_settings":
+            return {};
+          case "get_system_metrics":
+            return mockSystemMetrics;
+          default:
+            return {};
+        }
+      });
+
+      render(<Dashboard />);
+
+      await screen.findByRole("button", { name: /restart/i });
+      const restartButton = screen.getAllByRole("button", { name: /restart/i })[0];
+      fireEvent.click(restartButton);
+
+      expect(await screen.findByText("Restarting stack")).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: /restarting/i })).toBeDisabled();
+
+      resolveRestart(runningMap);
+
+      await waitFor(() => {
+        expect(screen.getByText("Stack restarted")).toBeInTheDocument();
+      });
+    });
+  });
 });

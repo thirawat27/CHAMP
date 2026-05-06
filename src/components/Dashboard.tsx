@@ -1,10 +1,13 @@
 import { invoke } from "@tauri-apps/api/core";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import {
+  AlertTriangle,
+  CheckCircle2,
   Database,
   Folder,
   Globe,
   HardDrive,
+  LoaderCircle,
   Play,
   RefreshCw,
   Settings,
@@ -13,7 +16,13 @@ import {
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import champLogo from "../assets/CHAMP.png";
-import { AppSettings, ServiceMap, ServiceState, ServiceType } from "../types/services";
+import {
+  AppSettings,
+  SERVICE_DISPLAY_NAMES,
+  ServiceMap,
+  ServiceState,
+  ServiceType,
+} from "../types/services";
 import { ServiceCard } from "./ServiceCard";
 import { SettingsPanel } from "./SettingsPanel";
 import { StatusBar } from "./StatusBar";
@@ -29,6 +38,67 @@ interface AppPaths {
 
 const SOURCE_REPO_URL = "https://github.com/thirawat27/CHAMP";
 const DEFAULT_DATABASE_TOOL_ID = "phpmyadmin-5.2";
+
+type NoticeTone = "info" | "success" | "error";
+type NoticeAction = "start" | "restart" | "stop";
+
+interface DashboardNotice {
+  tone: NoticeTone;
+  action?: NoticeAction;
+  title: string;
+  message: string;
+}
+
+const STACK_COMMAND_COPY = {
+  start_all_services: {
+    pendingTitle: "Starting stack",
+    pendingMessage: "Caddy, PHP-FPM, and MySQL are starting. This can take a few seconds.",
+    successTitle: "Stack started",
+    successMessage: "All stack commands finished. Statuses are refreshing now.",
+    buttonLabel: "Starting...",
+    action: "start",
+  },
+  restart_all_services: {
+    pendingTitle: "Restarting stack",
+    pendingMessage: "Services are stopping and starting again. The dashboard will update automatically.",
+    successTitle: "Stack restarted",
+    successMessage: "Restart command finished. Statuses are refreshing now.",
+    buttonLabel: "Restarting...",
+    action: "restart",
+  },
+  stop_all_services: {
+    pendingTitle: "Stopping stack",
+    pendingMessage: "Services are shutting down. This can take a moment.",
+    successTitle: "Stack stopped",
+    successMessage: "All services have received the stop command.",
+    buttonLabel: "Stopping...",
+    action: "stop",
+  },
+} as const;
+
+const SERVICE_COMMAND_COPY = {
+  start_service: {
+    pendingTitle: "Starting service",
+    pendingMessage: "The service is starting. Status will update automatically.",
+    successTitle: "Service started",
+    buttonLabel: "Starting...",
+    action: "start",
+  },
+  restart_service: {
+    pendingTitle: "Restarting service",
+    pendingMessage: "The service is restarting. Status will update automatically.",
+    successTitle: "Service restarted",
+    buttonLabel: "Restarting...",
+    action: "restart",
+  },
+  stop_service: {
+    pendingTitle: "Stopping service",
+    pendingMessage: "The service is stopping. Status will update automatically.",
+    successTitle: "Service stopped",
+    buttonLabel: "Stopping...",
+    action: "stop",
+  },
+} as const;
 
 function GitHubIcon({ size = 16 }: { size?: number }) {
   return (
@@ -52,6 +122,7 @@ export function Dashboard() {
   const [settings, setSettings] = useState<AppSettings | null>(null);
   const [installedVersions, setInstalledVersions] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState<string | null>(null);
+  const [notice, setNotice] = useState<DashboardNotice | null>(null);
 
   const caddyPort = services[ServiceType.Caddy]?.port || 8080;
   const webServerUrl = `http://localhost:${caddyPort}`;
@@ -65,6 +136,9 @@ export function Dashboard() {
   const totalCount = Object.keys(services).length || 3;
   const isCaddyRunning = services[ServiceType.Caddy]?.state === ServiceState.Running;
   const allRunning = runningCount === totalCount;
+  const busyStackCommand = busy?.startsWith("stack:")
+    ? (busy.slice("stack:".length) as keyof typeof STACK_COMMAND_COPY)
+    : null;
 
   const refreshStatuses = useCallback(async () => {
     try {
@@ -97,15 +171,85 @@ export function Dashboard() {
     return () => window.clearInterval(interval);
   }, [refreshMetadata, refreshStatuses]);
 
+  useEffect(() => {
+    if (!notice || notice.tone === "info") return undefined;
+
+    const timeout = window.setTimeout(() => {
+      setNotice(null);
+    }, 4200);
+
+    return () => window.clearTimeout(timeout);
+  }, [notice]);
+
+  const markStackTransition = (
+    command: "start_all_services" | "stop_all_services" | "restart_all_services"
+  ) => {
+    const transitionState =
+      command === "stop_all_services" ? ServiceState.Stopping : ServiceState.Starting;
+
+    setServices((current) => {
+      const next = { ...current };
+      for (const serviceType of [ServiceType.Caddy, ServiceType.PhpFpm, ServiceType.MySQL]) {
+        const service = next[serviceType];
+        if (!service) continue;
+        next[serviceType] = {
+          ...service,
+          state: transitionState,
+          error_message: undefined,
+        };
+      }
+      return next;
+    });
+  };
+
+  const markServiceTransition = (
+    command: "start_service" | "stop_service" | "restart_service",
+    service: ServiceType
+  ) => {
+    const transitionState =
+      command === "stop_service" ? ServiceState.Stopping : ServiceState.Starting;
+
+    setServices((current) => {
+      const selected = current[service];
+      if (!selected) return current;
+      return {
+        ...current,
+        [service]: {
+          ...selected,
+          state: transitionState,
+          error_message: undefined,
+        },
+      };
+    });
+  };
+
   const runStackCommand = async (
     command: "start_all_services" | "stop_all_services" | "restart_all_services"
   ) => {
-    setBusy(command);
+    const copy = STACK_COMMAND_COPY[command];
+    setBusy(`stack:${command}`);
+    setNotice({
+      tone: "info",
+      action: copy.action,
+      title: copy.pendingTitle,
+      message: copy.pendingMessage,
+    });
+    markStackTransition(command);
     try {
       const statuses = await invoke<ServiceMap>(command);
       setServices(statuses);
+      setNotice({
+        tone: "success",
+        action: copy.action,
+        title: copy.successTitle,
+        message: copy.successMessage,
+      });
     } catch (error) {
-      alert(`${command.replace(/_/g, " ")} failed:\n${error}`);
+      setNotice({
+        tone: "error",
+        title: `${command.replace(/_/g, " ")} failed`,
+        message: String(error),
+      });
       await refreshStatuses();
     } finally {
       setBusy(null);
@@ -116,12 +260,31 @@ export function Dashboard() {
     command: "start_service" | "stop_service" | "restart_service",
     service: ServiceType
   ) => {
+    const copy = SERVICE_COMMAND_COPY[command];
+    const displayName = SERVICE_DISPLAY_NAMES[service];
     setBusy(`${command}:${service}`);
+    setNotice({
+      tone: "info",
+      action: copy.action,
+      title: `${copy.pendingTitle}: ${displayName}`,
+      message: copy.pendingMessage,
+    });
+    markServiceTransition(command, service);
     try {
       const statuses = await invoke<ServiceMap>(command, { service });
       setServices(statuses);
+      setNotice({
+        tone: "success",
+        action: copy.action,
+        title: `${copy.successTitle}: ${displayName}`,
+        message: "The dashboard is refreshing service status.",
+      });
     } catch (error) {
-      alert(`Failed to ${command.split("_")[0]} ${service}:\n${error}`);
+      setNotice({
+        tone: "error",
+        title: `Failed to ${command.split("_")[0]} ${displayName}`,
+        message: String(error),
+      });
       await refreshStatuses();
     } finally {
       setBusy(null);
@@ -167,21 +330,42 @@ export function Dashboard() {
             onClick={() => runStackCommand("start_all_services")}
             disabled={Boolean(busy) || allRunning}
           >
-            <Play size={16} /> Start Stack
+            {busyStackCommand === "start_all_services" ? (
+              <LoaderCircle size={16} className="spin-icon" />
+            ) : (
+              <Play size={16} />
+            )}
+            {busyStackCommand === "start_all_services"
+              ? STACK_COMMAND_COPY.start_all_services.buttonLabel
+              : "Start Stack"}
           </button>
           <button
             className="btn-command"
             onClick={() => runStackCommand("restart_all_services")}
             disabled={Boolean(busy)}
           >
-            <RefreshCw size={16} /> Restart
+            {busyStackCommand === "restart_all_services" ? (
+              <LoaderCircle size={16} className="spin-icon" />
+            ) : (
+              <RefreshCw size={16} />
+            )}
+            {busyStackCommand === "restart_all_services"
+              ? STACK_COMMAND_COPY.restart_all_services.buttonLabel
+              : "Restart"}
           </button>
           <button
             className="btn-command danger"
             onClick={() => runStackCommand("stop_all_services")}
             disabled={Boolean(busy) || runningCount === 0}
           >
-            <Square size={15} /> Stop
+            {busyStackCommand === "stop_all_services" ? (
+              <LoaderCircle size={15} className="spin-icon" />
+            ) : (
+              <Square size={15} />
+            )}
+            {busyStackCommand === "stop_all_services"
+              ? STACK_COMMAND_COPY.stop_all_services.buttonLabel
+              : "Stop"}
           </button>
           <button
             className="icon-button github"
@@ -201,6 +385,26 @@ export function Dashboard() {
           </button>
         </div>
       </header>
+
+      {notice && (
+        <div
+          className={`stack-notice ${notice.tone} ${notice.action ?? ""}`}
+          role={notice.tone === "error" ? "alert" : "status"}
+        >
+          <span className="stack-notice-icon" aria-hidden="true">
+            {notice.tone === "info" && <LoaderCircle size={18} className="spin-icon" />}
+            {notice.tone === "success" && <CheckCircle2 size={18} />}
+            {notice.tone === "error" && <AlertTriangle size={18} />}
+          </span>
+          <span>
+            <strong>{notice.title}</strong>
+            <small>{notice.message}</small>
+          </span>
+          <button className="notice-close" onClick={() => setNotice(null)} aria-label="Dismiss notification">
+            ×
+          </button>
+        </div>
+      )}
 
       <main className="workspace">
         <section className="overview-band">
@@ -258,6 +462,9 @@ export function Dashboard() {
           {[ServiceType.Caddy, ServiceType.PhpFpm, ServiceType.MySQL].map((serviceType) => {
             const service = services[serviceType];
             if (!service) return null;
+            const busyServiceCommand = busy?.endsWith(serviceType)
+              ? (busy.split(":")[0] as keyof typeof SERVICE_COMMAND_COPY)
+              : null;
             return (
               <ServiceCard
                 key={serviceType}
@@ -265,7 +472,8 @@ export function Dashboard() {
                 state={service.state}
                 port={service.port}
                 error={service.error_message}
-                busy={busy?.endsWith(serviceType)}
+                busy={Boolean(busyServiceCommand)}
+                busyLabel={busyServiceCommand ? SERVICE_COMMAND_COPY[busyServiceCommand].buttonLabel : undefined}
                 onStart={() => runServiceCommand("start_service", serviceType)}
                 onStop={() => runServiceCommand("stop_service", serviceType)}
                 onRestart={() => runServiceCommand("restart_service", serviceType)}
