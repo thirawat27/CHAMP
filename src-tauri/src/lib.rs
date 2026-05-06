@@ -27,6 +27,12 @@ impl AppState {
     }
 }
 
+impl Default for AppState {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -173,7 +179,7 @@ fn handle_menu_event(app: &AppHandle, event: MenuEvent) {
         "reset-installation" => {
             let app = app.clone();
             tauri::async_runtime::spawn(async move {
-                if let Ok(_) = commands::reset_installation().await {
+                if commands::reset_installation().await.is_ok() {
                     let _ = app.emit("show-wizard", ());
                 }
             });

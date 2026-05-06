@@ -790,17 +790,20 @@ button:disabled {
 
 .progress-container {
   width: 100%;
-  height: 9px;
-  background: var(--bg-card-secondary);
-  border: 1px solid var(--border-color);
+  height: 11px;
+  position: relative;
+  background: #dcfce7;
+  border: 1px solid #86efac;
   border-radius: 999px;
   overflow: hidden;
+  box-shadow: inset 0 1px 2px rgba(20, 83, 45, 0.18);
 }
 
 .progress-bar,
 .progress-bar-animated {
   height: 100%;
-  background: linear-gradient(90deg, #a94f48, #c86b3c, #c58a2b);
+  background: linear-gradient(90deg, #bbf7d0, #22c55e, #15803d);
+  box-shadow: 0 0 12px rgba(34, 197, 94, 0.34);
 }
 
 .progress-bar {
@@ -808,17 +811,88 @@ button:disabled {
 }
 
 .progress-bar-animated {
-  background-size: 180% 100%;
-  animation: setup-progress 1.1s linear infinite;
+  width: 38%;
+  min-width: 92px;
+  border-radius: inherit;
+  animation: setup-progress 1.05s ease-in-out infinite;
+}
+
+.progress-percent {
+  min-width: 42px;
+  color: #4ade80;
+  font-size: 1rem;
+  font-weight: 800;
+  text-align: right;
 }
 
 @keyframes setup-progress {
   from {
-    background-position: 0 0;
+    transform: translateX(-110%);
   }
   to {
-    background-position: 180% 0;
+    transform: translateX(275%);
   }
+}
+
+.setup-complete {
+  display: grid;
+  justify-items: center;
+  gap: 12px;
+  padding: 8px 0 2px;
+  text-align: center;
+}
+
+.setup-complete-icon {
+  width: 64px;
+  height: 64px;
+  display: grid;
+  place-items: center;
+  border-radius: 999px;
+  background: linear-gradient(135deg, #bbf7d0, #22c55e);
+  color: #064e3b;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.62),
+    0 14px 28px rgba(34, 197, 94, 0.22);
+}
+
+.setup-complete h3 {
+  margin: 0;
+  color: var(--text-primary);
+  font-size: 22px;
+  line-height: 1.1;
+}
+
+.setup-complete p {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+
+.setup-complete-packages {
+  width: min(420px, 100%);
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin: 4px 0;
+}
+
+.setup-complete-package {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: 38px;
+  padding: 8px 10px;
+  background: color-mix(in srgb, #22c55e 9%, var(--bg-card-secondary));
+  border: 1px solid color-mix(in srgb, #22c55e 28%, var(--border-color));
+  border-radius: 7px;
+  font-size: 13px;
+}
+
+.setup-complete-package strong {
+  color: #22c55e;
+  font-size: 12px;
+  white-space: nowrap;
 }
 
 .setup-shell {
@@ -1139,6 +1213,10 @@ button:disabled {
   .setup-actions .btn-primary,
   .setup-actions .btn-secondary {
     width: 100%;
+  }
+
+  .setup-complete-packages {
+    grid-template-columns: 1fr;
   }
 
   .quick-actions {

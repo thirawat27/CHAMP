@@ -90,7 +90,6 @@ pub type ServiceMap = std::collections::HashMap<ServiceType, ServiceInfo>;
 #[cfg(test)]
 mod tests {
     use super::*;
-    use serde_json;
 
     #[test]
     fn test_service_type_default_ports() {

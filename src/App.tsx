@@ -12,6 +12,18 @@ function App() {
   useEffect(() => {
     checkRuntimeInstalled();
 
+    const blockDevtoolsShortcuts = (e: KeyboardEvent) => {
+      const key = e.key.toLowerCase();
+      const opensDevtools =
+        e.key === "F12" ||
+        ((e.ctrlKey || e.metaKey) && e.shiftKey && ["i", "j", "c"].includes(key));
+
+      if (opensDevtools) {
+        e.preventDefault();
+        e.stopPropagation();
+      }
+    };
+
     // Debug mode: press Ctrl+Shift+D to toggle debug menu
     const handleKeyPress = (e: KeyboardEvent) => {
       if (e.ctrlKey && e.shiftKey && e.key === "D") {
@@ -19,6 +31,7 @@ function App() {
       }
     };
 
+    window.addEventListener("keydown", blockDevtoolsShortcuts, true);
     window.addEventListener("keydown", handleKeyPress);
 
     // Listen for show-wizard event from menu
@@ -37,6 +50,7 @@ function App() {
 
     return () => {
       window.removeEventListener("keydown", handleKeyPress);
+      window.removeEventListener("keydown", blockDevtoolsShortcuts, true);
       window.removeEventListener("beforeunload", handleBeforeUnload);
       unlisten.then((fn) => fn());
     };

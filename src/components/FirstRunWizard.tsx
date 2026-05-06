@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, type HTMLAttributes } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import {
@@ -7,6 +7,7 @@ import {
   DependencyCheckResult,
   getDatabaseDisplayName,
 } from "../types/services";
+import { CheckCircle2 } from "lucide-react";
 import champLogo from "../assets/CHAMP.png";
 import { PackageSelector } from "./PackageSelector";
 
@@ -18,9 +19,8 @@ const detectPlatform = (): string => {
   return "linux";
 };
 
-interface FirstRunWizardProps {
+interface FirstRunWizardProps extends HTMLAttributes<HTMLDivElement> {
   onComplete: () => void;
-  [key: string]: any; // Allow additional props like data-testid
 }
 
 type WizardStep = "welcome" | "packages" | "dependencies" | "confirm" | "download" | "complete";
@@ -330,6 +330,11 @@ export function FirstRunWizard({ onComplete, ...props }: FirstRunWizardProps) {
 
   const currentStepNum = getStepNumber();
   const currentStep = SETUP_STEPS[currentStepNum - 1];
+  const shownPercent = Math.max(0, Math.min(100, progress.percent));
+  const isProgressIndeterminate =
+    (progress.step === "downloading" && (shownPercent === 0 || progress.totalBytes === 0)) ||
+    progress.step === "extracting" ||
+    progress.step === "installing";
 
   return (
     <div className="setup-shell" {...props}>
@@ -725,10 +730,8 @@ export function FirstRunWizard({ onComplete, ...props }: FirstRunWizardProps) {
                 >
                   <h3 style={{ fontSize: "1rem", fontWeight: 600 }}>{getStepLabel()}</h3>
                   {progress.step === "downloading" && (
-                    <span
-                      style={{ fontSize: "1rem", fontWeight: 600, color: "var(--color-primary)" }}
-                    >
-                      {progress.percent}%
+                    <span className="progress-percent">
+                      {progress.totalBytes > 0 && shownPercent > 0 ? `${shownPercent}%` : ""}
                     </span>
                   )}
                 </div>
@@ -767,16 +770,9 @@ export function FirstRunWizard({ onComplete, ...props }: FirstRunWizardProps) {
                 {/* Progress Bar */}
                 <div className="progress-container">
                   <div
-                    className={
-                      progress.step === "extracting" || progress.step === "installing"
-                        ? "progress-bar-animated"
-                        : "progress-bar"
-                    }
+                    className={isProgressIndeterminate ? "progress-bar-animated" : "progress-bar"}
                     style={{
-                      width:
-                        progress.step === "extracting" || progress.step === "installing"
-                          ? "100%"
-                          : `${progress.percent}%`,
+                      width: isProgressIndeterminate ? undefined : `${shownPercent}%`,
                     }}
                   />
                 </div>
@@ -823,26 +819,13 @@ export function FirstRunWizard({ onComplete, ...props }: FirstRunWizardProps) {
 
             {/* Complete Step */}
             {step === "complete" && (
-              <div style={{ textAlign: "center" }}>
-                <p
-                  style={{
-                    marginBottom: "0.75rem",
-                    color: "var(--color-success)",
-                    fontWeight: 500,
-                    fontSize: "0.875rem",
-                  }}
-                >
-                  Runtime binaries installed successfully!
-                </p>
-                <div
-                  style={{
-                    display: "flex",
-                    flexWrap: "wrap",
-                    gap: "0.5rem",
-                    justifyContent: "center",
-                    marginBottom: "1rem",
-                  }}
-                >
+              <div className="setup-complete">
+                <div className="setup-complete-icon" aria-hidden="true">
+                  <CheckCircle2 size={34} strokeWidth={2.4} />
+                </div>
+                <h3>Runtime installed</h3>
+                <p>CHAMP is ready to start the local web stack.</p>
+                <div className="setup-complete-packages">
                   {[
                     { name: "Caddy", version: "2.11.2" },
                     {
@@ -865,31 +848,9 @@ export function FirstRunWizard({ onComplete, ...props }: FirstRunWizardProps) {
                           ?.version || "5.2.2",
                     },
                   ].map((pkg) => (
-                    <div
-                      key={pkg.name}
-                      style={{
-                        display: "flex",
-                        alignItems: "center",
-                        gap: "0.375rem",
-                        padding: "0.375rem 0.5rem",
-                        backgroundColor: "var(--bg-card-secondary)",
-                        borderRadius: "0.375rem",
-                        fontSize: "0.875rem",
-                      }}
-                    >
-                      <span style={{ fontWeight: 500 }}>{pkg.name}</span>
-                      <span
-                        style={{
-                          padding: "0.125rem 0.375rem",
-                          backgroundColor: "var(--color-success)",
-                          borderRadius: "0.25rem",
-                          fontSize: "0.75rem",
-                          fontWeight: 500,
-                          color: "white",
-                        }}
-                      >
-                        {pkg.version}
-                      </span>
+                    <div key={pkg.name} className="setup-complete-package">
+                      <span>{pkg.name}</span>
+                      <strong>{pkg.version}</strong>
                     </div>
                   ))}
                 </div>

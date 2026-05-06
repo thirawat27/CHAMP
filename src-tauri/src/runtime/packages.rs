@@ -140,7 +140,7 @@ pub struct VersionInfo {
     pub urls: Urls,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct Checksums {
     #[serde(rename = "windowsX64", default)]
     pub windows_x64: Option<String>,
@@ -154,19 +154,6 @@ pub struct Checksums {
     pub macos_x64: Option<String>,
     #[serde(rename = "macOSArm64", default)]
     pub macos_arm64: Option<String>,
-}
-
-impl Default for Checksums {
-    fn default() -> Self {
-        Self {
-            windows_x64: None,
-            windows_arm64: None,
-            linux_x64: None,
-            linux_arm64: None,
-            macos_x64: None,
-            macos_arm64: None,
-        }
-    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -255,7 +242,7 @@ fn get_database_display_name(display_name: &str) -> String {
 
 /// Get all available packages from config file or defaults
 pub fn get_available_packages() -> PackagesConfig {
-    let config = RUNTIME_CONFIG.get_or_init(|| load_runtime_config_from_file());
+    let config = RUNTIME_CONFIG.get_or_init(load_runtime_config_from_file);
 
     if let Some(cfg) = config {
         // Convert from config format to package format
@@ -325,7 +312,7 @@ pub fn get_available_packages() -> PackagesConfig {
 
 /// Get the selected package IDs from config
 pub fn get_selected_package_ids() -> PackageSelection {
-    let config = RUNTIME_CONFIG.get_or_init(|| load_runtime_config_from_file());
+    let config = RUNTIME_CONFIG.get_or_init(load_runtime_config_from_file);
 
     if let Some(cfg) = config {
         PackageSelection {
@@ -391,7 +378,7 @@ pub fn reload_runtime_config() {
 /// Get the runtime configuration
 pub fn get_config() -> Option<RuntimeConfig> {
     RUNTIME_CONFIG
-        .get_or_init(|| load_runtime_config_from_file())
+        .get_or_init(load_runtime_config_from_file)
         .clone()
 }
 

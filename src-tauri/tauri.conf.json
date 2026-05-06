@@ -15,6 +15,7 @@
         "title": "CHAMP",
         "width": 1080,
         "height": 720,
+        "devtools": false,
         "dragDropEnabled": true
       }
     ],

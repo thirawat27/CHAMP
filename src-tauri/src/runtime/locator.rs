@@ -208,7 +208,7 @@ fn detect_php_binary_in_dir(runtime_dir: &Path) -> Result<PathBuf, String> {
         // - runtime/php-cgi.exe (direct in runtime dir)
 
         // First, look for versioned PHP directories (like php-8.4.16-Win32-vs17-x64)
-        if let Ok(entries) = fs::read_dir(&runtime_dir) {
+        if let Ok(entries) = fs::read_dir(runtime_dir) {
             for entry in entries.flatten() {
                 if let Ok(name) = entry.file_name().into_string() {
                     if name.starts_with("php-") && name.contains("Win32") && entry.path().is_dir() {

@@ -196,9 +196,6 @@ pub async fn start_service(
         .lock()
         .map_err(|e| format!("Failed to acquire process manager lock: {}", e))?;
 
-    // Initialize if needed - propagate error if this fails
-    manager.initialize()?;
-
     // Start the service
     let result = manager.start(service);
 
@@ -241,9 +238,6 @@ pub async fn restart_service(
         .process_manager
         .lock()
         .map_err(|e| format!("Failed to acquire process manager lock: {}", e))?;
-
-    // Initialize if needed - propagate error if this fails
-    manager.initialize()?;
 
     // Restart the service
     let result = manager.restart(service);

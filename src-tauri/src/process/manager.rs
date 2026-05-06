@@ -3,7 +3,7 @@ use crate::runtime::locator::{locate_runtime_binaries, RuntimePaths};
 use std::collections::HashMap;
 use std::fs::{self, File, OpenOptions};
 use std::io::Write;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
 
 // Windows-specific: Constant to hide console window
@@ -34,11 +34,7 @@ fn open_log_file_with_retry(log_path: &PathBuf, service_name: &str) -> Result<Fi
         let result = if attempt == 0 {
             File::create(log_path)
         } else {
-            OpenOptions::new()
-                .write(true)
-                .create(true)
-                .append(true)
-                .open(log_path)
+            OpenOptions::new().create(true).append(true).open(log_path)
         };
 
         match result {
@@ -236,9 +232,6 @@ impl ProcessManager {
                 .stdout(Stdio::null())
                 .stderr(Stdio::null())
                 .output();
-
-            // Give the process time to terminate
-            std::thread::sleep(std::time::Duration::from_millis(500));
         }
 
         // Terminate the child process if it exists
@@ -387,7 +380,7 @@ fn start_caddy(
     let log_file = open_log_file_with_retry(&log_path, "Caddy")?;
 
     // Start Caddy
-    let mut child = configure_no_window(Command::new(&paths.caddy))
+    let child = configure_no_window(Command::new(&paths.caddy))
         .arg("run")
         .arg("--config")
         .arg(&caddyfile_path)
@@ -397,22 +390,7 @@ fn start_caddy(
         .spawn()
         .map_err(|e| format!("Failed to start Caddy: {}", e))?;
 
-    // Give it a moment to start
-    std::thread::sleep(std::time::Duration::from_millis(500));
-
-    // Check if process is still running
-    match child.try_wait() {
-        Ok(Some(status)) => Err(format!(
-            "Caddy exited immediately with status: {:?}",
-            status
-        )),
-        Ok(None) => {
-            service_process.child = Some(child);
-            service_process.log_file = Some(log_path);
-            Ok(())
-        }
-        Err(e) => Err(format!("Failed to check Caddy process: {}", e)),
-    }
+    attach_started_process(service_process, child, log_path, "Caddy")
 }
 
 /// Start PHP-FPM (using PHP-CGI for simplicity in MVP)
@@ -438,7 +416,7 @@ fn start_php_fpm(service_process: &mut ServiceProcess, paths: &RuntimePaths) -> 
         .map(|n| n == "php-fpm")
         .unwrap_or(false);
 
-    let mut child = if is_fpm {
+    let child = if is_fpm {
         // Generate php-fpm.conf if it doesn't exist
         let fpm_conf_path = paths.config_dir.join("php-fpm.conf");
         if !fpm_conf_path.exists() {
@@ -474,19 +452,7 @@ fn start_php_fpm(service_process: &mut ServiceProcess, paths: &RuntimePaths) -> 
             .map_err(|e| format!("Failed to start PHP-CGI: {}", e))?
     };
 
-    // Give it a moment to start
-    std::thread::sleep(std::time::Duration::from_millis(500));
-
-    // Check if process is still running
-    match child.try_wait() {
-        Ok(Some(status)) => Err(format!("PHP exited immediately with status: {:?}", status)),
-        Ok(None) => {
-            service_process.child = Some(child);
-            service_process.log_file = Some(log_path);
-            Ok(())
-        }
-        Err(e) => Err(format!("Failed to check PHP process: {}", e)),
-    }
+    attach_started_process(service_process, child, log_path, "PHP")
 }
 
 /// Start MySQL/MariaDB database server
@@ -546,7 +512,7 @@ fn start_mysql(service_process: &mut ServiceProcess, paths: &RuntimePaths) -> Re
     // Build MySQL command with optional init file
     let mut cmd = configure_no_window(Command::new(&paths.mysql));
     cmd.arg("--datadir")
-        .arg(&data_dir_str)
+        .arg(data_dir_str)
         .arg("--port")
         .arg(service_process.port.to_string())
         .arg("--bind-address=127.0.0.1")
@@ -571,9 +537,6 @@ fn start_mysql(service_process: &mut ServiceProcess, paths: &RuntimePaths) -> Re
             )
         })?;
 
-    // Give MariaDB more time to start (it's slower than other services)
-    std::thread::sleep(std::time::Duration::from_secs(3));
-
     // Check if process is still running
     match child.try_wait() {
         Ok(Some(status)) => {
@@ -587,14 +550,32 @@ fn start_mysql(service_process: &mut ServiceProcess, paths: &RuntimePaths) -> Re
             ))
         }
         Ok(None) => {
-            // Mark user as created after successful start
             if needs_init_file {
-                let _ = fs::write(&user_created_flag, "done");
-                eprintln!("MariaDB root@127.0.0.1 user created during startup");
+                let marker_path = user_created_flag.clone();
+                let init_cleanup_path = init_file_path.clone();
+                let mysql_port = service_process.port;
+                std::thread::spawn(move || {
+                    for _ in 0..20 {
+                        let addr = format!("127.0.0.1:{}", mysql_port);
+                        if let Ok(socket_addr) = addr.parse() {
+                            if std::net::TcpStream::connect_timeout(
+                                &socket_addr,
+                                std::time::Duration::from_millis(100),
+                            )
+                            .is_ok()
+                            {
+                                let _ = fs::write(marker_path, "done");
+                                break;
+                            }
+                        }
+                        std::thread::sleep(std::time::Duration::from_millis(500));
+                    }
+                    if let Some(init_file) = init_cleanup_path {
+                        let _ = fs::remove_file(init_file);
+                    }
+                });
             }
-            service_process.child = Some(child);
-            service_process.log_file = Some(log_path);
-            Ok(())
+            attach_started_process(service_process, child, log_path, "MariaDB")
         }
         Err(e) => {
             if let Some(init_file) = init_file_path {
@@ -602,6 +583,26 @@ fn start_mysql(service_process: &mut ServiceProcess, paths: &RuntimePaths) -> Re
             }
             Err(format!("Failed to check MariaDB process: {}", e))
         }
+    }
+}
+
+fn attach_started_process(
+    service_process: &mut ServiceProcess,
+    mut child: Child,
+    log_path: PathBuf,
+    service_label: &str,
+) -> Result<(), String> {
+    match child.try_wait() {
+        Ok(Some(status)) => Err(format!(
+            "{} exited immediately with status: {:?}",
+            service_label, status
+        )),
+        Ok(None) => {
+            service_process.child = Some(child);
+            service_process.log_file = Some(log_path);
+            Ok(())
+        }
+        Err(e) => Err(format!("Failed to check {} process: {}", service_label, e)),
     }
 }
 
@@ -875,9 +876,6 @@ fn kill_existing_processes(process_name: &str) {
             .stdout(Stdio::null())
             .stderr(Stdio::null())
             .output();
-
-        // Give the process time to terminate and release ports
-        std::thread::sleep(std::time::Duration::from_millis(500));
     }
 
     #[cfg(unix)]
@@ -898,9 +896,6 @@ fn kill_existing_processes(process_name: &str) {
                 .stderr(Stdio::null())
                 .output();
         }
-
-        // Give the process time to terminate and release ports
-        std::thread::sleep(std::time::Duration::from_millis(500));
     }
 }
 
@@ -935,37 +930,37 @@ fn generate_caddyfile(
     content.push_str("    # Database tools - must come before project root directives\n");
     content.push_str("    redir /adminer /adminer/\n");
     content.push_str("    redir /phpmyadmin /phpmyadmin/\n");
-    content.push_str("\n");
+    content.push('\n');
     content.push_str("    handle_path /adminer/* {\n");
     content.push_str(&format!("        root * \"{}\"\n", adminer));
     content.push_str(&format!("        php_fastcgi 127.0.0.1:{}\n", php_port));
     content.push_str("        file_server\n");
     content.push_str("    }\n");
-    content.push_str("\n");
+    content.push('\n');
     content.push_str("    handle_path /phpmyadmin/* {\n");
     content.push_str(&format!("        root * \"{}\"\n", adminer));
     content.push_str(&format!("        php_fastcgi 127.0.0.1:{}\n", php_port));
     content.push_str("        file_server\n");
     content.push_str("    }\n");
-    content.push_str("\n");
+    content.push('\n');
     content.push_str("    # Root directory for serving files (default project root)\n");
     content.push_str(&format!("    root * \"{}\"\n", projects));
-    content.push_str("\n");
+    content.push('\n');
     content.push_str("    # Enable PHP for all other requests\n");
     content.push_str(&format!("    php_fastcgi 127.0.0.1:{}\n", php_port));
-    content.push_str("\n");
+    content.push('\n');
     content.push_str("    # File server for project files\n");
     content.push_str("    file_server browse\n");
-    content.push_str("\n");
+    content.push('\n');
     content.push_str("    # Logging\n");
     content.push_str("    log {\n");
     content.push_str(&format!("        output file \"{}\"\n", log_file));
     content.push_str("        format json\n");
     content.push_str("    }\n");
-    content.push_str("\n");
+    content.push('\n');
     content.push_str("    # Encode responses\n");
     content.push_str("    encode gzip\n");
-    content.push_str("\n");
+    content.push('\n');
     content.push_str("    # Security headers\n");
     content.push_str("    header {\n");
     content.push_str("        X-Content-Type-Options nosniff\n");
@@ -1330,7 +1325,7 @@ fn copy_dir_contents(source: &PathBuf, target: &PathBuf) -> Result<(), String> {
     Ok(())
 }
 
-fn write_phpmyadmin_config(target: &PathBuf, web_port: u16, mysql_port: u16) -> Result<(), String> {
+fn write_phpmyadmin_config(target: &Path, web_port: u16, mysql_port: u16) -> Result<(), String> {
     let config = format!(
         r#"<?php
 $cfg['blowfish_secret'] = 'CHAMP_LOCAL_DEV_BLOWFISH_1234567';
@@ -1607,13 +1602,13 @@ mod integration_tests {
         {
             use std::process::Command;
             let _ = Command::new("taskkill")
-                .args(&["/F", "/IM", "caddy.exe"])
+                .args(["/F", "/IM", "caddy.exe"])
                 .output();
             let _ = Command::new("taskkill")
-                .args(&["/F", "/IM", "php-cgi.exe"])
+                .args(["/F", "/IM", "php-cgi.exe"])
                 .output();
             let _ = Command::new("taskkill")
-                .args(&["/F", "/IM", "mysqld.exe"])
+                .args(["/F", "/IM", "mysqld.exe"])
                 .output();
         }
 

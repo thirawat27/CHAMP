@@ -2,6 +2,7 @@ use std::fs::{self, File};
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 use std::sync::OnceLock;
+use std::time::{Duration, Instant};
 
 use reqwest::Client;
 
@@ -406,11 +407,20 @@ pub struct RuntimeDownloader {
 }
 
 impl RuntimeDownloader {
+    fn build_client() -> Client {
+        Client::builder()
+            .connect_timeout(Duration::from_secs(20))
+            .timeout(Duration::from_secs(900))
+            .tcp_nodelay(true)
+            .build()
+            .unwrap_or_else(|_| Client::new())
+    }
+
     /// Create a new runtime downloader
     pub fn new() -> Self {
         Self {
             platform: Platform::current(),
-            client: Client::new(),
+            client: Self::build_client(),
             package_selection: None,
         }
     }
@@ -419,7 +429,7 @@ impl RuntimeDownloader {
     pub fn with_packages(package_selection: PackageSelection) -> Self {
         Self {
             platform: Platform::current(),
-            client: Client::new(),
+            client: Self::build_client(),
             package_selection: Some(package_selection),
         }
     }
@@ -563,13 +573,13 @@ impl RuntimeDownloader {
     /// Extract file extension from URL
     fn get_extension_from_url(url: &str) -> String {
         // Get the filename from the URL
-        if let Some(filename) = url.split('/').last() {
+        if let Some(filename) = url.split('/').next_back() {
             // Check for .tar.gz first (compound extension)
             if filename.ends_with(".tar.gz") {
                 return "tar.gz".to_string();
             }
             // Otherwise get the extension after the last dot
-            if let Some(ext) = filename.split('.').last() {
+            if let Some(ext) = filename.split('.').next_back() {
                 return ext.to_string();
             }
         }
@@ -583,11 +593,34 @@ impl RuntimeDownloader {
         component: BinaryComponent,
         dest_dir: &Path,
         progress_cb: &ProgressCallback,
-        _current: u8,
+        current: u8,
         total: u8,
     ) -> Result<PathBuf, String> {
         let url = self.get_binary_url(component);
         let extension = Self::get_extension_from_url(&url);
+        let version = self.get_component_version(&component);
+        let file_path = dest_dir.join(format!(
+            "{}-{}.{}",
+            component.binary_name(),
+            version,
+            extension
+        ));
+
+        if let Ok(metadata) = fs::metadata(&file_path) {
+            if metadata.len() > 4 || extension == "php" {
+                progress_cb(DownloadProgress {
+                    step: DownloadStep::Downloading,
+                    percent: 100,
+                    current_component: format!("{} {}/{}", component.name(), current, total),
+                    component_display: component.display_name(),
+                    version,
+                    total_components: total,
+                    downloaded_bytes: metadata.len(),
+                    total_bytes: metadata.len(),
+                });
+                return Ok(file_path);
+            }
+        }
 
         eprintln!("[DEBUG] Platform: {:?}", self.platform);
         eprintln!("[DEBUG] Downloading {} from: {}", component.name(), url);
@@ -613,7 +646,7 @@ impl RuntimeDownloader {
                 );
         }
 
-        let response = request
+        let mut response = request
             .send()
             .await
             .map_err(|e| format!("Failed to fetch {}: {}", component.name(), e))?;
@@ -648,62 +681,108 @@ impl RuntimeDownloader {
         }
 
         let total_bytes = response.content_length().unwrap_or(0);
-        let version = self.get_component_version(&component);
-        let file_path = dest_dir.join(format!(
-            "{}-{}.{}",
-            component.binary_name(),
-            version,
-            extension
-        ));
 
         // Create parent directory if it doesn't exist
         if let Some(parent) = file_path.parent() {
             fs::create_dir_all(parent).map_err(|e| format!("Failed to create directory: {}", e))?;
         }
 
+        let partial_path = file_path.with_file_name(format!(
+            "{}.part",
+            file_path
+                .file_name()
+                .and_then(|name| name.to_str())
+                .unwrap_or("download")
+        ));
+        let _ = fs::remove_file(&partial_path);
         let mut file =
-            File::create(&file_path).map_err(|e| format!("Failed to create file: {}", e))?;
+            File::create(&partial_path).map_err(|e| format!("Failed to create file: {}", e))?;
+        let mut hasher = Sha256::new();
+        let mut magic_bytes = Vec::with_capacity(4);
+        let mut downloaded_bytes = 0_u64;
+        let mut last_percent = u8::MAX;
+        let mut last_emit = Instant::now() - Duration::from_secs(1);
 
-        // Download using bytes() for simplicity
-        let bytes = response
-            .bytes()
+        progress_cb(DownloadProgress {
+            step: DownloadStep::Downloading,
+            percent: 0,
+            current_component: format!("{} {}/{}", component.name(), current, total),
+            component_display: component.display_name(),
+            version: version.clone(),
+            total_components: total,
+            downloaded_bytes,
+            total_bytes,
+        });
+
+        while let Some(chunk) = response
+            .chunk()
             .await
-            .map_err(|e| format!("Failed to download bytes: {}", e))?;
+            .map_err(|e| format!("Failed while downloading {}: {}", component.name(), e))?
+        {
+            if magic_bytes.len() < 4 {
+                let remaining = 4 - magic_bytes.len();
+                magic_bytes.extend_from_slice(&chunk[..chunk.len().min(remaining)]);
+            }
+
+            hasher.update(&chunk);
+            file.write_all(&chunk)
+                .map_err(|e| format!("Failed to write to file: {}", e))?;
+            downloaded_bytes = downloaded_bytes.saturating_add(chunk.len() as u64);
+
+            let percent = if total_bytes > 0 {
+                ((downloaded_bytes as f64 / total_bytes as f64) * 100.0)
+                    .round()
+                    .clamp(0.0, 100.0) as u8
+            } else {
+                0
+            };
+
+            if percent != last_percent || last_emit.elapsed() >= Duration::from_millis(120) {
+                last_percent = percent;
+                last_emit = Instant::now();
+                progress_cb(DownloadProgress {
+                    step: DownloadStep::Downloading,
+                    percent,
+                    current_component: format!("{} {}/{}", component.name(), current, total),
+                    component_display: component.display_name(),
+                    version: version.clone(),
+                    total_components: total,
+                    downloaded_bytes,
+                    total_bytes,
+                });
+            }
+        }
+
+        file.flush()
+            .map_err(|e| format!("Failed to flush downloaded file: {}", e))?;
+        drop(file);
 
         // Verify the file is valid by checking magic bytes
-        if extension != "php" && bytes.len() < 4 {
+        if extension != "php" && downloaded_bytes < 4 {
             return Err(format!(
                 "Downloaded file is too small ({} bytes) to be a valid archive",
-                bytes.len()
+                downloaded_bytes
             ));
         }
 
         // Check if it's a ZIP file (starts with PK)
-        let is_zip = bytes.len() >= 2 && bytes[0] == 0x50 && bytes[1] == 0x4B;
+        let is_zip = magic_bytes.len() >= 2 && magic_bytes[0] == 0x50 && magic_bytes[1] == 0x4B;
         // Check if it's gzip (starts with 0x1f 0x8b)
-        let is_gzip = bytes.len() >= 2 && bytes[0] == 0x1f && bytes[1] == 0x8b;
+        let is_gzip = magic_bytes.len() >= 2 && magic_bytes[0] == 0x1f && magic_bytes[1] == 0x8b;
 
         if extension == "zip" && !is_zip {
-            return Err(format!(
-                "Expected ZIP file but downloaded file doesn't have ZIP magic bytes. URL may have redirected to HTML page."
-            ));
+            return Err("Expected ZIP file but downloaded file doesn't have ZIP magic bytes. URL may have redirected to HTML page.".to_string());
         }
 
         if (extension == "gz" || extension == "tar.gz") && !is_gzip {
-            return Err(format!(
-                "Expected gzip file but downloaded file doesn't have gzip magic bytes."
-            ));
+            return Err(
+                "Expected gzip file but downloaded file doesn't have gzip magic bytes.".to_string(),
+            );
         }
-
-        let downloaded_bytes = bytes.len() as u64;
-        file.write_all(&bytes)
-            .map_err(|e| format!("Failed to write to file: {}", e))?;
 
         // Verify checksum if available
         if let Some(expected_checksum) = self.get_expected_checksum(&component, &url) {
-            let actual_checksum = self
-                .calculate_checksum_from_bytes(&bytes)
-                .map_err(|e| format!("Failed to calculate checksum: {}", e))?;
+            let actual_checksum = hex::encode(hasher.finalize());
 
             if actual_checksum.to_lowercase() != expected_checksum.to_lowercase() {
                 return Err(format!(
@@ -720,31 +799,21 @@ impl RuntimeDownloader {
             );
         }
 
-        let percent = if total_bytes > 0 {
-            ((downloaded_bytes as f64 / total_bytes as f64) * 100.0) as u8
-        } else {
-            100
-        };
+        fs::rename(&partial_path, &file_path)
+            .map_err(|e| format!("Failed to finalize downloaded file: {}", e))?;
 
         progress_cb(DownloadProgress {
             step: DownloadStep::Downloading,
-            percent,
-            current_component: component.name().to_string(),
+            percent: 100,
+            current_component: format!("{} {}/{}", component.name(), current, total),
             component_display: component.display_name(),
-            version: self.get_component_version(&component),
+            version,
             total_components: total,
             downloaded_bytes,
-            total_bytes,
+            total_bytes: total_bytes.max(downloaded_bytes),
         });
 
         Ok(file_path)
-    }
-
-    /// Calculate SHA256 checksum from bytes
-    fn calculate_checksum_from_bytes(&self, bytes: &[u8]) -> Result<String, String> {
-        let mut hasher = Sha256::new();
-        hasher.update(bytes);
-        Ok(hex::encode(hasher.finalize()))
     }
 
     /// Get the expected checksum for a component based on current platform
@@ -775,7 +844,7 @@ impl RuntimeDownloader {
                 };
 
                 for version in version_info {
-                    if target_id.is_some() && version.id == target_id.unwrap() {
+                    if target_id == Some(version.id.as_str()) {
                         // Use the package selection
                         return match platform_key.as_str() {
                             "windowsX64" => version.checksums.windows_x64.clone(),
@@ -1015,7 +1084,7 @@ impl RuntimeDownloader {
                 percent: 0,
                 current_component: component.name().to_string(),
                 component_display: component.display_name(),
-                version: self.get_component_version(&component),
+                version: self.get_component_version(component),
                 total_components: total,
                 downloaded_bytes: 0,
                 total_bytes: 0,
@@ -1110,7 +1179,7 @@ impl RuntimeDownloader {
                 percent: 0,
                 current_component: component.name().to_string(),
                 component_display: component.display_name(),
-                version: self.get_component_version(&component),
+                version: self.get_component_version(component),
                 total_components: total,
                 downloaded_bytes: 0,
                 total_bytes: 0,
@@ -1395,11 +1464,6 @@ impl RuntimeDownloader {
                     }
                 }
             }
-        }
-
-        // Add Caddy version from default config (not in packages)
-        if !installed.contains_key("caddy") {
-            installed.insert("caddy".to_string(), "2.11.2".to_string());
         }
 
         installed
