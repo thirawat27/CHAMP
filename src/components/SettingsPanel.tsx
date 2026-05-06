@@ -20,13 +20,12 @@ interface PortCheck {
   mysql: { port: number; available: boolean };
 }
 
-const defaultPackageSelection: PackageSelection = {
-  php: "php-8.5",
-  mysql: "mysql-8.4",
-  phpmyadmin: "phpmyadmin-5.2",
-};
-
 export function SettingsPanel({ onClose, onSettingsChanged, ...props }: SettingsPanelProps) {
+  const defaultPackageSelection: PackageSelection = {
+    php: "php-8.5",
+    mysql: "mysql-8.4",
+    phpmyadmin: "phpmyadmin-5.2",
+  };
   const [settings, setSettings] = useState<AppSettings>({
     web_port: 8080,
     php_port: 9000,

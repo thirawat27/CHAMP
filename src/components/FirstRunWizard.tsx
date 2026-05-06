@@ -602,7 +602,7 @@ export function FirstRunWizard({ onComplete, ...props }: FirstRunWizardProps) {
                     marginBottom: "0.75rem",
                   }}
                 >
-                  After installing the dependencies, click &quot;Retry Check&quot; to continue.
+                  After installing the dependencies, click "Retry Check" to continue.
                 </p>
                 <div className="setup-actions">
                   <button
