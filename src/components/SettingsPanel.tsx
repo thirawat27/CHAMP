@@ -1,8 +1,10 @@
 import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
 import { CheckCircle2, FolderOpen, X } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import {
   AppSettings,
+  DownloadProgress,
   InstalledPhpVersion,
   PackagesConfig,
   PackageSelection,
@@ -41,6 +43,7 @@ export function SettingsPanel({ onClose, onSettingsChanged, ...props }: Settings
   const [phpBusy, setPhpBusy] = useState(false);
   const [portCheck, setPortCheck] = useState<PortCheck | null>(null);
   const [saving, setSaving] = useState(false);
+  const [saveProgress, setSaveProgress] = useState<DownloadProgress | null>(null);
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -72,6 +75,16 @@ export function SettingsPanel({ onClose, onSettingsChanged, ...props }: Settings
     loadSettings();
   }, [loadSettings]);
 
+  useEffect(() => {
+    const unlisten = listen<DownloadProgress>("download-progress", (event) => {
+      setSaveProgress(event.payload);
+    });
+
+    return () => {
+      unlisten.then((dispose) => dispose());
+    };
+  }, []);
+
   const handlePortChange = (field: "web_port" | "php_port" | "mysql_port", value: string) => {
     const next = Number.parseInt(value, 10);
     if (Number.isNaN(next) || next < 1 || next > 65535) return;
@@ -90,6 +103,7 @@ export function SettingsPanel({ onClose, onSettingsChanged, ...props }: Settings
 
   const handleSave = async () => {
     setSaving(true);
+    setSaveProgress(null);
     setError(null);
     setMessage(null);
 
@@ -102,6 +116,7 @@ export function SettingsPanel({ onClose, onSettingsChanged, ...props }: Settings
       setError(`Failed to save settings: ${e}`);
     } finally {
       setSaving(false);
+      setSaveProgress(null);
     }
   };
 
@@ -391,7 +406,11 @@ export function SettingsPanel({ onClose, onSettingsChanged, ...props }: Settings
             Cancel
           </button>
           <button className="btn-primary success" onClick={handleSave} disabled={saving || loading}>
-            {saving ? "Saving..." : "Save"}
+            {saving && saveProgress?.step === "downloading"
+              ? `Downloading ${saveProgress.componentDisplay || "database tool"}`
+              : saving
+                ? "Saving..."
+                : "Save"}
           </button>
         </footer>
       </section>

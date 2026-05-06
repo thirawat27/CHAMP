@@ -93,7 +93,7 @@ pub struct InstalledPhpVersionDto {
     pub path: Option<String>,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Clone, Debug, Serialize)]
 pub struct SystemMetricsDto {
     pub cpu_usage: f32,
     pub memory_used_bytes: u64,
@@ -102,12 +102,16 @@ pub struct SystemMetricsDto {
     pub network_tx_bps: u64,
 }
 
+const SYSTEM_METRICS_MIN_SAMPLE_INTERVAL: std::time::Duration =
+    std::time::Duration::from_millis(1500);
+
 struct SystemMetricsMonitor {
     system: System,
     networks: Networks,
     last_network_received_bytes: u64,
     last_network_transmitted_bytes: u64,
     last_sample_time: Instant,
+    cached_metrics: Option<SystemMetricsDto>,
 }
 
 impl SystemMetricsMonitor {
@@ -126,10 +130,17 @@ impl SystemMetricsMonitor {
             last_network_received_bytes: received,
             last_network_transmitted_bytes: transmitted,
             last_sample_time: Instant::now(),
+            cached_metrics: None,
         }
     }
 
     fn collect(&mut self) -> SystemMetricsDto {
+        if self.last_sample_time.elapsed() < SYSTEM_METRICS_MIN_SAMPLE_INTERVAL {
+            if let Some(metrics) = &self.cached_metrics {
+                return metrics.clone();
+            }
+        }
+
         self.system.refresh_cpu_usage();
         self.system.refresh_memory();
         self.networks.refresh(true);
@@ -155,13 +166,15 @@ impl SystemMetricsMonitor {
         self.last_network_transmitted_bytes = current_transmitted;
         self.last_sample_time = now;
 
-        SystemMetricsDto {
+        let metrics = SystemMetricsDto {
             cpu_usage: self.system.global_cpu_usage(),
             memory_used_bytes: self.system.used_memory(),
             memory_total_bytes: self.system.total_memory(),
             network_rx_bps,
             network_tx_bps,
-        }
+        };
+        self.cached_metrics = Some(metrics.clone());
+        metrics
     }
 }
 
@@ -314,9 +327,12 @@ pub async fn get_settings() -> Result<crate::config::AppSettings, String> {
 #[tauri::command]
 pub async fn save_settings(
     settings: crate::config::AppSettings,
+    app: tauri::AppHandle,
     state: State<'_, AppState>,
 ) -> Result<(), String> {
-    // Save the settings first
+    ensure_selected_database_tool_installed(&settings, &app).await?;
+
+    // Save the settings after any required runtime install succeeds.
     settings.save()?;
 
     // Update the ProcessManager with new settings
@@ -345,6 +361,62 @@ pub async fn save_settings(
     }
 
     Ok(())
+}
+
+async fn ensure_selected_database_tool_installed(
+    settings: &AppSettings,
+    app: &tauri::AppHandle,
+) -> Result<(), String> {
+    let tool_id = &settings.package_selection.phpmyadmin;
+    let packages = crate::runtime::packages::get_available_packages();
+    let package = packages
+        .phpmyadmin
+        .iter()
+        .find(|package| package.id == *tool_id)
+        .ok_or_else(|| format!("Unknown database tool: {}", tool_id))?;
+
+    let downloader = RuntimeDownloader::with_packages(settings.package_selection.clone());
+    let runtime_dir = downloader.get_runtime_dir()?;
+    if is_database_tool_installed(&runtime_dir, tool_id) {
+        return Ok(());
+    }
+
+    eprintln!(
+        "{} is selected but not installed. Downloading it now.",
+        package.display_name
+    );
+
+    let app_clone = app.clone();
+    downloader
+        .download_all_with_skip(
+            Box::new(move |progress| {
+                let _ = app_clone.emit("download-progress", &progress);
+                if let Ok(mut p) = DOWNLOAD_PROGRESS.lock() {
+                    *p = Some(progress);
+                }
+            }),
+            &["caddy", "php", "mysql"],
+        )
+        .await?;
+
+    if is_database_tool_installed(&runtime_dir, tool_id) {
+        Ok(())
+    } else {
+        Err(format!(
+            "{} was downloaded, but CHAMP could not find the installed files in {}",
+            package.display_name,
+            runtime_dir.display()
+        ))
+    }
+}
+
+fn is_database_tool_installed(runtime_dir: &Path, tool_id: &str) -> bool {
+    if tool_id.starts_with("adminer") {
+        runtime_dir.join("adminer").join("index.php").exists()
+            || runtime_dir.join("adminer.php").exists()
+    } else {
+        runtime_dir.join("phpmyadmin").join("index.php").exists()
+    }
 }
 
 /// Validate settings (check port conflicts, valid paths)

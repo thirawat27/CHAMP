@@ -399,10 +399,8 @@ fn start_php_fpm(service_process: &mut ServiceProcess, paths: &RuntimePaths) -> 
     kill_existing_processes("php-fpm");
     kill_existing_processes("php-cgi");
 
-    // Generate php.ini if it doesn't exist
-    if !paths.php_ini.exists() {
-        generate_php_ini(&paths.php_ini, paths)?;
-    }
+    // Regenerate php.ini on each start because it depends on the selected PHP runtime.
+    generate_php_ini(&paths.php_ini, paths)?;
 
     // Open log file with retry logic
     let log_path = paths.logs_dir.join("php-fpm.log");
@@ -1000,11 +998,17 @@ fn generate_php_ini(path: &PathBuf, paths: &RuntimePaths) -> Result<(), String> 
         .join("php-errors.log")
         .to_string_lossy()
         .replace('\\', "/");
-    let session_path = paths
-        .logs_dir
-        .join("php-sessions")
-        .to_string_lossy()
-        .replace('\\', "/");
+    let session_dir = paths.logs_dir.join("php-sessions");
+    fs::create_dir_all(&session_dir).map_err(|e| {
+        format!(
+            "Failed to create PHP session directory {}: {}",
+            session_dir.display(),
+            e
+        )
+    })?;
+    let session_path = session_dir.to_string_lossy().replace('\\', "/");
+
+    let extension_lines = php_ini_extension_lines(&ext_dir);
 
     let php_ini_content = format!(
         r#"; CHAMP PHP Configuration
@@ -1034,14 +1038,9 @@ max_input_vars = 5000
 date.timezone = UTC
 
 ; Extensions - use absolute path for reliability
-; Note: zlib and session are built-in to PHP 8.3 and cannot be loaded as extensions
+; Note: PDO, zlib, and session are built-in to bundled PHP builds.
 extension_dir = "{}"
-extension=curl
-extension=mbstring
-extension=mysqli
-extension=openssl
-extension=pdo
-extension=pdo_mysql
+{}
 
 ; Session settings - use absolute path for Windows compatibility
 session.save_path = "{}"
@@ -1060,25 +1059,17 @@ cgi.fix_pathinfo = 1
 ; Security settings
 expose_php = Off
 
-; OPcache settings optimized for local PHP projects
-zend_extension=opcache
-opcache.enable=1
-opcache.memory_consumption=256
-opcache.interned_strings_buffer=16
-opcache.max_accelerated_files=40000
-opcache.revalidate_freq=60
-opcache.fast_shutdown=1
+; OPcache/JIT is disabled for FastCGI runtime stability.
+opcache.enable=0
 opcache.enable_cli=0
-opcache.validate_timestamps=1
-opcache.save_comments=1
-opcache.jit=tracing
-opcache.jit_buffer_size=128M
+opcache.jit=off
+opcache.jit_buffer_size=0
 
 ; Realpath cache for better file path resolution (doubled)
 realpath_cache_size=8192K
 realpath_cache_ttl=300
 "#,
-        error_log, ext_dir_str, session_path, session_path
+        error_log, ext_dir_str, extension_lines, session_path, session_path
     );
 
     let mut file = File::create(path).map_err(|e| format!("Failed to create php.ini: {}", e))?;
@@ -1086,6 +1077,25 @@ realpath_cache_ttl=300
         .map_err(|e| format!("Failed to write php.ini: {}", e))?;
 
     Ok(())
+}
+
+fn php_ini_extension_lines(ext_dir: &Path) -> String {
+    ["curl", "mbstring", "mysqli", "openssl", "pdo_mysql"]
+        .iter()
+        .filter(|extension| php_extension_available(ext_dir, extension))
+        .map(|extension| format!("extension={}", extension))
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+#[cfg(target_os = "windows")]
+fn php_extension_available(ext_dir: &Path, extension: &str) -> bool {
+    ext_dir.join(format!("php_{}.dll", extension)).exists()
+}
+
+#[cfg(not(target_os = "windows"))]
+fn php_extension_available(_ext_dir: &Path, _extension: &str) -> bool {
+    true
 }
 
 /// Generate php-fpm.conf for static-php builds
@@ -1157,16 +1167,8 @@ fn ensure_database_tool(
     fs::create_dir_all(&paths.adminer)
         .map_err(|e| format!("Failed to create database tool directory: {}", e))?;
 
-    let requested_source =
-        find_database_tool_source(paths, database_tool_id).map(|source| (database_tool_id, source));
-    let fallback_source = if database_tool_id.starts_with("phpmyadmin") {
-        find_database_tool_source(paths, "adminer").map(|source| ("adminer", source))
-    } else {
-        find_database_tool_source(paths, "phpmyadmin").map(|source| ("phpmyadmin", source))
-    };
-
     let index_path = paths.adminer.join("index.php");
-    if let Some((installed_tool_id, source)) = requested_source.or(fallback_source) {
+    if let Some(source) = find_database_tool_source(paths, database_tool_id) {
         if source.is_file() {
             fs::copy(&source, &index_path).map_err(|e| {
                 format!(
@@ -1178,7 +1180,7 @@ fn ensure_database_tool(
         } else {
             copy_dir_contents(&source, &paths.adminer)?;
         }
-        if installed_tool_id.starts_with("phpmyadmin") {
+        if database_tool_id.starts_with("phpmyadmin") {
             write_phpmyadmin_config(&paths.adminer, web_port, mysql_port)?;
         }
         return Ok(());

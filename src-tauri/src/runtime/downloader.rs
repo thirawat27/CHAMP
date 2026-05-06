@@ -1,5 +1,5 @@
 use std::fs::{self, File};
-use std::io::{self, Read, Write};
+use std::io::{self, BufReader, BufWriter, Read, Write};
 use std::path::{Path, PathBuf};
 use std::sync::{
     atomic::{AtomicU64, Ordering},
@@ -7,7 +7,7 @@ use std::sync::{
 };
 use std::time::{Duration, Instant};
 
-use reqwest::header::{ACCEPT_RANGES, RANGE};
+use reqwest::header::{ACCEPT_RANGES, CONTENT_LENGTH, CONTENT_RANGE, RANGE};
 use reqwest::{Client, RequestBuilder, StatusCode};
 use tokio::io::AsyncWriteExt;
 use tokio::task::JoinSet;
@@ -25,9 +25,11 @@ pub use crate::runtime::packages::{
 
 /// Global runtime config (loaded once)
 static RUNTIME_CONFIG: OnceLock<RuntimeConfig> = OnceLock::new();
-const SEGMENTED_DOWNLOAD_MIN_BYTES: u64 = 32 * 1024 * 1024;
-const SEGMENTED_DOWNLOAD_MIN_PART_BYTES: u64 = 16 * 1024 * 1024;
-const SEGMENTED_DOWNLOAD_MAX_CHANNELS: usize = 32;
+const SEGMENTED_DOWNLOAD_MIN_BYTES: u64 = 12 * 1024 * 1024;
+const SEGMENTED_DOWNLOAD_MIN_PART_BYTES: u64 = 8 * 1024 * 1024;
+const SEGMENTED_DOWNLOAD_MAX_CHANNELS: usize = 16;
+const PROGRESS_EMIT_INTERVAL: Duration = Duration::from_millis(250);
+const MERGE_BUFFER_BYTES: usize = 1024 * 1024;
 
 /// Load runtime configuration from bundled resource or file
 pub fn load_runtime_config() -> RuntimeConfig {
@@ -210,7 +212,7 @@ impl BinaryComponent {
             BinaryComponent::Caddy => "Caddy",
             BinaryComponent::Php => "PHP",
             BinaryComponent::MySQL => "MySQL",
-            BinaryComponent::PhpMyAdmin => "Database Tool",
+            BinaryComponent::PhpMyAdmin => "phpMyAdmin",
         }
     }
 
@@ -423,7 +425,8 @@ struct SegmentDownloadResult {
 
 struct DownloadProgressMeta<'a> {
     progress_cb: &'a ProgressCallback,
-    component: BinaryComponent,
+    component_name: String,
+    component_display: String,
     current: u8,
     total: u8,
     version: &'a str,
@@ -434,8 +437,8 @@ impl DownloadProgressMeta<'_> {
         (self.progress_cb)(DownloadProgress {
             step: DownloadStep::Downloading,
             percent,
-            current_component: format!("{} {}/{}", self.component.name(), self.current, self.total),
-            component_display: self.component.display_name(),
+            current_component: format!("{} {}/{}", self.component_name, self.current, self.total),
+            component_display: self.component_display.clone(),
             version: self.version.to_string(),
             total_components: self.total,
             downloaded_bytes,
@@ -451,6 +454,11 @@ struct DownloadFinalizeRequest<'a> {
     partial_path: &'a Path,
     file_path: &'a Path,
     progress_meta: &'a DownloadProgressMeta<'a>,
+}
+
+struct DownloadMetadata {
+    total_bytes: u64,
+    accepts_ranges: bool,
 }
 
 /// Runtime binary downloader
@@ -492,6 +500,58 @@ impl RuntimeDownloader {
         }
 
         request
+    }
+
+    fn build_head_request(&self, url: &str, component: BinaryComponent) -> RequestBuilder {
+        let mut request = self
+            .client
+            .head(url)
+            .header("User-Agent", self.user_agent());
+
+        if component == BinaryComponent::MySQL && url.contains("dev.mysql.com") {
+            request = request
+                .header("Referer", "https://dev.mysql.com/downloads/mysql/")
+                .header(
+                    "Accept",
+                    "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+                );
+        }
+
+        request
+    }
+
+    fn component_name(&self, component: BinaryComponent) -> String {
+        if component == BinaryComponent::PhpMyAdmin {
+            return self
+                .package_selection
+                .as_ref()
+                .and_then(|selection| get_phpmyadmin_package(&selection.phpmyadmin))
+                .map(|package| {
+                    package
+                        .display_name
+                        .split_whitespace()
+                        .next()
+                        .unwrap_or(package.display_name.as_str())
+                        .to_string()
+                })
+                .unwrap_or_else(|| {
+                    if self.selected_database_tool_id().starts_with("adminer") {
+                        "Adminer".to_string()
+                    } else {
+                        "phpMyAdmin".to_string()
+                    }
+                });
+        }
+
+        component.name().to_string()
+    }
+
+    fn component_display_name(&self, component: BinaryComponent) -> String {
+        if component == BinaryComponent::PhpMyAdmin {
+            return self.component_name(component);
+        }
+
+        component.display_name()
     }
 
     /// Create a new runtime downloader
@@ -678,7 +738,7 @@ impl RuntimeDownloader {
         if url.trim().is_empty() {
             return Err(format!(
                 "{} does not have an official portable binary URL for {:?}. Use the Windows official runtime or configure a trusted platform package source.",
-                component.display_name(),
+                self.component_display_name(component),
                 self.platform
             ));
         }
@@ -695,7 +755,8 @@ impl RuntimeDownloader {
             if metadata.len() > 4 || extension == "php" {
                 let meta = DownloadProgressMeta {
                     progress_cb,
-                    component,
+                    component_name: self.component_name(component),
+                    component_display: self.component_display_name(component),
                     current,
                     total,
                     version: &version,
@@ -708,6 +769,69 @@ impl RuntimeDownloader {
         eprintln!("[DEBUG] Platform: {:?}", self.platform);
         eprintln!("[DEBUG] Downloading {} from: {}", component.name(), url);
         eprintln!("[DEBUG] Full URL ({} chars): {}", url.len(), url);
+
+        let probed_metadata = self.probe_download_metadata(&url, component).await;
+
+        // Create parent directory if it doesn't exist
+        if let Some(parent) = file_path.parent() {
+            fs::create_dir_all(parent).map_err(|e| format!("Failed to create directory: {}", e))?;
+        }
+
+        let partial_path = file_path.with_file_name(format!(
+            "{}.part",
+            file_path
+                .file_name()
+                .and_then(|name| name.to_str())
+                .unwrap_or("download")
+        ));
+        let _ = fs::remove_file(&partial_path);
+        let progress_meta = DownloadProgressMeta {
+            progress_cb,
+            component_name: self.component_name(component),
+            component_display: self.component_display_name(component),
+            current,
+            total,
+            version: &version,
+        };
+
+        let mut segmented_attempted = false;
+        if let Some(metadata) = &probed_metadata {
+            if metadata.accepts_ranges && metadata.total_bytes >= SEGMENTED_DOWNLOAD_MIN_BYTES {
+                segmented_attempted = true;
+                match self
+                    .download_component_segmented(
+                        &url,
+                        component,
+                        &partial_path,
+                        metadata.total_bytes,
+                        &progress_meta,
+                    )
+                    .await
+                {
+                    Ok(downloaded_file) => {
+                        return self.finalize_downloaded_file(
+                            DownloadFinalizeRequest {
+                                component,
+                                url: &url,
+                                extension: &extension,
+                                partial_path: &partial_path,
+                                file_path: &file_path,
+                                progress_meta: &progress_meta,
+                            },
+                            downloaded_file,
+                        );
+                    }
+                    Err(error) => {
+                        eprintln!(
+                            "Segmented download failed for {}, falling back to single stream: {}",
+                            component.name(),
+                            error
+                        );
+                        let _ = fs::remove_file(&partial_path);
+                    }
+                }
+            }
+        }
 
         let mut response = self
             .build_download_request(&url, component)
@@ -744,38 +868,29 @@ impl RuntimeDownloader {
             }
         }
 
-        let total_bytes = response.content_length().unwrap_or(0);
+        let total_bytes = response
+            .content_length()
+            .or(probed_metadata
+                .as_ref()
+                .map(|metadata| metadata.total_bytes))
+            .unwrap_or(0);
         let accepts_ranges = response
             .headers()
             .get(ACCEPT_RANGES)
             .and_then(|value| value.to_str().ok())
             .map(|value| value.eq_ignore_ascii_case("bytes"))
-            .unwrap_or(false);
+            .unwrap_or(false)
+            || probed_metadata
+                .as_ref()
+                .map(|metadata| metadata.accepts_ranges)
+                .unwrap_or(false);
 
-        // Create parent directory if it doesn't exist
-        if let Some(parent) = file_path.parent() {
-            fs::create_dir_all(parent).map_err(|e| format!("Failed to create directory: {}", e))?;
-        }
-
-        let partial_path = file_path.with_file_name(format!(
-            "{}.part",
-            file_path
-                .file_name()
-                .and_then(|name| name.to_str())
-                .unwrap_or("download")
-        ));
         let _ = fs::remove_file(&partial_path);
-        let progress_meta = DownloadProgressMeta {
-            progress_cb,
-            component,
-            current,
-            total,
-            version: &version,
-        };
 
-        if self
-            .should_use_segmented_download(total_bytes, accepts_ranges, &url, component)
-            .await
+        if !segmented_attempted
+            && self
+                .should_use_segmented_download(total_bytes, accepts_ranges, &url, component)
+                .await
         {
             drop(response);
             match self
@@ -817,8 +932,10 @@ impl RuntimeDownloader {
             }
         }
 
-        let mut file =
-            File::create(&partial_path).map_err(|e| format!("Failed to create file: {}", e))?;
+        let mut file = BufWriter::with_capacity(
+            MERGE_BUFFER_BYTES,
+            File::create(&partial_path).map_err(|e| format!("Failed to create file: {}", e))?,
+        );
         let mut hasher = Sha256::new();
         let mut magic_bytes = Vec::with_capacity(4);
         let mut downloaded_bytes = 0_u64;
@@ -850,7 +967,7 @@ impl RuntimeDownloader {
                 0
             };
 
-            if percent != last_percent || last_emit.elapsed() >= Duration::from_millis(120) {
+            if percent != last_percent || last_emit.elapsed() >= PROGRESS_EMIT_INTERVAL {
                 last_percent = percent;
                 last_emit = Instant::now();
                 progress_meta.emit(percent, downloaded_bytes, total_bytes);
@@ -877,6 +994,67 @@ impl RuntimeDownloader {
                 hasher,
             },
         )
+    }
+
+    async fn probe_download_metadata(
+        &self,
+        url: &str,
+        component: BinaryComponent,
+    ) -> Option<DownloadMetadata> {
+        if let Ok(response) = self.build_head_request(url, component).send().await {
+            if response.status().is_success() {
+                let total_bytes = response
+                    .headers()
+                    .get(CONTENT_LENGTH)
+                    .and_then(|value| value.to_str().ok())
+                    .and_then(|value| value.parse::<u64>().ok())
+                    .unwrap_or(0);
+                let accepts_ranges = response
+                    .headers()
+                    .get(ACCEPT_RANGES)
+                    .and_then(|value| value.to_str().ok())
+                    .map(|value| value.eq_ignore_ascii_case("bytes"))
+                    .unwrap_or(false);
+
+                if total_bytes > 0 {
+                    return Some(DownloadMetadata {
+                        total_bytes,
+                        accepts_ranges,
+                    });
+                }
+            }
+        }
+
+        let response = self
+            .build_download_request(url, component)
+            .header(RANGE, "bytes=0-0")
+            .send()
+            .await
+            .ok()?;
+
+        if response.status() != StatusCode::PARTIAL_CONTENT {
+            return None;
+        }
+
+        let total_bytes = response
+            .headers()
+            .get(CONTENT_RANGE)
+            .and_then(|value| value.to_str().ok())
+            .and_then(Self::parse_content_range_total)
+            .unwrap_or(0);
+
+        if total_bytes == 0 {
+            return None;
+        }
+
+        Some(DownloadMetadata {
+            total_bytes,
+            accepts_ranges: true,
+        })
+    }
+
+    fn parse_content_range_total(value: &str) -> Option<u64> {
+        value.rsplit('/').next()?.parse::<u64>().ok()
     }
 
     async fn should_use_segmented_download(
@@ -964,9 +1142,10 @@ impl RuntimeDownloader {
                     ));
                 }
 
-                let mut file = tokio::fs::File::create(&part_path)
+                let file = tokio::fs::File::create(&part_path)
                     .await
                     .map_err(|e| format!("Failed to create part file: {}", e))?;
+                let mut file = tokio::io::BufWriter::with_capacity(MERGE_BUFFER_BYTES, file);
                 let mut part_bytes = 0_u64;
 
                 while let Some(chunk) = response.chunk().await.map_err(|e| {
@@ -1018,7 +1197,7 @@ impl RuntimeDownloader {
                     results[index] = Some(result);
                     completed_segments += 1;
                 }
-                _ = tokio::time::sleep(Duration::from_millis(120)) => {
+                _ = tokio::time::sleep(PROGRESS_EMIT_INTERVAL) => {
                     let downloaded_bytes = downloaded.load(Ordering::Relaxed);
                     let percent = Self::download_percent(downloaded_bytes, total_bytes);
                     if percent != last_percent {
@@ -1055,17 +1234,21 @@ impl RuntimeDownloader {
         results: Vec<Option<SegmentDownloadResult>>,
         total_bytes: u64,
     ) -> Result<DownloadedFile, String> {
-        let mut file =
-            File::create(partial_path).map_err(|e| format!("Failed to create file: {}", e))?;
+        let mut file = BufWriter::with_capacity(
+            MERGE_BUFFER_BYTES,
+            File::create(partial_path).map_err(|e| format!("Failed to create file: {}", e))?,
+        );
         let mut hasher = Sha256::new();
         let mut magic_bytes = Vec::with_capacity(4);
         let mut downloaded_bytes = 0_u64;
-        let mut buffer = vec![0_u8; 256 * 1024];
+        let mut buffer = vec![0_u8; MERGE_BUFFER_BYTES];
 
         for result in results {
             let result = result.ok_or_else(|| "Missing segmented download part".to_string())?;
-            let mut part_file =
-                File::open(&result.path).map_err(|e| format!("Failed to open part file: {}", e))?;
+            let mut part_file = BufReader::with_capacity(
+                MERGE_BUFFER_BYTES,
+                File::open(&result.path).map_err(|e| format!("Failed to open part file: {}", e))?,
+            );
             let mut part_bytes = 0_u64;
 
             loop {
@@ -1251,8 +1434,10 @@ impl RuntimeDownloader {
 
     /// Extract a ZIP archive
     fn extract_zip(&self, archive_path: &Path, dest_dir: &Path) -> Result<(), String> {
-        let file =
-            File::open(archive_path).map_err(|e| format!("Failed to open archive: {}", e))?;
+        let file = BufReader::with_capacity(
+            MERGE_BUFFER_BYTES,
+            File::open(archive_path).map_err(|e| format!("Failed to open archive: {}", e))?,
+        );
         let mut archive =
             zip::ZipArchive::new(file).map_err(|e| format!("Failed to read ZIP: {}", e))?;
 
@@ -1270,8 +1455,10 @@ impl RuntimeDownloader {
                     fs::create_dir_all(parent)
                         .map_err(|e| format!("Failed to create parent directory: {}", e))?;
                 }
-                let mut outfile =
-                    File::create(&outpath).map_err(|e| format!("Failed to create file: {}", e))?;
+                let mut outfile = BufWriter::with_capacity(
+                    MERGE_BUFFER_BYTES,
+                    File::create(&outpath).map_err(|e| format!("Failed to create file: {}", e))?,
+                );
                 io::copy(&mut file, &mut outfile)
                     .map_err(|e| format!("Failed to write file: {}", e))?;
 
@@ -1298,8 +1485,10 @@ impl RuntimeDownloader {
     fn extract_tar_gz(&self, archive_path: &Path, dest_dir: &Path) -> Result<(), String> {
         use flate2::read::GzDecoder;
 
-        let file =
-            File::open(archive_path).map_err(|e| format!("Failed to open archive: {}", e))?;
+        let file = BufReader::with_capacity(
+            MERGE_BUFFER_BYTES,
+            File::open(archive_path).map_err(|e| format!("Failed to open archive: {}", e))?,
+        );
         let decoder = GzDecoder::new(file);
         let mut archive = tar::Archive::new(decoder);
 
@@ -1346,8 +1535,10 @@ impl RuntimeDownloader {
     fn extract_tar_xz(&self, archive_path: &Path, dest_dir: &Path) -> Result<(), String> {
         use xz2::read::XzDecoder;
 
-        let file =
-            File::open(archive_path).map_err(|e| format!("Failed to open archive: {}", e))?;
+        let file = BufReader::with_capacity(
+            MERGE_BUFFER_BYTES,
+            File::open(archive_path).map_err(|e| format!("Failed to open archive: {}", e))?,
+        );
         let decoder = XzDecoder::new(file);
         let mut archive = tar::Archive::new(decoder);
 
@@ -1449,8 +1640,8 @@ impl RuntimeDownloader {
             progress_cb(DownloadProgress {
                 step: DownloadStep::Extracting,
                 percent: 0,
-                current_component: component.name().to_string(),
-                component_display: component.display_name(),
+                current_component: self.component_name(*component),
+                component_display: self.component_display_name(*component),
                 version: self.get_component_version(component),
                 total_components: total,
                 downloaded_bytes: 0,
@@ -1544,8 +1735,8 @@ impl RuntimeDownloader {
             progress_cb(DownloadProgress {
                 step: DownloadStep::Extracting,
                 percent: 0,
-                current_component: component.name().to_string(),
-                component_display: component.display_name(),
+                current_component: self.component_name(*component),
+                component_display: self.component_display_name(*component),
                 version: self.get_component_version(component),
                 total_components: total,
                 downloaded_bytes: 0,
