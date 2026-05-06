@@ -1,13 +1,6 @@
 import { useState, useEffect } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import {
-  PackagesConfig,
-  PackageSelection,
-  PhpPackage,
-  MySQLPackage,
-  PhpMyAdminPackage,
-  getDatabaseDisplayName,
-} from "../types/services";
+import { PackagesConfig, PackageSelection, PhpPackage, MySQLPackage, PhpMyAdminPackage, getDatabaseDisplayName } from "../types/services";
 
 // Helper to detect platform
 const detectPlatform = (): string => {
@@ -44,7 +37,7 @@ export function PackageSelector({ onSelectionChange, initialSelection }: Package
     if (packages) {
       onSelectionChange(selection);
     }
-  }, [selection, packages]);
+  }, [selection, packages, onSelectionChange]);
 
   const loadPackages = async () => {
     try {
@@ -71,14 +64,7 @@ export function PackageSelector({ onSelectionChange, initialSelection }: Package
 
   if (loading) {
     return (
-      <div
-        style={{
-          textAlign: "center",
-          color: "var(--text-secondary)",
-          fontSize: "0.875rem",
-          padding: "1rem",
-        }}
-      >
+      <div style={{ textAlign: "center", color: "var(--text-secondary)", fontSize: "0.875rem", padding: "1rem" }}>
         Loading available packages...
       </div>
     );
@@ -103,12 +89,7 @@ export function PackageSelector({ onSelectionChange, initialSelection }: Package
           value={selection.php}
           onChange={(e) => handlePhpChange(e.target.value)}
           className="input"
-          style={{
-            cursor: "pointer",
-            padding: "0.375rem 0.5rem",
-            fontSize: "0.875rem",
-            width: "100%",
-          }}
+          style={{ cursor: "pointer", padding: "0.375rem 0.5rem", fontSize: "0.875rem", width: "100%" }}
         >
           {packages.php.map((pkg: PhpPackage) => (
             <option key={pkg.id} value={pkg.id}>
@@ -129,12 +110,7 @@ export function PackageSelector({ onSelectionChange, initialSelection }: Package
           value={selection.mysql}
           onChange={(e) => handleMySQLChange(e.target.value)}
           className="input"
-          style={{
-            cursor: "pointer",
-            padding: "0.375rem 0.5rem",
-            fontSize: "0.875rem",
-            width: "100%",
-          }}
+          style={{ cursor: "pointer", padding: "0.375rem 0.5rem", fontSize: "0.875rem", width: "100%" }}
         >
           {packages.mysql.map((pkg: MySQLPackage) => (
             <option key={pkg.id} value={pkg.id}>
@@ -155,12 +131,7 @@ export function PackageSelector({ onSelectionChange, initialSelection }: Package
           value={selection.phpmyadmin}
           onChange={(e) => handleDatabaseToolChange(e.target.value)}
           className="input"
-          style={{
-            cursor: "pointer",
-            padding: "0.375rem 0.5rem",
-            fontSize: "0.875rem",
-            width: "100%",
-          }}
+          style={{ cursor: "pointer", padding: "0.375rem 0.5rem", fontSize: "0.875rem", width: "100%" }}
         >
           {packages.phpmyadmin.map((pkg: PhpMyAdminPackage) => (
             <option key={pkg.id} value={pkg.id}>
@@ -173,11 +144,8 @@ export function PackageSelector({ onSelectionChange, initialSelection }: Package
 
       {/* Package Info Box */}
       <div className="info-box" style={{ padding: "0.5rem", fontSize: "0.875rem" }}>
-        <p
-          style={{ fontSize: "0.875rem", color: "var(--text-secondary)", margin: "0 0 0.375rem 0" }}
-        >
-          <strong>Recommended:</strong> PHP 8.5, {getDatabaseDisplayName(currentPlatform)} 8.4
-          (LTS), phpMyAdmin 5.2
+        <p style={{ fontSize: "0.875rem", color: "var(--text-secondary)", margin: "0 0 0.375rem 0" }}>
+          <strong>Recommended:</strong> PHP 8.5, {getDatabaseDisplayName(currentPlatform)} 8.4 (LTS), phpMyAdmin 5.2
         </p>
         <p style={{ fontSize: "0.875rem", color: "var(--text-secondary)", margin: 0 }}>
           <strong>Note:</strong> EOL versions may have security vulnerabilities.

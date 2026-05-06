@@ -1,7 +1,6 @@
 use serde::{Deserialize, Serialize};
 use std::fs;
-use std::path::PathBuf;
-use std::sync::{Mutex, OnceLock};
+use std::sync::OnceLock;
 
 /// Available package versions for each component
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -202,29 +201,15 @@ pub struct Urls {
 }
 
 /// Global runtime config cache
-static RUNTIME_CONFIG: OnceLock<Mutex<Option<RuntimeConfig>>> = OnceLock::new();
-
-fn app_runtime_config_path() -> Option<PathBuf> {
-    dirs::data_local_dir()
-        .or_else(dirs::home_dir)
-        .map(|p| p.join("CHAMP").join("config").join("runtime-config.json"))
-}
+static RUNTIME_CONFIG: OnceLock<Option<RuntimeConfig>> = OnceLock::new();
 
 /// Load runtime configuration from file
 pub fn load_runtime_config_from_file() -> Option<RuntimeConfig> {
     // Try to load from various locations
-    let mut paths_to_try = Vec::new();
-
-    if let Some(path) = app_runtime_config_path() {
-        paths_to_try.push(path.to_string_lossy().to_string());
-    }
-
-    paths_to_try.extend([
-        "runtime-config.user.json".to_string(),
+    let mut paths_to_try = vec![
         "runtime-config.json".to_string(),
-        "src-tauri/runtime-config.user.json".to_string(),
         "src-tauri/runtime-config.json".to_string(),
-    ]);
+    ];
 
     // Also try alongside the executable
     if let Ok(exe_path) = std::env::current_exe() {
@@ -270,11 +255,7 @@ fn get_database_display_name(display_name: &str) -> String {
 
 /// Get all available packages from config file or defaults
 pub fn get_available_packages() -> PackagesConfig {
-    let config = RUNTIME_CONFIG
-        .get_or_init(|| Mutex::new(load_runtime_config_from_file()))
-        .lock()
-        .ok()
-        .and_then(|config| config.clone());
+    let config = RUNTIME_CONFIG.get_or_init(|| load_runtime_config_from_file());
 
     if let Some(cfg) = config {
         // Convert from config format to package format
@@ -344,11 +325,7 @@ pub fn get_available_packages() -> PackagesConfig {
 
 /// Get the selected package IDs from config
 pub fn get_selected_package_ids() -> PackageSelection {
-    let config = RUNTIME_CONFIG
-        .get_or_init(|| Mutex::new(load_runtime_config_from_file()))
-        .lock()
-        .ok()
-        .and_then(|config| config.clone());
+    let config = RUNTIME_CONFIG.get_or_init(|| load_runtime_config_from_file());
 
     if let Some(cfg) = config {
         PackageSelection {
@@ -408,23 +385,14 @@ pub fn get_phpmyadmin_package(id: &str) -> Option<PhpMyAdminPackage> {
 
 /// Reload the runtime configuration (call after modifying the config file)
 pub fn reload_runtime_config() {
-    let loaded = load_runtime_config_from_file();
-    if let Some(config) = RUNTIME_CONFIG.get() {
-        if let Ok(mut config) = config.lock() {
-            *config = loaded;
-        }
-    } else {
-        let _ = RUNTIME_CONFIG.set(Mutex::new(loaded));
-    }
+    let _ = RUNTIME_CONFIG.set(load_runtime_config_from_file());
 }
 
 /// Get the runtime configuration
 pub fn get_config() -> Option<RuntimeConfig> {
     RUNTIME_CONFIG
-        .get_or_init(|| Mutex::new(load_runtime_config_from_file()))
-        .lock()
-        .ok()
-        .and_then(|config| config.clone())
+        .get_or_init(|| load_runtime_config_from_file())
+        .clone()
 }
 
 /// Get default hardcoded packages (fallback when config file is not available)

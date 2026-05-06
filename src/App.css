@@ -1,21 +1,21 @@
 @import "tailwindcss";
 
 @theme {
-  --color-primary: #15803d;
+  --color-primary: #c86b3c;
   --color-accent: #3f7f7a;
-  --color-success: #16a34a;
-  --color-warning: #4d7c0f;
+  --color-success: #a76537;
+  --color-warning: #c58a2b;
   --color-error: #b4514b;
 }
 
 :root {
-  --bg-app: #f4fbf6;
-  --bg-card: #fcfffd;
-  --bg-card-secondary: #eaf7ee;
-  --text-primary: #122018;
-  --text-secondary: #4b6654;
-  --border-color: #cce8d3;
-  --shadow-panel: 0 12px 34px rgba(30, 105, 55, 0.1);
+  --bg-app: #fbf6f1;
+  --bg-card: #fffdfb;
+  --bg-card-secondary: #f6e8dd;
+  --text-primary: #211916;
+  --text-secondary: #755849;
+  --border-color: #e8d2c2;
+  --shadow-panel: 0 12px 34px rgba(119, 72, 45, 0.1);
   --status-stopped-bg: #fee2e2;
   --status-stopped-text: #991b1b;
   --status-running-bg: #dcfce7;
@@ -70,7 +70,7 @@ body {
   background:
     radial-gradient(
       circle at top left,
-      color-mix(in srgb, var(--color-primary) 10%, transparent),
+      color-mix(in srgb, var(--color-primary) 12%, transparent),
       transparent 34rem
     ),
     var(--bg-app);
@@ -112,7 +112,7 @@ button {
   background: color-mix(in srgb, var(--bg-card-secondary) 74%, white);
   border: 1px solid var(--border-color);
   overflow: hidden;
-  box-shadow: 0 8px 20px rgba(30, 105, 55, 0.14);
+  box-shadow: 0 8px 20px rgba(119, 72, 45, 0.14);
 }
 
 .brand-logo {
@@ -291,9 +291,9 @@ button {
 
 .btn-command:not(.primary):not(.danger),
 .btn-restart {
-  background: linear-gradient(135deg, #166534, #4ade80);
-  border: 1px solid #86efac;
-  color: #f0fdf4;
+  background: linear-gradient(135deg, #ca8a04, #facc15);
+  border: 1px solid #fde047;
+  color: #1f1600;
 }
 
 .btn-command.danger,
@@ -301,12 +301,6 @@ button {
   background: linear-gradient(135deg, #b91c1c, #ef4444);
   border: 1px solid #fca5a5;
   color: #fff7f7;
-}
-
-.btn-command.update {
-  background: linear-gradient(135deg, #0f766e, #2dd4bf);
-  border-color: #99f6e4;
-  color: #ecfdf5;
 }
 
 .btn-quick-action {
@@ -796,9 +790,9 @@ button:disabled {
 
 .progress-container {
   width: 100%;
-  height: 11px;
-  background: #e4f6e9;
-  border: 1px solid #b6e3c1;
+  height: 9px;
+  background: var(--bg-card-secondary);
+  border: 1px solid var(--border-color);
   border-radius: 999px;
   overflow: hidden;
 }
@@ -806,7 +800,7 @@ button:disabled {
 .progress-bar,
 .progress-bar-animated {
   height: 100%;
-  background: linear-gradient(90deg, #bbf7d0, #22c55e, #14532d);
+  background: linear-gradient(90deg, #a94f48, #c86b3c, #c58a2b);
 }
 
 .progress-bar {
@@ -848,7 +842,7 @@ button:disabled {
 
 .setup-rail {
   padding: 20px;
-  background: linear-gradient(180deg, #14532d, #15803d 58%, #86efac);
+  background: linear-gradient(180deg, #6f3732, #9c563a 58%, #bd7143);
   color: white;
 }
 
@@ -881,7 +875,7 @@ button:disabled {
 
 .setup-rail p {
   margin-top: 8px;
-  color: #dcfce7;
+  color: #f3dfcf;
   font-size: 13px;
 }
 
@@ -898,7 +892,7 @@ button:disabled {
   align-items: start;
   padding: 9px;
   border-radius: 7px;
-  color: #d9f99d;
+  color: #ead2c1;
 }
 
 .setup-step.active {
@@ -907,7 +901,7 @@ button:disabled {
 }
 
 .setup-step.done {
-  color: #f0fdf4;
+  color: #f8eee7;
 }
 
 .setup-step-index {
@@ -986,62 +980,9 @@ button:disabled {
 }
 
 .setup-actions .setup-btn-keep {
-  background: linear-gradient(135deg, #166534, #4ade80);
-  border-color: #86efac;
-  color: #f0fdf4;
-}
-
-.activity-alert,
-.update-band {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  margin-bottom: 12px;
-  padding: 11px 13px;
-  background: color-mix(in srgb, var(--color-success) 12%, var(--bg-card));
-  border: 1px solid color-mix(in srgb, var(--color-success) 36%, var(--border-color));
-  border-radius: 8px;
-  color: var(--text-primary);
-  box-shadow: var(--shadow-panel);
-  font-size: 13px;
-}
-
-.activity-alert {
-  justify-content: flex-start;
-}
-
-.activity-dot {
-  width: 9px;
-  height: 9px;
-  flex: 0 0 auto;
-  border-radius: 999px;
-  background: var(--color-success);
-}
-
-.activity-alert.active .activity-dot {
-  animation: pulse-dot 0.9s ease-in-out infinite;
-}
-
-.update-band div:first-child {
-  display: grid;
-  gap: 2px;
-}
-
-.update-band span {
-  color: var(--text-secondary);
-}
-
-@keyframes pulse-dot {
-  0%,
-  100% {
-    opacity: 0.45;
-    transform: scale(0.8);
-  }
-  50% {
-    opacity: 1;
-    transform: scale(1);
-  }
+  background: linear-gradient(135deg, #ca8a04, #facc15);
+  border-color: #fde047;
+  color: #1f1600;
 }
 
 .setup-actions .setup-btn-install-all {

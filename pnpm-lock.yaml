@@ -39,6 +39,9 @@ importers:
         specifier: ^3.5.0
         version: 3.5.0
     devDependencies:
+      '@eslint/js':
+        specifier: ^9.39.4
+        version: 9.39.4
       '@tauri-apps/cli':
         specifier: ^2.11.0
         version: 2.11.0

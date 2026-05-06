@@ -2,7 +2,6 @@ import { invoke } from "@tauri-apps/api/core";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import {
   Database,
-  Download,
   Folder,
   Globe,
   HardDrive,
@@ -14,14 +13,7 @@ import {
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import champLogo from "../assets/CHAMP.png";
-import {
-  AppSettings,
-  AppUpdateInfo,
-  RuntimeComponentUpdate,
-  ServiceMap,
-  ServiceState,
-  ServiceType,
-} from "../types/services";
+import { AppSettings, ServiceMap, ServiceState, ServiceType } from "../types/services";
 import { ServiceCard } from "./ServiceCard";
 import { SettingsPanel } from "./SettingsPanel";
 import { StatusBar } from "./StatusBar";
@@ -60,9 +52,6 @@ export function Dashboard() {
   const [settings, setSettings] = useState<AppSettings | null>(null);
   const [installedVersions, setInstalledVersions] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState<string | null>(null);
-  const [notice, setNotice] = useState<string | null>(null);
-  const [appUpdate, setAppUpdate] = useState<AppUpdateInfo | null>(null);
-  const [runtimeUpdates, setRuntimeUpdates] = useState<RuntimeComponentUpdate[]>([]);
 
   const caddyPort = services[ServiceType.Caddy]?.port || 8080;
   const webServerUrl = `http://localhost:${caddyPort}`;
@@ -76,19 +65,6 @@ export function Dashboard() {
   const totalCount = Object.keys(services).length || 3;
   const isCaddyRunning = services[ServiceType.Caddy]?.state === ServiceState.Running;
   const allRunning = runningCount === totalCount;
-  const busyMessage = useMemo(() => {
-    if (!busy) return null;
-    if (busy === "start_all_services") return "Starting the full stack...";
-    if (busy === "restart_all_services") return "Restarting services...";
-    if (busy === "stop_all_services") return "Stopping services...";
-    if (busy === "check_updates") return "Checking GitHub for updates...";
-    if (busy === "download_app_update") return "Downloading latest CHAMP release...";
-    if (busy === "update_runtime") return "Updating runtime services and tools...";
-    if (busy.startsWith("start_service")) return "Starting service...";
-    if (busy.startsWith("restart_service")) return "Restarting service...";
-    if (busy.startsWith("stop_service")) return "Stopping service...";
-    return "Working...";
-  }, [busy]);
 
   const refreshStatuses = useCallback(async () => {
     try {
@@ -101,16 +77,14 @@ export function Dashboard() {
 
   const refreshMetadata = useCallback(async () => {
     try {
-      const [paths, versions, loadedSettings, componentUpdates] = await Promise.all([
+      const [paths, versions, loadedSettings] = await Promise.all([
         invoke<AppPaths>("get_app_paths"),
         invoke<Record<string, string>>("get_installed_versions"),
         invoke<AppSettings>("get_settings"),
-        invoke<RuntimeComponentUpdate[]>("check_runtime_updates").catch(() => []),
       ]);
       setAppPaths(paths);
       setInstalledVersions(versions);
       setSettings(loadedSettings);
-      setRuntimeUpdates(Array.isArray(componentUpdates) ? componentUpdates : []);
     } catch (error) {
       console.error("Failed to load app metadata:", error);
     }
@@ -123,39 +97,10 @@ export function Dashboard() {
     return () => window.clearInterval(interval);
   }, [refreshMetadata, refreshStatuses]);
 
-  useEffect(() => {
-    if (!settings?.auto_check_updates) return;
-
-    const checkUpdates = async () => {
-      try {
-        if (settings.auto_update_runtime_manifest ?? true) {
-          await invoke("refresh_runtime_manifest_from_github");
-          await refreshMetadata();
-        }
-        const update = await invoke<AppUpdateInfo>("check_app_update");
-        setAppUpdate(update);
-        if (update.available && update.latest_version) {
-          setNotice(`CHAMP ${update.latest_version} is available on GitHub.`);
-        }
-      } catch (error) {
-        console.warn("Auto update check failed:", error);
-      }
-    };
-
-    checkUpdates();
-  }, [refreshMetadata, settings?.auto_check_updates, settings?.auto_update_runtime_manifest]);
-
   const runStackCommand = async (
     command: "start_all_services" | "stop_all_services" | "restart_all_services"
   ) => {
     setBusy(command);
-    setNotice(
-      command === "start_all_services"
-        ? "Starting stack. Service status will refresh as each process is ready."
-        : command === "restart_all_services"
-          ? "Restarting stack. Please wait while services are stopped and started again."
-          : "Stopping stack. Please wait while running processes are closed."
-    );
     try {
       const statuses = await invoke<ServiceMap>(command);
       setServices(statuses);
@@ -164,7 +109,6 @@ export function Dashboard() {
       await refreshStatuses();
     } finally {
       setBusy(null);
-      window.setTimeout(() => setNotice(null), 1600);
     }
   };
 
@@ -173,70 +117,12 @@ export function Dashboard() {
     service: ServiceType
   ) => {
     setBusy(`${command}:${service}`);
-    setNotice(`${command.split("_")[0]} ${service}. Please wait...`);
     try {
       const statuses = await invoke<ServiceMap>(command, { service });
       setServices(statuses);
     } catch (error) {
       alert(`Failed to ${command.split("_")[0]} ${service}:\n${error}`);
       await refreshStatuses();
-    } finally {
-      setBusy(null);
-      window.setTimeout(() => setNotice(null), 1600);
-    }
-  };
-
-  const checkUpdates = async () => {
-    setBusy("check_updates");
-    setNotice("Checking GitHub and runtime manifests...");
-    try {
-      const [update, componentUpdates] = await Promise.all([
-        invoke<AppUpdateInfo>("check_app_update"),
-        invoke<RuntimeComponentUpdate[]>("check_runtime_updates"),
-      ]);
-      setAppUpdate(update);
-      const safeComponentUpdates = Array.isArray(componentUpdates) ? componentUpdates : [];
-      setRuntimeUpdates(safeComponentUpdates);
-      const runtimeCount = safeComponentUpdates.filter((item) => item.update_available).length;
-      if (update.available || runtimeCount > 0) {
-        setNotice(
-          `${update.available ? "App update available" : "App is current"} · ${runtimeCount} runtime update${runtimeCount === 1 ? "" : "s"}`
-        );
-      } else {
-        setNotice("CHAMP and selected runtime components are up to date.");
-      }
-    } catch (error) {
-      alert(`Failed to check updates:\n${error}`);
-    } finally {
-      setBusy(null);
-    }
-  };
-
-  const downloadAppUpdate = async () => {
-    setBusy("download_app_update");
-    setNotice("Downloading the latest CHAMP release from GitHub...");
-    try {
-      const result = await invoke<{ file_path: string; version: string }>("download_app_update");
-      setNotice(`Downloaded CHAMP ${result.version}. Opening the update folder.`);
-      await invoke("open_folder", { path: result.file_path });
-    } catch (error) {
-      alert(`Failed to download app update:\n${error}`);
-    } finally {
-      setBusy(null);
-    }
-  };
-
-  const updateRuntime = async () => {
-    setBusy("update_runtime");
-    setNotice(
-      "Updating selected runtime components. Running services should be restarted after this finishes."
-    );
-    try {
-      await invoke("update_runtime_components");
-      await refreshMetadata();
-      setNotice("Runtime components updated. Restart the stack to use the new binaries.");
-    } catch (error) {
-      alert(`Failed to update runtime components:\n${error}`);
     } finally {
       setBusy(null);
     }
@@ -297,9 +183,6 @@ export function Dashboard() {
           >
             <Square size={15} /> Stop
           </button>
-          <button className="btn-command update" onClick={checkUpdates} disabled={Boolean(busy)}>
-            <Download size={16} /> Updates
-          </button>
           <button
             className="icon-button github"
             onClick={() => openUrl(SOURCE_REPO_URL)}
@@ -320,13 +203,6 @@ export function Dashboard() {
       </header>
 
       <main className="workspace">
-        {(busyMessage || notice) && (
-          <section className={`activity-alert ${busyMessage ? "active" : ""}`}>
-            <span className="activity-dot" aria-hidden="true" />
-            <span>{busyMessage || notice}</span>
-          </section>
-        )}
-
         <section className="overview-band">
           <div>
             <span
@@ -353,22 +229,13 @@ export function Dashboard() {
             >
               <Database size={16} /> {databaseToolName}
             </button>
-            <button
-              className="btn-quick-action action-projects"
-              onClick={() => openFolder(appPaths?.projects_dir)}
-            >
+            <button className="btn-quick-action action-projects" onClick={() => openFolder(appPaths?.projects_dir)}>
               <Folder size={16} /> Projects
             </button>
-            <button
-              className="btn-quick-action action-logs"
-              onClick={() => openFolder(appPaths?.logs_dir)}
-            >
+            <button className="btn-quick-action action-logs" onClick={() => openFolder(appPaths?.logs_dir)}>
               <TerminalSquare size={16} /> Logs
             </button>
-            <button
-              className="btn-quick-action action-config"
-              onClick={() => openFolder(appPaths?.config_dir)}
-            >
+            <button className="btn-quick-action action-config" onClick={() => openFolder(appPaths?.config_dir)}>
               <HardDrive size={16} /> Config
             </button>
             <button className="btn-quick-action github" onClick={() => openUrl(SOURCE_REPO_URL)}>
@@ -384,42 +251,6 @@ export function Dashboard() {
                 {name} {version}
               </span>
             ))}
-          </section>
-        )}
-
-        {(appUpdate?.available || runtimeUpdates.some((update) => update.update_available)) && (
-          <section className="update-band">
-            <div>
-              <strong>Updates available</strong>
-              <span>
-                {appUpdate?.available && appUpdate.latest_version
-                  ? `CHAMP ${appUpdate.latest_version}`
-                  : "CHAMP is current"}
-                {" · "}
-                {runtimeUpdates.filter((update) => update.update_available).length} runtime item
-                {runtimeUpdates.filter((update) => update.update_available).length === 1 ? "" : "s"}
-              </span>
-            </div>
-            <div className="settings-inline-actions">
-              {appUpdate?.available && (
-                <button
-                  className="btn-secondary"
-                  onClick={downloadAppUpdate}
-                  disabled={Boolean(busy)}
-                >
-                  Download App
-                </button>
-              )}
-              {runtimeUpdates.some((update) => update.update_available) && (
-                <button
-                  className="btn-primary success"
-                  onClick={updateRuntime}
-                  disabled={Boolean(busy)}
-                >
-                  Update Runtime
-                </button>
-              )}
-            </div>
           </section>
         )}
 

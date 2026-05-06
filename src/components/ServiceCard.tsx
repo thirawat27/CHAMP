@@ -1,12 +1,6 @@
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { Database, Globe2, Play, RefreshCw, Square, Terminal } from "lucide-react";
-import {
-  DEFAULT_PORTS,
-  SERVICE_DESCRIPTIONS,
-  SERVICE_DISPLAY_NAMES,
-  ServiceState,
-  ServiceType,
-} from "../types/services";
+import { DEFAULT_PORTS, SERVICE_DESCRIPTIONS, SERVICE_DISPLAY_NAMES, ServiceState, ServiceType } from "../types/services";
 
 interface ServiceCardProps {
   serviceType: ServiceType;
@@ -50,8 +44,7 @@ export function ServiceCard({
   const description = SERVICE_DESCRIPTIONS[serviceType];
   const serviceUrl = getServiceUrl(serviceType, port);
   const isRunning = state === ServiceState.Running;
-  const isTransitioning =
-    busy || state === ServiceState.Starting || state === ServiceState.Stopping;
+  const isTransitioning = busy || state === ServiceState.Starting || state === ServiceState.Stopping;
   const isError = state === ServiceState.Error;
   const statusClass = {
     [ServiceState.Stopped]: "status-gray",
@@ -62,27 +55,16 @@ export function ServiceCard({
   }[state];
 
   return (
-    <article
-      className={`service-card ${isError ? "has-error" : ""}`}
-      data-testid={`service-card-${serviceType}`}
-      {...props}
-    >
+    <article className={`service-card ${isError ? "has-error" : ""}`} data-testid={`service-card-${serviceType}`} {...props}>
       <div className="service-card-header">
         <div className="service-identity">
-          <span className="service-icon">
-            <Icon size={18} />
-          </span>
+          <span className="service-icon"><Icon size={18} /></span>
           <div>
             <h3>{displayName}</h3>
             <p>{description}</p>
           </div>
         </div>
-        <span
-          className={`status-pill ${state} ${statusClass}`}
-          data-testid={`service-state-${serviceType}`}
-        >
-          {state}
-        </span>
+        <span className={`status-pill ${state} ${statusClass}`} data-testid={`service-state-${serviceType}`}>{state}</span>
       </div>
 
       <div className="service-meta">
@@ -92,11 +74,7 @@ export function ServiceCard({
           <button
             type="button"
             className="service-url-button"
-            onClick={() =>
-              openUrl(serviceUrl).catch((openError) =>
-                console.error("Failed to open service URL:", openError)
-              )
-            }
+            onClick={() => openUrl(serviceUrl).catch((openError) => console.error("Failed to open service URL:", openError))}
           >
             {serviceUrl}
           </button>
@@ -111,30 +89,15 @@ export function ServiceCard({
 
       <div className="service-actions">
         {!isRunning ? (
-          <button
-            onClick={onStart}
-            disabled={isTransitioning}
-            className="btn-start"
-            data-testid={`start-button-${serviceType}`}
-          >
+          <button onClick={onStart} disabled={isTransitioning} className="btn-start" data-testid={`start-button-${serviceType}`}>
             <Play size={15} /> Start
           </button>
         ) : (
           <>
-            <button
-              onClick={onStop}
-              disabled={isTransitioning}
-              className="btn-stop"
-              data-testid={`stop-button-${serviceType}`}
-            >
+            <button onClick={onStop} disabled={isTransitioning} className="btn-stop" data-testid={`stop-button-${serviceType}`}>
               <Square size={14} /> Stop
             </button>
-            <button
-              onClick={onRestart}
-              disabled={isTransitioning}
-              className="btn-restart"
-              data-testid={`restart-button-${serviceType}`}
-            >
+            <button onClick={onRestart} disabled={isTransitioning} className="btn-restart" data-testid={`restart-button-${serviceType}`}>
               <RefreshCw size={15} /> Restart
             </button>
           </>
