@@ -35,19 +35,18 @@ interface ExistingComponent {
 // Package versions for display
 const packages = {
   php: [
-    { id: "php-8.5", version: "8.5.1" },
+    { id: "php-8.5", version: "8.5.x" },
     { id: "php-8.4", version: "8.4.16" },
     { id: "php-8.3", version: "8.3.29" },
     { id: "php-8.2", version: "8.2.30" },
     { id: "php-7.4", version: "7.4.33" },
   ],
   mysql: [
-    { id: "mysql-8.4", version: "8.4.0" },
-    { id: "mysql-8.0", version: "8.0.40" },
+    { id: "mysql-9.7", version: "9.7.0" },
   ],
   phpmyadmin: [
-    { id: "phpmyadmin-5.2", version: "5.2.2", name: "phpMyAdmin" },
-    { id: "adminer-5.4", version: "5.4.1", name: "Adminer" },
+    { id: "phpmyadmin-5.2", version: "5.2.3", name: "phpMyAdmin" },
+    { id: "adminer-5.4", version: "5.4.2", name: "Adminer" },
   ],
 };
 
@@ -75,7 +74,7 @@ export function FirstRunWizard({ onComplete, ...props }: FirstRunWizardProps) {
   const [error, setError] = useState<string | null>(null);
   const [packageSelection, setPackageSelection] = useState<PackageSelection>({
     php: "php-8.5",
-    mysql: "mysql-8.4",
+    mysql: "mysql-9.7",
     phpmyadmin: "phpmyadmin-5.2",
   });
   const [existingComponents, setExistingComponents] = useState<ExistingComponent[]>([]);
@@ -831,13 +830,13 @@ export function FirstRunWizard({ onComplete, ...props }: FirstRunWizardProps) {
                     {
                       name: "PHP",
                       version:
-                        packages.php.find((p) => p.id === packageSelection.php)?.version || "8.5.1",
+                        packages.php.find((p) => p.id === packageSelection.php)?.version || "8.5.x",
                     },
                     {
                       name: getDatabaseDisplayName(currentPlatform),
                       version:
                         packages.mysql.find((p) => p.id === packageSelection.mysql)?.version ||
-                        "8.4.0",
+                        "9.7.0",
                     },
                     {
                       name:
@@ -845,7 +844,7 @@ export function FirstRunWizard({ onComplete, ...props }: FirstRunWizardProps) {
                           ?.name || "phpMyAdmin",
                       version:
                         packages.phpmyadmin.find((p) => p.id === packageSelection.phpmyadmin)
-                          ?.version || "5.2.2",
+                        ?.version || "5.2.3",
                     },
                   ].map((pkg) => (
                     <div key={pkg.name} className="setup-complete-package">

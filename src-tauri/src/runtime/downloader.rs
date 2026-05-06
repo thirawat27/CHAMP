@@ -1,10 +1,16 @@
 use std::fs::{self, File};
-use std::io::{self, Write};
+use std::io::{self, Read, Write};
 use std::path::{Path, PathBuf};
-use std::sync::OnceLock;
+use std::sync::{
+    atomic::{AtomicU64, Ordering},
+    Arc, OnceLock,
+};
 use std::time::{Duration, Instant};
 
-use reqwest::Client;
+use reqwest::header::{ACCEPT_RANGES, RANGE};
+use reqwest::{Client, RequestBuilder, StatusCode};
+use tokio::io::AsyncWriteExt;
+use tokio::task::JoinSet;
 
 use crate::runtime::locator::get_app_data_paths;
 use crate::runtime::packages::{
@@ -19,6 +25,9 @@ pub use crate::runtime::packages::{
 
 /// Global runtime config (loaded once)
 static RUNTIME_CONFIG: OnceLock<RuntimeConfig> = OnceLock::new();
+const SEGMENTED_DOWNLOAD_MIN_BYTES: u64 = 32 * 1024 * 1024;
+const SEGMENTED_DOWNLOAD_MIN_PART_BYTES: u64 = 16 * 1024 * 1024;
+const SEGMENTED_DOWNLOAD_MAX_CHANNELS: usize = 32;
 
 /// Load runtime configuration from bundled resource or file
 pub fn load_runtime_config() -> RuntimeConfig {
@@ -120,19 +129,19 @@ fn get_default_config() -> RuntimeConfig {
                 versions: vec![
                     VersionInfo {
                         id: "php-8.5".to_string(),
-                        version: "8.5.1".to_string(),
+                        version: "8.5.6".to_string(),
                         selected: true,
-                        display_name: "PHP 8.5.1".to_string(),
+                        display_name: "PHP 8.5".to_string(),
                         eol: false,
                         lts: false,
                         checksums: Checksums::default(),
                         urls: Urls {
-                            windows_x64: Some("https://github.com/KarnYong/campp-runtime-binaries/releases/download/php-8.5.1/php-8.5.1-Win32-vs17-x64.zip".to_string()),
-                            windows_arm64: Some("https://github.com/KarnYong/campp-runtime-binaries/releases/download/php-8.5.1/php-8.5.1-Win32-vs17-x86.zip".to_string()),
-                            linux_x64: Some("https://github.com/KarnYong/campp-runtime-binaries/releases/download/php-8.5.1/php-8.4.18-fpm-linux-x86_64.tar.gz".to_string()),
-                            linux_arm64: Some("https://github.com/KarnYong/campp-runtime-binaries/releases/download/php-8.5.1/php-8.4.18-fpm-linux-aarch64.tar.gz".to_string()),
-                            macos_x64: Some("https://github.com/KarnYong/campp-runtime-binaries/releases/download/php-8.5.1/php-8.4.18-fpm-macos-x86_64.tar.gz".to_string()),
-                            macos_arm64: Some("https://github.com/KarnYong/campp-runtime-binaries/releases/download/php-8.5.1/php-8.4.18-fpm-macos-aarch64.tar.gz".to_string()),
+                            windows_x64: Some("https://downloads.php.net/~windows/releases/archives/php-8.5.6-nts-Win32-vs17-x64.zip".to_string()),
+                            windows_arm64: Some("https://downloads.php.net/~windows/releases/archives/php-8.5.6-nts-Win32-vs17-x64.zip".to_string()),
+                            linux_x64: Some("https://dl.static-php.dev/static-php-cli/bulk/php-8.5.5-fpm-linux-x86_64.tar.gz".to_string()),
+                            linux_arm64: Some("https://dl.static-php.dev/static-php-cli/bulk/php-8.5.5-fpm-linux-aarch64.tar.gz".to_string()),
+                            macos_x64: Some("https://dl.static-php.dev/static-php-cli/bulk/php-8.5.5-fpm-macos-x86_64.tar.gz".to_string()),
+                            macos_arm64: Some("https://dl.static-php.dev/static-php-cli/bulk/php-8.5.5-fpm-macos-aarch64.tar.gz".to_string()),
                         },
                     },
                 ],
@@ -140,20 +149,20 @@ fn get_default_config() -> RuntimeConfig {
             mysql: BinaryConfig {
                 versions: vec![
                     VersionInfo {
-                        id: "mysql-8.4".to_string(),
-                        version: "8.4.0".to_string(),
+                        id: "mysql-9.7".to_string(),
+                        version: "9.7.0".to_string(),
                         selected: true,
-                        display_name: "MySQL 8.4.0 LTS".to_string(),
+                        display_name: "MySQL 9.7.0".to_string(),
                         eol: false,
                         lts: true,
                         checksums: Checksums::default(),
                         urls: Urls {
-                            windows_x64: Some("https://github.com/KarnYong/campp-runtime-binaries/releases/download/mysql-8.4.0/mysql-8.4.0-winx64.zip".to_string()),
-                            windows_arm64: Some("https://github.com/KarnYong/campp-runtime-binaries/releases/download/mysql-8.4.0/mysql-8.4.0-winx64.zip".to_string()),
-                            linux_x64: Some("https://github.com/KarnYong/campp-runtime-binaries/releases/download/mysql-8.4.0/mysql-8.4.0-linux-glibc2.28-x86_64.tar.xz".to_string()),
-                            linux_arm64: Some("https://github.com/KarnYong/campp-runtime-binaries/releases/download/mysql-8.4.0/mysql-8.4.0-linux-glibc2.28-aarch64.tar.xz".to_string()),
-                            macos_x64: Some("https://github.com/KarnYong/campp-runtime-binaries/releases/download/mysql-8.4.0/mysql-8.4.0-macos14-x86_64.tar.gz".to_string()),
-                            macos_arm64: Some("https://github.com/KarnYong/campp-runtime-binaries/releases/download/mysql-8.4.0/mysql-8.4.0-macos14-arm64.tar.gz".to_string()),
+                            windows_x64: Some("https://cdn.mysql.com/Downloads/MySQL-9.7/mysql-9.7.0-winx64.zip".to_string()),
+                            windows_arm64: Some("https://cdn.mysql.com/Downloads/MySQL-9.7/mysql-9.7.0-winx64.zip".to_string()),
+                            linux_x64: Some("https://cdn.mysql.com/Downloads/MySQL-9.7/mysql-9.7.0-linux-glibc2.28-x86_64.tar.xz".to_string()),
+                            linux_arm64: Some("https://cdn.mysql.com/Downloads/MySQL-9.7/mysql-9.7.0-linux-glibc2.28-aarch64.tar.xz".to_string()),
+                            macos_x64: Some("https://cdn.mysql.com/Downloads/MySQL-9.7/mysql-9.7.0-macos15-x86_64.tar.gz".to_string()),
+                            macos_arm64: Some("https://cdn.mysql.com/Downloads/MySQL-9.7/mysql-9.7.0-macos15-arm64.tar.gz".to_string()),
                         },
                     },
                 ],
@@ -162,23 +171,23 @@ fn get_default_config() -> RuntimeConfig {
                 versions: vec![
                     VersionInfoSingleUrl {
                         id: "phpmyadmin-5.2".to_string(),
-                        version: "5.2.2".to_string(),
+                        version: "5.2.3".to_string(),
                         selected: true,
-                        display_name: "phpMyAdmin 5.2.2".to_string(),
+                        display_name: "phpMyAdmin 5.2.3".to_string(),
                         eol: false,
                         lts: false,
-                        checksum: None,
-                        url: "https://github.com/KarnYong/campp-runtime-binaries/releases/download/phpmyadmin-5.2.2/phpMyAdmin-5.2.2-all-languages.zip".to_string(),
+                        checksum: Some("2d2e13c735366d318425c78e4ee2cc8fc648d77faba3ddea2cd516e43885733f".to_string()),
+                        url: "https://files.phpmyadmin.net/phpMyAdmin/5.2.3/phpMyAdmin-5.2.3-all-languages.zip".to_string(),
                     },
                     VersionInfoSingleUrl {
                         id: "adminer-5.4".to_string(),
-                        version: "5.4.1".to_string(),
+                        version: "5.4.2".to_string(),
                         selected: false,
-                        display_name: "Adminer 5.4.1".to_string(),
+                        display_name: "Adminer 5.4.2".to_string(),
                         eol: false,
                         lts: false,
                         checksum: None,
-                        url: "https://github.com/vrana/adminer/releases/download/v5.4.1/adminer-5.4.1.php".to_string(),
+                        url: "https://www.adminer.org/latest-mysql.php".to_string(),
                     },
                 ],
             },
@@ -399,6 +408,51 @@ pub enum DownloadStep {
 
 pub type ProgressCallback = Box<dyn Fn(DownloadProgress) + Send + Sync>;
 
+struct DownloadedFile {
+    downloaded_bytes: u64,
+    total_bytes: u64,
+    magic_bytes: Vec<u8>,
+    hasher: Sha256,
+}
+
+struct SegmentDownloadResult {
+    index: usize,
+    path: PathBuf,
+    bytes: u64,
+}
+
+struct DownloadProgressMeta<'a> {
+    progress_cb: &'a ProgressCallback,
+    component: BinaryComponent,
+    current: u8,
+    total: u8,
+    version: &'a str,
+}
+
+impl DownloadProgressMeta<'_> {
+    fn emit(&self, percent: u8, downloaded_bytes: u64, total_bytes: u64) {
+        (self.progress_cb)(DownloadProgress {
+            step: DownloadStep::Downloading,
+            percent,
+            current_component: format!("{} {}/{}", self.component.name(), self.current, self.total),
+            component_display: self.component.display_name(),
+            version: self.version.to_string(),
+            total_components: self.total,
+            downloaded_bytes,
+            total_bytes,
+        });
+    }
+}
+
+struct DownloadFinalizeRequest<'a> {
+    component: BinaryComponent,
+    url: &'a str,
+    extension: &'a str,
+    partial_path: &'a Path,
+    file_path: &'a Path,
+    progress_meta: &'a DownloadProgressMeta<'a>,
+}
+
 /// Runtime binary downloader
 pub struct RuntimeDownloader {
     platform: Platform,
@@ -414,6 +468,30 @@ impl RuntimeDownloader {
             .tcp_nodelay(true)
             .build()
             .unwrap_or_else(|_| Client::new())
+    }
+
+    fn user_agent(&self) -> &'static str {
+        match self.platform {
+            Platform::LinuxX64 | Platform::LinuxArm64 => "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+            Platform::MacOSX64 | Platform::MacOSArm64 => "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+            Platform::WindowsX64 | Platform::WindowsArm64 => "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        }
+    }
+
+    fn build_download_request(&self, url: &str, component: BinaryComponent) -> RequestBuilder {
+        let mut request = self.client.get(url).header("User-Agent", self.user_agent());
+
+        // MySQL downloads require specific headers when routed through dev.mysql.com.
+        if component == BinaryComponent::MySQL && url.contains("dev.mysql.com") {
+            request = request
+                .header("Referer", "https://dev.mysql.com/downloads/mysql/")
+                .header(
+                    "Accept",
+                    "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+                );
+        }
+
+        request
     }
 
     /// Create a new runtime downloader
@@ -597,6 +675,13 @@ impl RuntimeDownloader {
         total: u8,
     ) -> Result<PathBuf, String> {
         let url = self.get_binary_url(component);
+        if url.trim().is_empty() {
+            return Err(format!(
+                "{} does not have an official portable binary URL for {:?}. Use the Windows official runtime or configure a trusted platform package source.",
+                component.display_name(),
+                self.platform
+            ));
+        }
         let extension = Self::get_extension_from_url(&url);
         let version = self.get_component_version(&component);
         let file_path = dest_dir.join(format!(
@@ -608,16 +693,14 @@ impl RuntimeDownloader {
 
         if let Ok(metadata) = fs::metadata(&file_path) {
             if metadata.len() > 4 || extension == "php" {
-                progress_cb(DownloadProgress {
-                    step: DownloadStep::Downloading,
-                    percent: 100,
-                    current_component: format!("{} {}/{}", component.name(), current, total),
-                    component_display: component.display_name(),
-                    version,
-                    total_components: total,
-                    downloaded_bytes: metadata.len(),
-                    total_bytes: metadata.len(),
-                });
+                let meta = DownloadProgressMeta {
+                    progress_cb,
+                    component,
+                    current,
+                    total,
+                    version: &version,
+                };
+                meta.emit(100, metadata.len(), metadata.len());
                 return Ok(file_path);
             }
         }
@@ -626,27 +709,8 @@ impl RuntimeDownloader {
         eprintln!("[DEBUG] Downloading {} from: {}", component.name(), url);
         eprintln!("[DEBUG] Full URL ({} chars): {}", url.len(), url);
 
-        // Set platform-appropriate User-Agent
-        let user_agent = match self.platform {
-            Platform::LinuxX64 | Platform::LinuxArm64 => "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-            Platform::MacOSX64 | Platform::MacOSArm64 => "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-            Platform::WindowsX64 | Platform::WindowsArm64 => "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-        };
-
-        // MySQL downloads require specific headers to bypass their gateway
-        let mut request = self.client.get(&url).header("User-Agent", user_agent);
-
-        // Add Referer header for MySQL downloads (required by dev.mysql.com gateway)
-        if component == BinaryComponent::MySQL && url.contains("dev.mysql.com") {
-            request = request
-                .header("Referer", "https://dev.mysql.com/downloads/mysql/")
-                .header(
-                    "Accept",
-                    "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-                );
-        }
-
-        let mut response = request
+        let mut response = self
+            .build_download_request(&url, component)
             .send()
             .await
             .map_err(|e| format!("Failed to fetch {}: {}", component.name(), e))?;
@@ -681,6 +745,12 @@ impl RuntimeDownloader {
         }
 
         let total_bytes = response.content_length().unwrap_or(0);
+        let accepts_ranges = response
+            .headers()
+            .get(ACCEPT_RANGES)
+            .and_then(|value| value.to_str().ok())
+            .map(|value| value.eq_ignore_ascii_case("bytes"))
+            .unwrap_or(false);
 
         // Create parent directory if it doesn't exist
         if let Some(parent) = file_path.parent() {
@@ -695,6 +765,58 @@ impl RuntimeDownloader {
                 .unwrap_or("download")
         ));
         let _ = fs::remove_file(&partial_path);
+        let progress_meta = DownloadProgressMeta {
+            progress_cb,
+            component,
+            current,
+            total,
+            version: &version,
+        };
+
+        if self
+            .should_use_segmented_download(total_bytes, accepts_ranges, &url, component)
+            .await
+        {
+            drop(response);
+            match self
+                .download_component_segmented(
+                    &url,
+                    component,
+                    &partial_path,
+                    total_bytes,
+                    &progress_meta,
+                )
+                .await
+            {
+                Ok(downloaded_file) => {
+                    return self.finalize_downloaded_file(
+                        DownloadFinalizeRequest {
+                            component,
+                            url: &url,
+                            extension: &extension,
+                            partial_path: &partial_path,
+                            file_path: &file_path,
+                            progress_meta: &progress_meta,
+                        },
+                        downloaded_file,
+                    );
+                }
+                Err(error) => {
+                    eprintln!(
+                        "Segmented download failed for {}, falling back to single stream: {}",
+                        component.name(),
+                        error
+                    );
+                    let _ = fs::remove_file(&partial_path);
+                    response = self
+                        .build_download_request(&url, component)
+                        .send()
+                        .await
+                        .map_err(|e| format!("Failed to fetch {}: {}", component.name(), e))?;
+                }
+            }
+        }
+
         let mut file =
             File::create(&partial_path).map_err(|e| format!("Failed to create file: {}", e))?;
         let mut hasher = Sha256::new();
@@ -703,16 +825,7 @@ impl RuntimeDownloader {
         let mut last_percent = u8::MAX;
         let mut last_emit = Instant::now() - Duration::from_secs(1);
 
-        progress_cb(DownloadProgress {
-            step: DownloadStep::Downloading,
-            percent: 0,
-            current_component: format!("{} {}/{}", component.name(), current, total),
-            component_display: component.display_name(),
-            version: version.clone(),
-            total_components: total,
-            downloaded_bytes,
-            total_bytes,
-        });
+        progress_meta.emit(0, downloaded_bytes, total_bytes);
 
         while let Some(chunk) = response
             .chunk()
@@ -740,16 +853,7 @@ impl RuntimeDownloader {
             if percent != last_percent || last_emit.elapsed() >= Duration::from_millis(120) {
                 last_percent = percent;
                 last_emit = Instant::now();
-                progress_cb(DownloadProgress {
-                    step: DownloadStep::Downloading,
-                    percent,
-                    current_component: format!("{} {}/{}", component.name(), current, total),
-                    component_display: component.display_name(),
-                    version: version.clone(),
-                    total_components: total,
-                    downloaded_bytes,
-                    total_bytes,
-                });
+                progress_meta.emit(percent, downloaded_bytes, total_bytes);
             }
         }
 
@@ -757,63 +861,322 @@ impl RuntimeDownloader {
             .map_err(|e| format!("Failed to flush downloaded file: {}", e))?;
         drop(file);
 
-        // Verify the file is valid by checking magic bytes
-        if extension != "php" && downloaded_bytes < 4 {
+        self.finalize_downloaded_file(
+            DownloadFinalizeRequest {
+                component,
+                url: &url,
+                extension: &extension,
+                partial_path: &partial_path,
+                file_path: &file_path,
+                progress_meta: &progress_meta,
+            },
+            DownloadedFile {
+                downloaded_bytes,
+                total_bytes,
+                magic_bytes,
+                hasher,
+            },
+        )
+    }
+
+    async fn should_use_segmented_download(
+        &self,
+        total_bytes: u64,
+        accepts_ranges: bool,
+        url: &str,
+        component: BinaryComponent,
+    ) -> bool {
+        if total_bytes < SEGMENTED_DOWNLOAD_MIN_BYTES {
+            return false;
+        }
+
+        if accepts_ranges {
+            return true;
+        }
+
+        self.build_download_request(url, component)
+            .header(RANGE, "bytes=0-0")
+            .send()
+            .await
+            .map(|response| response.status() == StatusCode::PARTIAL_CONTENT)
+            .unwrap_or(false)
+    }
+
+    async fn download_component_segmented(
+        &self,
+        url: &str,
+        component: BinaryComponent,
+        partial_path: &Path,
+        total_bytes: u64,
+        progress_meta: &DownloadProgressMeta<'_>,
+    ) -> Result<DownloadedFile, String> {
+        let requested_channels = total_bytes
+            .div_ceil(SEGMENTED_DOWNLOAD_MIN_PART_BYTES)
+            .max(2) as usize;
+        let channels = requested_channels.min(SEGMENTED_DOWNLOAD_MAX_CHANNELS);
+        let part_size = total_bytes.div_ceil(channels as u64);
+        let downloaded = Arc::new(AtomicU64::new(0));
+        let mut join_set = JoinSet::new();
+        let mut expected_segments = 0_usize;
+
+        progress_meta.emit(0, 0, total_bytes);
+
+        for index in 0..channels {
+            let start = index as u64 * part_size;
+            if start >= total_bytes {
+                break;
+            }
+            let end = ((start + part_size).min(total_bytes)).saturating_sub(1);
+            let part_path = partial_path.with_extension(format!("part.{}", index));
+            let client = self.client.clone();
+            let url = url.to_string();
+            let user_agent = self.user_agent().to_string();
+            let downloaded = Arc::clone(&downloaded);
+            expected_segments += 1;
+
+            join_set.spawn(async move {
+                let _ = tokio::fs::remove_file(&part_path).await;
+                let mut request = client
+                    .get(&url)
+                    .header("User-Agent", user_agent)
+                    .header(RANGE, format!("bytes={}-{}", start, end));
+
+                if component == BinaryComponent::MySQL && url.contains("dev.mysql.com") {
+                    request = request
+                        .header("Referer", "https://dev.mysql.com/downloads/mysql/")
+                        .header(
+                            "Accept",
+                            "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+                        );
+                }
+
+                let mut response = request
+                    .send()
+                    .await
+                    .map_err(|e| format!("Failed to fetch range {}-{}: {}", start, end, e))?;
+
+                if response.status() != StatusCode::PARTIAL_CONTENT {
+                    return Err(format!(
+                        "Server did not honor range request {}-{}: HTTP {}",
+                        start,
+                        end,
+                        response.status().as_u16()
+                    ));
+                }
+
+                let mut file = tokio::fs::File::create(&part_path)
+                    .await
+                    .map_err(|e| format!("Failed to create part file: {}", e))?;
+                let mut part_bytes = 0_u64;
+
+                while let Some(chunk) = response.chunk().await.map_err(|e| {
+                    format!("Failed while downloading range {}-{}: {}", start, end, e)
+                })? {
+                    file.write_all(&chunk)
+                        .await
+                        .map_err(|e| format!("Failed to write part file: {}", e))?;
+                    let chunk_len = chunk.len() as u64;
+                    part_bytes = part_bytes.saturating_add(chunk_len);
+                    downloaded.fetch_add(chunk_len, Ordering::Relaxed);
+                }
+
+                file.flush()
+                    .await
+                    .map_err(|e| format!("Failed to flush part file: {}", e))?;
+
+                let expected_bytes = end - start + 1;
+                if part_bytes != expected_bytes {
+                    return Err(format!(
+                        "Range {}-{} downloaded {} bytes, expected {} bytes",
+                        start, end, part_bytes, expected_bytes
+                    ));
+                }
+
+                Ok(SegmentDownloadResult {
+                    index,
+                    path: part_path,
+                    bytes: part_bytes,
+                })
+            });
+        }
+
+        let mut results: Vec<Option<SegmentDownloadResult>> =
+            (0..expected_segments).map(|_| None).collect();
+        let mut completed_segments = 0_usize;
+        let mut last_percent = u8::MAX;
+
+        while completed_segments < expected_segments {
+            tokio::select! {
+                result = join_set.join_next() => {
+                    let result = result
+                        .ok_or_else(|| "Segmented downloader finished unexpectedly".to_string())?
+                        .map_err(|e| format!("Segmented download task failed: {}", e))??;
+                    let index = result.index;
+                    if index >= results.len() {
+                        return Err(format!("Segmented downloader returned invalid index {}", index));
+                    }
+                    results[index] = Some(result);
+                    completed_segments += 1;
+                }
+                _ = tokio::time::sleep(Duration::from_millis(120)) => {
+                    let downloaded_bytes = downloaded.load(Ordering::Relaxed);
+                    let percent = Self::download_percent(downloaded_bytes, total_bytes);
+                    if percent != last_percent {
+                        last_percent = percent;
+                        progress_meta.emit(percent, downloaded_bytes, total_bytes);
+                    }
+                }
+            }
+        }
+
+        let downloaded_bytes = downloaded.load(Ordering::Relaxed);
+        progress_meta.emit(
+            Self::download_percent(downloaded_bytes, total_bytes),
+            downloaded_bytes,
+            total_bytes,
+        );
+
+        self.merge_segmented_parts(partial_path, results, total_bytes)
+    }
+
+    fn download_percent(downloaded_bytes: u64, total_bytes: u64) -> u8 {
+        if total_bytes == 0 {
+            return 0;
+        }
+
+        ((downloaded_bytes as f64 / total_bytes as f64) * 100.0)
+            .round()
+            .clamp(0.0, 100.0) as u8
+    }
+
+    fn merge_segmented_parts(
+        &self,
+        partial_path: &Path,
+        results: Vec<Option<SegmentDownloadResult>>,
+        total_bytes: u64,
+    ) -> Result<DownloadedFile, String> {
+        let mut file =
+            File::create(partial_path).map_err(|e| format!("Failed to create file: {}", e))?;
+        let mut hasher = Sha256::new();
+        let mut magic_bytes = Vec::with_capacity(4);
+        let mut downloaded_bytes = 0_u64;
+        let mut buffer = vec![0_u8; 256 * 1024];
+
+        for result in results {
+            let result = result.ok_or_else(|| "Missing segmented download part".to_string())?;
+            let mut part_file =
+                File::open(&result.path).map_err(|e| format!("Failed to open part file: {}", e))?;
+            let mut part_bytes = 0_u64;
+
+            loop {
+                let read = part_file
+                    .read(&mut buffer)
+                    .map_err(|e| format!("Failed to read part file: {}", e))?;
+                if read == 0 {
+                    break;
+                }
+
+                if magic_bytes.len() < 4 {
+                    let remaining = 4 - magic_bytes.len();
+                    magic_bytes.extend_from_slice(&buffer[..read.min(remaining)]);
+                }
+
+                hasher.update(&buffer[..read]);
+                file.write_all(&buffer[..read])
+                    .map_err(|e| format!("Failed to write merged file: {}", e))?;
+                let read = read as u64;
+                part_bytes = part_bytes.saturating_add(read);
+                downloaded_bytes = downloaded_bytes.saturating_add(read);
+            }
+
+            if part_bytes != result.bytes {
+                return Err(format!(
+                    "Part {} changed while merging: read {} bytes, expected {} bytes",
+                    result.index, part_bytes, result.bytes
+                ));
+            }
+
+            let _ = fs::remove_file(&result.path);
+        }
+
+        file.flush()
+            .map_err(|e| format!("Failed to flush downloaded file: {}", e))?;
+
+        if downloaded_bytes != total_bytes {
             return Err(format!(
-                "Downloaded file is too small ({} bytes) to be a valid archive",
-                downloaded_bytes
+                "Merged download size mismatch: got {} bytes, expected {} bytes",
+                downloaded_bytes, total_bytes
             ));
         }
 
-        // Check if it's a ZIP file (starts with PK)
-        let is_zip = magic_bytes.len() >= 2 && magic_bytes[0] == 0x50 && magic_bytes[1] == 0x4B;
-        // Check if it's gzip (starts with 0x1f 0x8b)
-        let is_gzip = magic_bytes.len() >= 2 && magic_bytes[0] == 0x1f && magic_bytes[1] == 0x8b;
+        Ok(DownloadedFile {
+            downloaded_bytes,
+            total_bytes,
+            magic_bytes,
+            hasher,
+        })
+    }
 
-        if extension == "zip" && !is_zip {
+    fn finalize_downloaded_file(
+        &self,
+        request: DownloadFinalizeRequest<'_>,
+        downloaded_file: DownloadedFile,
+    ) -> Result<PathBuf, String> {
+        if request.extension != "php" && downloaded_file.downloaded_bytes < 4 {
+            return Err(format!(
+                "Downloaded file is too small ({} bytes) to be a valid archive",
+                downloaded_file.downloaded_bytes
+            ));
+        }
+
+        let is_zip = downloaded_file.magic_bytes.len() >= 2
+            && downloaded_file.magic_bytes[0] == 0x50
+            && downloaded_file.magic_bytes[1] == 0x4B;
+        let is_gzip = downloaded_file.magic_bytes.len() >= 2
+            && downloaded_file.magic_bytes[0] == 0x1f
+            && downloaded_file.magic_bytes[1] == 0x8b;
+
+        if request.extension == "zip" && !is_zip {
             return Err("Expected ZIP file but downloaded file doesn't have ZIP magic bytes. URL may have redirected to HTML page.".to_string());
         }
 
-        if (extension == "gz" || extension == "tar.gz") && !is_gzip {
+        if (request.extension == "gz" || request.extension == "tar.gz") && !is_gzip {
             return Err(
                 "Expected gzip file but downloaded file doesn't have gzip magic bytes.".to_string(),
             );
         }
 
-        // Verify checksum if available
-        if let Some(expected_checksum) = self.get_expected_checksum(&component, &url) {
-            let actual_checksum = hex::encode(hasher.finalize());
+        if let Some(expected_checksum) = self.get_expected_checksum(&request.component, request.url)
+        {
+            let actual_checksum = hex::encode(downloaded_file.hasher.finalize());
 
             if actual_checksum.to_lowercase() != expected_checksum.to_lowercase() {
                 return Err(format!(
                     "Checksum verification failed for {}.\nExpected: {}\nActual: {}\n\nThe downloaded file may be corrupted or tampered with.",
-                    component.name(),
+                    request.component.name(),
                     expected_checksum,
                     actual_checksum
                 ));
             }
             eprintln!(
                 "Checksum verified for {}: {}",
-                component.name(),
+                request.component.name(),
                 actual_checksum
             );
         }
 
-        fs::rename(&partial_path, &file_path)
+        fs::rename(request.partial_path, request.file_path)
             .map_err(|e| format!("Failed to finalize downloaded file: {}", e))?;
 
-        progress_cb(DownloadProgress {
-            step: DownloadStep::Downloading,
-            percent: 100,
-            current_component: format!("{} {}/{}", component.name(), current, total),
-            component_display: component.display_name(),
-            version,
-            total_components: total,
-            downloaded_bytes,
-            total_bytes: total_bytes.max(downloaded_bytes),
-        });
+        request.progress_meta.emit(
+            100,
+            downloaded_file.downloaded_bytes,
+            downloaded_file
+                .total_bytes
+                .max(downloaded_file.downloaded_bytes),
+        );
 
-        Ok(file_path)
+        Ok(request.file_path.to_path_buf())
     }
 
     /// Get the expected checksum for a component based on current platform
@@ -871,12 +1234,16 @@ impl RuntimeDownloader {
                 None
             }
             BinaryComponent::PhpMyAdmin => {
+                let selected_id = self
+                    .package_selection
+                    .as_ref()
+                    .map(|selection| selection.phpmyadmin.as_str());
                 let version = config
                     .binaries
                     .phpmyadmin
                     .versions
                     .iter()
-                    .find(|v| v.selected)?;
+                    .find(|v| selected_id.map(|id| v.id == id).unwrap_or(v.selected))?;
                 version.checksum.clone()
             }
         }

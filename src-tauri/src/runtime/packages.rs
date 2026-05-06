@@ -90,7 +90,7 @@ impl Default for PackageSelection {
     fn default() -> Self {
         Self {
             php: "php-8.5".to_string(),
-            mysql: "mysql-8.4".to_string(),
+            mysql: "mysql-9.7".to_string(),
             phpmyadmin: "phpmyadmin-5.2".to_string(),
         }
     }
@@ -331,7 +331,7 @@ pub fn get_selected_package_ids() -> PackageSelection {
                 .iter()
                 .find(|v| v.selected)
                 .map(|v| v.id.clone())
-                .unwrap_or_else(|| "mysql-8.4".to_string()),
+                .unwrap_or_else(|| "mysql-9.7".to_string()),
             phpmyadmin: cfg
                 .binaries
                 .phpmyadmin
@@ -388,14 +388,14 @@ fn get_default_packages() -> PackagesConfig {
         php: vec![
             PhpPackage {
                 id: "php-8.5".to_string(),
-                version: "8.5.1".to_string(),
-                display_name: "PHP 8.5.1 (Latest)".to_string(),
-                windows_x64: "https://github.com/KarnYong/campp-runtime-binaries/releases/download/php-8.5.1/php-8.5.1-Win32-vs17-x64.zip".to_string(),
-                windows_arm64: "https://github.com/KarnYong/campp-runtime-binaries/releases/download/php-8.5.1/php-8.5.1-Win32-vs17-x86.zip".to_string(),
-                linux_x64: "https://github.com/KarnYong/campp-runtime-binaries/releases/download/php-8.5.1/php-8.4.18-fpm-linux-x86_64.tar.gz".to_string(),
-                linux_arm64: "https://github.com/KarnYong/campp-runtime-binaries/releases/download/php-8.5.1/php-8.4.18-fpm-linux-aarch64.tar.gz".to_string(),
-                macos_x64: "https://github.com/KarnYong/campp-runtime-binaries/releases/download/php-8.5.1/php-8.4.18-fpm-macos-x86_64.tar.gz".to_string(),
-                macos_arm64: "https://github.com/KarnYong/campp-runtime-binaries/releases/download/php-8.5.1/php-8.4.18-fpm-macos-aarch64.tar.gz".to_string(),
+                version: "8.5.6".to_string(),
+                display_name: "PHP 8.5".to_string(),
+                windows_x64: "https://downloads.php.net/~windows/releases/archives/php-8.5.6-nts-Win32-vs17-x64.zip".to_string(),
+                windows_arm64: "https://downloads.php.net/~windows/releases/archives/php-8.5.6-nts-Win32-vs17-x64.zip".to_string(),
+                linux_x64: "https://dl.static-php.dev/static-php-cli/bulk/php-8.5.5-fpm-linux-x86_64.tar.gz".to_string(),
+                linux_arm64: "https://dl.static-php.dev/static-php-cli/bulk/php-8.5.5-fpm-linux-aarch64.tar.gz".to_string(),
+                macos_x64: "https://dl.static-php.dev/static-php-cli/bulk/php-8.5.5-fpm-macos-x86_64.tar.gz".to_string(),
+                macos_arm64: "https://dl.static-php.dev/static-php-cli/bulk/php-8.5.5-fpm-macos-aarch64.tar.gz".to_string(),
                 eol: false,
                 lts: false,
                 recommended: true,
@@ -403,15 +403,15 @@ fn get_default_packages() -> PackagesConfig {
         ],
         mysql: vec![
             MySQLPackage {
-                id: "mysql-8.4".to_string(),
-                version: "8.4.0".to_string(),
-                display_name: "MySQL 8.4.0 LTS (Recommended)".to_string(),
-                windows_x64: "https://github.com/KarnYong/campp-runtime-binaries/releases/download/mysql-8.4.0/mysql-8.4.0-winx64.zip".to_string(),
-                windows_arm64: "https://github.com/KarnYong/campp-runtime-binaries/releases/download/mysql-8.4.0/mysql-8.4.0-winx64.zip".to_string(),
-                linux_x64: "https://github.com/KarnYong/campp-runtime-binaries/releases/download/mysql-8.4.0/mysql-8.4.0-linux-glibc2.28-x86_64.tar.xz".to_string(),
-                linux_arm64: "https://github.com/KarnYong/campp-runtime-binaries/releases/download/mysql-8.4.0/mysql-8.4.0-linux-glibc2.28-aarch64.tar.xz".to_string(),
-                macos_x64: "https://github.com/KarnYong/campp-runtime-binaries/releases/download/mysql-8.4.0/mysql-8.4.0-macos14-x86_64.tar.gz".to_string(),
-                macos_arm64: "https://github.com/KarnYong/campp-runtime-binaries/releases/download/mysql-8.4.0/mysql-8.4.0-macos14-arm64.tar.gz".to_string(),
+                id: "mysql-9.7".to_string(),
+                version: "9.7.0".to_string(),
+                display_name: "MySQL 9.7.0".to_string(),
+                windows_x64: "https://cdn.mysql.com/Downloads/MySQL-9.7/mysql-9.7.0-winx64.zip".to_string(),
+                windows_arm64: "https://cdn.mysql.com/Downloads/MySQL-9.7/mysql-9.7.0-winx64.zip".to_string(),
+                linux_x64: "https://cdn.mysql.com/Downloads/MySQL-9.7/mysql-9.7.0-linux-glibc2.28-x86_64.tar.xz".to_string(),
+                linux_arm64: "https://cdn.mysql.com/Downloads/MySQL-9.7/mysql-9.7.0-linux-glibc2.28-aarch64.tar.xz".to_string(),
+                macos_x64: "https://cdn.mysql.com/Downloads/MySQL-9.7/mysql-9.7.0-macos15-x86_64.tar.gz".to_string(),
+                macos_arm64: "https://cdn.mysql.com/Downloads/MySQL-9.7/mysql-9.7.0-macos15-arm64.tar.gz".to_string(),
                 eol: false,
                 lts: true,
                 recommended: true,
@@ -420,18 +420,18 @@ fn get_default_packages() -> PackagesConfig {
         phpmyadmin: vec![
             PhpMyAdminPackage {
                 id: "phpmyadmin-5.2".to_string(),
-                version: "5.2.2".to_string(),
-                display_name: "phpMyAdmin 5.2.2 (Default)".to_string(),
-                url: "https://github.com/KarnYong/campp-runtime-binaries/releases/download/phpmyadmin-5.2.2/phpMyAdmin-5.2.2-all-languages.zip".to_string(),
+                version: "5.2.3".to_string(),
+                display_name: "phpMyAdmin 5.2.3".to_string(),
+                url: "https://files.phpmyadmin.net/phpMyAdmin/5.2.3/phpMyAdmin-5.2.3-all-languages.zip".to_string(),
                 eol: false,
                 lts: false,
                 recommended: true,
             },
             PhpMyAdminPackage {
                 id: "adminer-5.4".to_string(),
-                version: "5.4.1".to_string(),
-                display_name: "Adminer 5.4.1 (Latest)".to_string(),
-                url: "https://github.com/vrana/adminer/releases/download/v5.4.1/adminer-5.4.1.php".to_string(),
+                version: "5.4.2".to_string(),
+                display_name: "Adminer 5.4.2".to_string(),
+                url: "https://www.adminer.org/latest-mysql.php".to_string(),
                 eol: false,
                 lts: false,
                 recommended: false,

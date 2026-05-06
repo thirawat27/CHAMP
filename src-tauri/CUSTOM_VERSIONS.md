@@ -1,6 +1,6 @@
 # Customizing Runtime Versions
 
-This guide explains how to customize the versions of PHP, MariaDB, phpMyAdmin, and Caddy that CAMPP downloads and uses.
+This guide explains how to customize the versions of PHP, MySQL/MariaDB, Adminer/phpMyAdmin, and Caddy that CAMPP downloads and uses.
 
 ## Quick Start
 
@@ -26,9 +26,9 @@ The `runtime-config.json` file should be placed in one of these locations (searc
       "versions": [
         {
           "id": "php-8.5",
-          "version": "8.5.1",
+          "version": "8.5.x",
           "selected": true,
-          "display_name": "PHP 8.5.1 (Latest)",
+          "display_name": "PHP 8.5",
           "urls": {
             "windowsX64": "...",
             "linuxX64": "...",
@@ -111,12 +111,16 @@ For phpMyAdmin, only a single `url` field is needed since it's platform-independ
 ## Finding Download URLs
 
 ### PHP
-- **Windows**: https://windows.php.net/downloads/
-- **Linux/macOS**: https://github.com/static-php/static-php-cli/releases
+- **Windows official portable builds**: https://www.php.net/downloads.php?os=windows
+- **Linux/macOS portable FPM builds**: https://dl.static-php.dev/static-php-cli/bulk/
 
-### MariaDB
-- **All platforms**: https://mariadb.org/downloads/
-- **Archive**: https://archive.mariadb.org/
+### MySQL/MariaDB
+- **MySQL official downloads**: https://dev.mysql.com/downloads/mysql/
+- **MySQL CDN**: https://cdn.mysql.com/
+- **MariaDB archive**: https://archive.mariadb.org/
+
+### Adminer
+- **All platforms**: https://www.adminer.org/
 
 ### phpMyAdmin
 - **All platforms**: https://www.phpmyadmin.net/downloads/

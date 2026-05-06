@@ -663,204 +663,209 @@ fn initialize_mysql_data_dir(paths: &RuntimePaths) -> Result<(), String> {
 
     #[cfg(target_os = "linux")]
     {
-        // ============================================================
-        // LINUX: MariaDB 12.x Initialization
-        // ============================================================
-        // MariaDB 12.x does NOT support --initialize-insecure flag
-        // (removed in MariaDB 10.4+)
-        //
-        // Instead, we use the mariadb-install-db script which:
-        // - Creates the mysql system database
-        // - Initializes privilege tables
-        // - Sets up default users (root@localhost with no password)
-        // ============================================================
-
-        eprintln!("MariaDB 12.x: Initializing data directory using mariadb-install-db");
-
-        // Find the mariadb-install-db script
-        let mariadbd_dir = paths
+        let uses_mysql_server = paths
             .mysql
-            .parent()
-            .ok_or("Failed to get MariaDB binary directory")?;
+            .file_name()
+            .and_then(|name| name.to_str())
+            .map(|name| name == "mysqld")
+            .unwrap_or(false);
 
-        let install_db_script = mariadbd_dir
-            .parent()
-            .ok_or("Failed to get MariaDB base directory")?
-            .join("scripts")
-            .join("mariadb-install-db");
+        if uses_mysql_server {
+            initialize_mysqld_data_dir(paths, &data_dir_str, &mysql_dir)?;
+        } else {
+            // ============================================================
+            // LINUX: MariaDB 12.x Initialization
+            // ============================================================
+            // MariaDB 12.x does NOT support --initialize-insecure flag
+            // (removed in MariaDB 10.4+)
+            //
+            // Instead, we use the mariadb-install-db script which:
+            // - Creates the mysql system database
+            // - Initializes privilege tables
+            // - Sets up default users (root@localhost with no password)
+            // ============================================================
 
-        if !install_db_script.exists() {
-            // Fallback to mysql_install_db (older name)
-            let install_db_script_fallback = mariadbd_dir
+            eprintln!("MariaDB 12.x: Initializing data directory using mariadb-install-db");
+
+            // Find the mariadb-install-db script
+            let mariadbd_dir = paths
+                .mysql
+                .parent()
+                .ok_or("Failed to get MariaDB binary directory")?;
+
+            let mut install_db_script = mariadbd_dir
                 .parent()
                 .ok_or("Failed to get MariaDB base directory")?
                 .join("scripts")
-                .join("mysql_install_db");
+                .join("mariadb-install-db");
 
-            if !install_db_script_fallback.exists() {
-                return Err(format!(
-                    "MariaDB installation script not found. Tried:\n  - {}\n  - {}\n\
+            if !install_db_script.exists() {
+                // Fallback to mysql_install_db (older name)
+                let install_db_script_fallback = mariadbd_dir
+                    .parent()
+                    .ok_or("Failed to get MariaDB base directory")?
+                    .join("scripts")
+                    .join("mysql_install_db");
+
+                if !install_db_script_fallback.exists() {
+                    return Err(format!(
+                        "MariaDB installation script not found. Tried:\n  - {}\n  - {}\n\
                     Please ensure the MariaDB runtime was downloaded correctly.",
-                    install_db_script.display(),
-                    install_db_script_fallback.display()
-                ));
-            }
-        }
-
-        let init_log_path = paths.logs_dir.join("mysql_init.log");
-        let init_log_file = fs::File::create(&init_log_path)
-            .map_err(|e| format!("Failed to create init log file: {}", e))?;
-
-        // Run mariadb-install-db
-        // Key parameters:
-        // --datadir=DIR: Location of database files
-        // --basedir=PATH: Path to MariaDB installation
-        // --user=: Run as current user (not root)
-        let mut cmd = configure_no_window(Command::new(&install_db_script));
-        cmd.arg(format!("--datadir={}", data_dir_str))
-            .arg(format!(
-                "--basedir={}",
-                mariadbd_dir.parent().unwrap().display()
-            ))
-            .arg("--user=") // Empty string = current user
-            .stdout(Stdio::from(init_log_file.try_clone().unwrap()))
-            .stderr(Stdio::from(init_log_file));
-
-        let mut child = cmd
-            .spawn()
-            .map_err(|e| format!("Failed to start MariaDB initialization: {}", e))?;
-
-        // Wait for initialization with longer timeout (120 seconds)
-        let timeout = std::time::Duration::from_secs(120);
-        let start = std::time::Instant::now();
-
-        let mut output = String::new();
-        let success = loop {
-            match child.try_wait() {
-                Ok(Some(status)) => {
-                    // Read any remaining output
-                    let _ = fs::read_to_string(&init_log_path).map(|s| output = s);
-                    break status.success();
+                        install_db_script.display(),
+                        install_db_script_fallback.display()
+                    ));
                 }
-                Ok(None) => {
-                    if start.elapsed() > timeout {
-                        eprintln!("MariaDB initialization timeout, killing process");
-                        let _ = child.kill();
-                        // Force wait to get final status
-                        let _ = child.wait();
+
+                install_db_script = install_db_script_fallback;
+            }
+
+            let init_log_path = paths.logs_dir.join("mysql_init.log");
+            let init_log_file = fs::File::create(&init_log_path)
+                .map_err(|e| format!("Failed to create init log file: {}", e))?;
+
+            // Run mariadb-install-db
+            // Key parameters:
+            // --datadir=DIR: Location of database files
+            // --basedir=PATH: Path to MariaDB installation
+            // --user=: Run as current user (not root)
+            let mut cmd = configure_no_window(Command::new(&install_db_script));
+            cmd.arg(format!("--datadir={}", data_dir_str))
+                .arg(format!(
+                    "--basedir={}",
+                    mariadbd_dir.parent().unwrap().display()
+                ))
+                .arg("--user=") // Empty string = current user
+                .stdout(Stdio::from(init_log_file.try_clone().unwrap()))
+                .stderr(Stdio::from(init_log_file));
+
+            let mut child = cmd
+                .spawn()
+                .map_err(|e| format!("Failed to start MariaDB initialization: {}", e))?;
+
+            // Wait for initialization with longer timeout (120 seconds)
+            let timeout = std::time::Duration::from_secs(120);
+            let start = std::time::Instant::now();
+
+            let mut output = String::new();
+            let success = loop {
+                match child.try_wait() {
+                    Ok(Some(status)) => {
+                        // Read any remaining output
+                        let _ = fs::read_to_string(&init_log_path).map(|s| output = s);
+                        break status.success();
+                    }
+                    Ok(None) => {
+                        if start.elapsed() > timeout {
+                            eprintln!("MariaDB initialization timeout, killing process");
+                            let _ = child.kill();
+                            // Force wait to get final status
+                            let _ = child.wait();
+                            let _ = fs::read_to_string(&init_log_path).map(|s| output = s);
+                            break false;
+                        }
+                        std::thread::sleep(std::time::Duration::from_millis(500));
+                    }
+                    Err(_) => {
                         let _ = fs::read_to_string(&init_log_path).map(|s| output = s);
                         break false;
                     }
-                    std::thread::sleep(std::time::Duration::from_millis(500));
                 }
-                Err(_) => {
-                    let _ = fs::read_to_string(&init_log_path).map(|s| output = s);
-                    break false;
-                }
+            };
+
+            if !success {
+                eprintln!("MariaDB initialization failed. Output:\n{}", output);
+                return Err(format!(
+                    "MariaDB initialization failed. Check the log file at: {:?}",
+                    init_log_path
+                ));
             }
-        };
 
-        if !success {
-            eprintln!("MariaDB initialization failed. Output:\n{}", output);
-            return Err(format!(
-                "MariaDB initialization failed. Check the log file at: {:?}",
-                init_log_path
-            ));
-        }
+            eprintln!("MariaDB initialization completed successfully");
 
-        eprintln!("MariaDB initialization completed successfully");
-
-        // Verify that mysql directory was created
-        if !mysql_dir.exists() {
-            return Err(format!(
-                "MariaDB initialization failed - mysql directory not created at {:?}. \
+            // Verify that mysql directory was created
+            if !mysql_dir.exists() {
+                return Err(format!(
+                    "MariaDB initialization failed - mysql directory not created at {:?}. \
                  Check the log file at: {:?}",
-                mysql_dir, init_log_path
-            ));
+                    mysql_dir, init_log_path
+                ));
+            }
         }
     }
 
     #[cfg(not(target_os = "linux"))]
     {
-        // ============================================================
-        // WINDOWS/MAC: MySQL 8.x Initialization
-        // ============================================================
-        // MySQL 8.x requires explicit initialization using the
-        // --initialize-insecure flag before first use.
-        //
-        // This creates the system database (mysql schema), sets up
-        // privilege tables, and generates initial data files.
-        // ============================================================
-        eprintln!(
-            "MySQL 8.x: Initializing data directory at: {}",
-            data_dir_str
-        );
+        initialize_mysqld_data_dir(paths, &data_dir_str, &mysql_dir)?;
+    }
 
-        // MySQL 8.0+ uses mysqld --initialize-insecure instead of mysql_install_db
-        let mysqld = &paths.mysql;
+    Ok(())
+}
 
-        let init_log_path = paths.logs_dir.join("mysql_init.log");
-        let init_log_file = fs::File::create(&init_log_path)
-            .map_err(|e| format!("Failed to create init log file: {}", e))?;
+fn initialize_mysqld_data_dir(
+    paths: &RuntimePaths,
+    data_dir_str: &str,
+    mysql_dir: &Path,
+) -> Result<(), String> {
+    // MySQL 8.0+ and 9.x initialize local data directories with mysqld.
+    eprintln!("MySQL: Initializing data directory at: {}", data_dir_str);
 
-        let mut child = configure_no_window(Command::new(mysqld))
-            .arg("--initialize-insecure")
-            .arg("--datadir")
-            .arg(&data_dir_str)
-            .arg("--console")
-            .stdout(Stdio::from(init_log_file.try_clone().unwrap()))
-            .stderr(Stdio::from(init_log_file))
-            .spawn()
-            .map_err(|e| format!("Failed to start MySQL initialization: {}", e))?;
+    let init_log_path = paths.logs_dir.join("mysql_init.log");
+    let init_log_file = fs::File::create(&init_log_path)
+        .map_err(|e| format!("Failed to create init log file: {}", e))?;
 
-        // Wait for initialization with longer timeout (120 seconds)
-        let timeout = std::time::Duration::from_secs(120);
-        let start = std::time::Instant::now();
+    let mut child = configure_no_window(Command::new(&paths.mysql))
+        .arg("--initialize-insecure")
+        .arg("--datadir")
+        .arg(data_dir_str)
+        .arg("--console")
+        .stdout(Stdio::from(init_log_file.try_clone().unwrap()))
+        .stderr(Stdio::from(init_log_file))
+        .spawn()
+        .map_err(|e| format!("Failed to start MySQL initialization: {}", e))?;
 
-        let mut output = String::new();
-        let success = loop {
-            match child.try_wait() {
-                Ok(Some(status)) => {
-                    // Read any remaining output
-                    let _ = fs::read_to_string(&init_log_path).map(|s| output = s);
-                    break status.success();
-                }
-                Ok(None) => {
-                    if start.elapsed() > timeout {
-                        eprintln!("MySQL initialization timeout, killing process");
-                        let _ = child.kill();
-                        // Force wait to get final status
-                        let _ = child.wait();
-                        let _ = fs::read_to_string(&init_log_path).map(|s| output = s);
-                        break false;
-                    }
-                    std::thread::sleep(std::time::Duration::from_millis(500));
-                }
-                Err(_) => {
+    let timeout = std::time::Duration::from_secs(120);
+    let start = std::time::Instant::now();
+
+    let mut output = String::new();
+    let success = loop {
+        match child.try_wait() {
+            Ok(Some(status)) => {
+                let _ = fs::read_to_string(&init_log_path).map(|s| output = s);
+                break status.success();
+            }
+            Ok(None) => {
+                if start.elapsed() > timeout {
+                    eprintln!("MySQL initialization timeout, killing process");
+                    let _ = child.kill();
+                    let _ = child.wait();
                     let _ = fs::read_to_string(&init_log_path).map(|s| output = s);
                     break false;
                 }
+                std::thread::sleep(std::time::Duration::from_millis(500));
             }
-        };
-
-        if !success {
-            eprintln!("MySQL initialization failed. Output:\n{}", output);
-            return Err(format!(
-                "MySQL initialization failed. Check the log file at: {:?}",
-                init_log_path
-            ));
+            Err(_) => {
+                let _ = fs::read_to_string(&init_log_path).map(|s| output = s);
+                break false;
+            }
         }
+    };
 
-        eprintln!("MySQL initialization completed successfully");
+    if !success {
+        eprintln!("MySQL initialization failed. Output:\n{}", output);
+        return Err(format!(
+            "MySQL initialization failed. Check the log file at: {:?}",
+            init_log_path
+        ));
+    }
 
-        // Verify that mysql directory was created
-        if !mysql_dir.exists() {
-            return Err(format!(
-                "MySQL initialization failed - mysql directory not created at {:?}. \
-                 Check the log file at: {:?}",
-                mysql_dir, init_log_path
-            ));
-        }
+    eprintln!("MySQL initialization completed successfully");
+
+    if !mysql_dir.exists() {
+        return Err(format!(
+            "MySQL initialization failed - mysql directory not created at {:?}. \
+             Check the log file at: {:?}",
+            mysql_dir, init_log_path
+        ));
     }
 
     Ok(())

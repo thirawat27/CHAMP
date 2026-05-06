@@ -489,7 +489,21 @@ fn detect_mysql_binary(runtime_dir: &Path) -> Result<PathBuf, String> {
         // so we check for both as a fallback.
         // ============================================================
 
-        // First, look for MariaDB directories
+        // First, look for official MySQL directories.
+        if let Ok(entries) = fs::read_dir(runtime_dir) {
+            for entry in entries.flatten() {
+                if let Ok(name) = entry.file_name().into_string() {
+                    if name.starts_with("mysql") && entry.path().is_dir() {
+                        let mysqld_path = entry.path().join("bin").join("mysqld");
+                        if mysqld_path.exists() {
+                            return Ok(mysqld_path);
+                        }
+                    }
+                }
+            }
+        }
+
+        // Then look for MariaDB directories.
         if let Ok(entries) = fs::read_dir(runtime_dir) {
             for entry in entries.flatten() {
                 if let Ok(name) = entry.file_name().into_string() {
@@ -512,6 +526,8 @@ fn detect_mysql_binary(runtime_dir: &Path) -> Result<PathBuf, String> {
 
         // Fallback paths - check both mariadbd and mysqld
         let paths_to_check = vec![
+            runtime_dir.join("mysql").join("bin").join("mysqld"),
+            runtime_dir.join("bin").join("mysqld"),
             runtime_dir.join("mariadb").join("bin").join("mariadbd"),
             runtime_dir.join("bin").join("mariadbd"),
             runtime_dir.join("mariadbd"),

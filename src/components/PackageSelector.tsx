@@ -22,7 +22,7 @@ export function PackageSelector({ onSelectionChange, initialSelection }: Package
   const [selection, setSelection] = useState<PackageSelection>(
     initialSelection || {
       php: "php-8.5",
-      mysql: "mysql-8.4",
+      mysql: "mysql-9.7",
       phpmyadmin: "phpmyadmin-5.2",
     }
   );
@@ -95,7 +95,6 @@ export function PackageSelector({ onSelectionChange, initialSelection }: Package
             <option key={pkg.id} value={pkg.id}>
               {pkg.display_name}
               {pkg.eol && " (EOL)"}
-              {pkg.recommended && " (Recommended)"}
             </option>
           ))}
         </select>
@@ -115,8 +114,6 @@ export function PackageSelector({ onSelectionChange, initialSelection }: Package
           {packages.mysql.map((pkg: MySQLPackage) => (
             <option key={pkg.id} value={pkg.id}>
               {pkg.display_name}
-              {pkg.lts && " (LTS)"}
-              {pkg.recommended && " (Recommended)"}
             </option>
           ))}
         </select>
@@ -136,7 +133,6 @@ export function PackageSelector({ onSelectionChange, initialSelection }: Package
           {packages.phpmyadmin.map((pkg: PhpMyAdminPackage) => (
             <option key={pkg.id} value={pkg.id}>
               {pkg.display_name}
-              {pkg.recommended && " (Recommended)"}
             </option>
           ))}
         </select>
@@ -145,7 +141,7 @@ export function PackageSelector({ onSelectionChange, initialSelection }: Package
       {/* Package Info Box */}
       <div className="info-box" style={{ padding: "0.5rem", fontSize: "0.875rem" }}>
         <p style={{ fontSize: "0.875rem", color: "var(--text-secondary)", margin: "0 0 0.375rem 0" }}>
-          <strong>Recommended:</strong> PHP 8.5, {getDatabaseDisplayName(currentPlatform)} 8.4 (LTS), phpMyAdmin 5.2
+          <strong>Default:</strong> PHP 8.5, {getDatabaseDisplayName(currentPlatform)} 9.7, phpMyAdmin 5.2
         </p>
         <p style={{ fontSize: "0.875rem", color: "var(--text-secondary)", margin: 0 }}>
           <strong>Note:</strong> EOL versions may have security vulnerabilities.

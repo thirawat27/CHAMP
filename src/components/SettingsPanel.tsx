@@ -22,7 +22,7 @@ interface PortCheck {
 
 const defaultPackageSelection: PackageSelection = {
   php: "php-8.5",
-  mysql: "mysql-8.4",
+  mysql: "mysql-9.7",
   phpmyadmin: "phpmyadmin-5.2",
 };
 
@@ -336,7 +336,6 @@ export function SettingsPanel({ onClose, onSettingsChanged, ...props }: Settings
                     {(packages?.phpmyadmin ?? []).map((pkg) => (
                       <option key={pkg.id} value={pkg.id}>
                         {pkg.display_name}
-                        {pkg.recommended ? " - default" : ""}
                       </option>
                     ))}
                   </select>
