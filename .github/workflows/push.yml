@@ -6,7 +6,7 @@ on:
 
 concurrency:
   group: push-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   build:
@@ -75,7 +75,7 @@ jobs:
       - name: Build Tauri app
         env:
           APPLE_SIGNING_IDENTITY: "-"
-        run: pnpm tauri build
+        run: pnpm tauri build ${{ runner.os == 'Linux' && '--bundles deb,rpm' || '' }}
 
       - name: Upload app bundle
         uses: actions/upload-artifact@v4
