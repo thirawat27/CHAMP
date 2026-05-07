@@ -65,6 +65,7 @@ CHAMP is a self-contained desktop application that provides a complete local web
 - 📊 **System Metrics** - Monitor CPU, memory, and disk usage
 - 🗂️ **Custom Configuration** - Advanced users can customize runtime configs
 - 🐛 **Debug Mode** - Developer menu with runtime folder access and reset options
+- ⌨️ **Keyboard Shortcuts** - Control the app without touching the mouse
 
 ---
 
@@ -118,6 +119,16 @@ Download the latest release for your platform from the [Releases](https://github
 - **Individual Control**: Start/stop/restart each service independently
 - **Bulk Operations**: Use "Start All" or "Stop All" for convenience
 - **Auto-Start**: Enable in Settings to start services on app launch
+
+### Keyboard Shortcuts
+
+| Shortcut | Action |
+| -------- | ------ |
+| `Ctrl / Cmd + R` | Restart all services |
+| `Ctrl / Cmd + ,` | Open / close Settings |
+| `Esc` | Dismiss notification · Close Settings |
+
+> Shortcuts use physical key positions (`e.code`) so they work regardless of keyboard language (Thai, English, etc.).
 
 ### System Tray
 
@@ -271,7 +282,7 @@ See `runtime-config.schema.json` for the full configuration schema.
 
 ### Settings
 
-Accessible via the Settings panel in the app:
+Accessible via the Settings panel in the app (or press `Ctrl/Cmd + ,`):
 - **Ports**: Customize service ports
 - **Auto-Start**: Enable/disable automatic service startup
 - **Project Folder**: Set default project directory

@@ -130,6 +130,32 @@ The project follows an 8-phase implementation plan:
 | `src-tauri/Cargo.toml`      | Rust dependencies                                 |
 | `vite.config.ts`            | Frontend dev server (port 1420)                   |
 | `DEVELOPMENT_PLAN.md`       | Full implementation plan and architecture details |
+| `src/App.css`               | Global styles, theme variables, scrollbar styling |
+| `src/components/Dashboard.tsx`   | Main dashboard, keyboard shortcuts (Ctrl+R, Ctrl+,, Esc) |
+| `src/components/SettingsPanel.tsx` | Settings UI, ESC-to-close handler              |
+
+## UX Conventions
+
+### Keyboard Shortcuts
+All shortcuts use `e.code` (physical key position) so they work regardless of keyboard language:
+
+| Shortcut | Action | Implemented in |
+| -------- | ------ | -------------- |
+| `Ctrl/Cmd + R` | Restart all services | `Dashboard.tsx` |
+| `Ctrl/Cmd + ,` | Toggle Settings panel | `Dashboard.tsx` |
+| `Esc` | Dismiss toast / Close Settings | `Dashboard.tsx` + `SettingsPanel.tsx` |
+
+### Toast Notifications
+- Position: `bottom-center`, `bottom: 48px` (above status bar)
+- Slide-up animation on appear
+- Auto-dismiss after 4.2 s for success/error; stays until dismissed for info
+- Tones: `info` (blue), `success` (green), `error` (red)
+- Action variants: `start`, `restart`, `stop` override background color
+
+### Scrollbar Styling
+Custom scrollbar defined globally in `App.css` using CSS variables so it adapts to both light and dark themes automatically:
+- Firefox: `scrollbar-width: thin` + `scrollbar-color`
+- WebKit/Blink: `::-webkit-scrollbar` (6 px, rounded thumb, primary-tinted hover)
 
 ## Platform-Specific Notes
 
