@@ -30,6 +30,17 @@ const defaultPackageSelection: PackageSelection = {
 };
 
 export function SettingsPanel({ onClose, onSettingsChanged, ...props }: SettingsPanelProps) {
+  // ESC to close
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.code === "Escape") {
+        e.preventDefault();
+        onClose();
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [onClose]);
   const [settings, setSettings] = useState<AppSettings>({
     web_port: 8080,
     php_port: 9000,

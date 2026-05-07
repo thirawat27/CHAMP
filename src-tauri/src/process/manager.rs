@@ -254,22 +254,15 @@ impl ProcessManager {
             .ok_or("Runtime paths not initialized")?
             .clone();
 
-        let current_port = self
+        let service_snapshot = self
             .services
             .get(&service)
-            .ok_or_else(|| format!("Service {:?} not found", service))
-            .and_then(|service_process| {
-                if service_process.state.is_running() {
-                    Err("already-running".to_string())
-                } else {
-                    Ok(service_process.port)
-                }
-            });
-        let current_port = match current_port {
-            Ok(port) => port,
-            Err(message) if message == "already-running" => return Ok(()),
-            Err(message) => return Err(message),
-        };
+            .ok_or_else(|| format!("Service {:?} not found", service))?;
+        if service_snapshot.state.is_running() {
+            return Ok(());
+        }
+
+        let current_port = service_snapshot.port;
         let reserved_ports = self.reserved_ports_except(service);
         let selected_port = match service {
             ServiceType::Caddy => select_caddy_port(current_port, &paths.caddy, &reserved_ports)?,
@@ -278,18 +271,7 @@ impl ProcessManager {
             }
         };
         if selected_port != current_port {
-            let message = format!(
-                "{} port {} is in use; using fallback port {}.",
-                service.display_name(),
-                current_port,
-                selected_port
-            );
-            let log_path = paths.logs_dir.join("port-fallback.log");
-            append_log_line(&log_path, &message);
-            self.set_runtime_port(service, selected_port);
-            if let Some(service_process) = self.services.get_mut(&service) {
-                service_process.error_message = Some(message);
-            }
+            self.record_port_fallback(service, current_port, selected_port, &paths.logs_dir);
         }
 
         let web_port = self.web_port();
@@ -363,7 +345,24 @@ impl ProcessManager {
             let _ = terminate_process_by_pid(pid);
         }
 
-        let _ = wait_for_port_release(service_process.port, std::time::Duration::from_secs(4));
+        // สำหรับ MySQL: ตรวจสอบและหยุด processes ที่เหลือทั้งหมด
+        if service == ServiceType::MySQL {
+            if let Some(ref paths) = self.runtime_paths {
+                // หยุด MySQL processes ทั้งหมดที่ยังค้างอยู่
+                let _ = force_stop_all_mysql_processes(&paths.mysql);
+                
+                // รอให้ port ว่างนานขึ้น
+                let _ = wait_for_port_release(
+                    service_process.port, 
+                    std::time::Duration::from_secs(8)
+                );
+            }
+        } else {
+            let _ = wait_for_port_release(
+                service_process.port, 
+                std::time::Duration::from_secs(4)
+            );
+        }
 
         service_process.child = None;
         service_process.state = ServiceState::Stopped;
@@ -380,6 +379,7 @@ impl ProcessManager {
 
     pub fn start_all(&mut self) -> Result<(), String> {
         self.initialize()?;
+        self.prepare_stack_ports()?;
         for service in [ServiceType::PhpFpm, ServiceType::MySQL, ServiceType::Caddy] {
             self.start(service)?;
         }
@@ -389,6 +389,61 @@ impl ProcessManager {
     pub fn restart_all(&mut self) -> Result<(), String> {
         self.stop_all()?;
         self.start_all()
+    }
+
+    fn prepare_stack_ports(&mut self) -> Result<(), String> {
+        let paths = self
+            .runtime_paths
+            .as_ref()
+            .ok_or("Runtime paths not initialized")?
+            .clone();
+
+        for service in [ServiceType::Caddy, ServiceType::PhpFpm, ServiceType::MySQL] {
+            let Some(service_process) = self.services.get(&service) else {
+                continue;
+            };
+            if service_process.state.is_running() {
+                continue;
+            }
+
+            let current_port = service_process.port;
+            let reserved_ports = self.reserved_ports_except(service);
+            let selected_port = match service {
+                ServiceType::Caddy => {
+                    select_caddy_port(current_port, &paths.caddy, &reserved_ports)?
+                }
+                ServiceType::PhpFpm | ServiceType::MySQL => {
+                    select_available_port(service, current_port, &reserved_ports)?
+                }
+            };
+
+            if selected_port != current_port {
+                self.record_port_fallback(service, current_port, selected_port, &paths.logs_dir);
+            }
+        }
+
+        Ok(())
+    }
+
+    fn record_port_fallback(
+        &mut self,
+        service: ServiceType,
+        current_port: u16,
+        selected_port: u16,
+        logs_dir: &Path,
+    ) {
+        let message = format!(
+            "{} port {} is in use; using fallback port {}.",
+            service.display_name(),
+            current_port,
+            selected_port
+        );
+        let log_path = logs_dir.join("port-fallback.log");
+        append_log_line(&log_path, &message);
+        self.set_runtime_port(service, selected_port);
+        if let Some(service_process) = self.services.get_mut(&service) {
+            service_process.error_message = Some(message);
+        }
     }
 
     /// Get the status of a service
@@ -605,6 +660,9 @@ fn start_mysql(service_process: &mut ServiceProcess, paths: &RuntimePaths) -> Re
     // Initialize MySQL data directory if needed
     initialize_mysql_data_dir(paths)?;
 
+    // ตรวจสอบและหยุด MySQL processes ที่ซ้ำซ้อนอัตโนมัติ
+    cleanup_duplicate_mysql_processes(paths, service_process.port)?;
+
     if let Some(pid) = find_running_mysql_pid(paths, service_process.port) {
         let log_path = paths.logs_dir.join("mysql.log");
         append_log_line(
@@ -617,6 +675,42 @@ fn start_mysql(service_process: &mut ServiceProcess, paths: &RuntimePaths) -> Re
         attach_existing_mysql_process(service_process, pid, log_path.clone());
         return Ok(());
     }
+
+    // Check if port is available before attempting to start
+    if !port_can_bind(service_process.port) {
+        // พยายามหยุด process ที่ใช้ port นี้อยู่
+        let log_path = paths.logs_dir.join("mysql.log");
+        append_log_line(
+            &log_path,
+            &format!(
+                "Port {} is in use. Attempting to stop conflicting MySQL processes...",
+                service_process.port
+            ),
+        );
+        
+        let stopped = stop_runtime_processes_by_executable(&paths.mysql, "MySQL/MariaDB")?;
+        if stopped > 0 {
+            append_log_line(
+                &log_path,
+                &format!("Stopped {} conflicting MySQL process(es)", stopped),
+            );
+            // รอให้ port ว่าง
+            let _ = wait_for_port_release(service_process.port, std::time::Duration::from_secs(5));
+        }
+        
+        // ตรวจสอบอีกครั้ง
+        if !port_can_bind(service_process.port) {
+            return Err(format!(
+                "Port {} is still in use after cleanup. MySQL cannot start.\n\
+                Please manually stop any MySQL/MariaDB processes and try again.\n\
+                You can change the MySQL port in Settings.",
+                service_process.port
+            ));
+        }
+    }
+
+    // Verify MySQL data directory integrity before starting
+    verify_mysql_data_integrity(paths)?;
 
     // Clean path and use proper Windows format for MySQL
     let data_dir_str = paths.mysql_data_dir.to_string_lossy().to_string();
@@ -680,11 +774,28 @@ fn start_mysql(service_process: &mut ServiceProcess, paths: &RuntimePaths) -> Re
             if let Some(init_file) = init_file_path {
                 let _ = fs::remove_file(&init_file);
             }
-            Err(format_process_exit_error(
-                "MariaDB exited immediately",
+            
+            // Enhanced error message with troubleshooting tips
+            let mut error_msg = format_process_exit_error(
+                "MySQL/MariaDB exited immediately",
                 status,
                 Some(&log_path),
-            ))
+            );
+            
+            // Add troubleshooting suggestions
+            error_msg.push_str("\n\n=== Troubleshooting Tips ===");
+            error_msg.push_str("\n1. Check if port ");
+            error_msg.push_str(&service_process.port.to_string());
+            error_msg.push_str(" is already in use by another application");
+            error_msg.push_str("\n2. Verify data directory permissions at: ");
+            error_msg.push_str(&paths.mysql_data_dir.display().to_string());
+            error_msg.push_str("\n3. Try stopping all services and restarting CHAMP");
+            error_msg.push_str("\n4. If the problem persists, you may need to reinitialize the database:");
+            error_msg.push_str("\n   - Stop CHAMP completely");
+            error_msg.push_str("\n   - Delete the MySQL data directory");
+            error_msg.push_str("\n   - Restart CHAMP to reinitialize");
+            
+            Err(error_msg)
         }
         Ok(None) => {
             if needs_init_file {
@@ -816,7 +927,9 @@ fn find_available_port_excluding(
     preferred_port: u16,
     reserved_ports: &[u16],
 ) -> Option<u16> {
-    if preferred_port > 0 && !reserved_ports.contains(&preferred_port) && port_can_bind(preferred_port)
+    if preferred_port > 0
+        && !reserved_ports.contains(&preferred_port)
+        && port_can_bind(preferred_port)
     {
         return Some(preferred_port);
     }
@@ -828,17 +941,13 @@ fn find_available_port_excluding(
         }
     }
 
-    for port in 49152..=65535 {
-        if !reserved_ports.contains(&port) && port_can_bind(port) {
-            return Some(port);
-        }
-    }
-
-    None
+    (49152..=65535).find(|&port| !reserved_ports.contains(&port) && port_can_bind(port))
 }
 
 fn first_fallback_port(service_type: ServiceType, preferred_port: u16) -> u16 {
-    if service_type == ServiceType::MySQL && preferred_port == crate::config::DEFAULT_PORTS.mysql {
+    if service_type == ServiceType::MySQL
+        && preferred_port == crate::config::DEFAULT_PORTS.mysql
+    {
         preferred_port.saturating_add(2)
     } else {
         preferred_port.saturating_add(1)
@@ -1040,6 +1149,208 @@ fn mysql_root_tcp_login_works(mysql_client: &Path, port: u16) -> bool {
     .status()
     .map(|status| status.success())
     .unwrap_or(false)
+}
+
+/// Verify MySQL data directory integrity
+/// Checks for common issues that cause MySQL to fail on startup
+fn verify_mysql_data_integrity(paths: &RuntimePaths) -> Result<(), String> {
+    let mysql_dir = paths.mysql_data_dir.join("mysql");
+    
+    // Check if mysql system directory exists
+    if !mysql_dir.exists() {
+        return Err(format!(
+            "MySQL system directory not found at {:?}. \
+            The data directory may be corrupted. \
+            Try stopping all services and restarting CHAMP.",
+            mysql_dir
+        ));
+    }
+
+    // Check for lock files that might prevent startup
+    let lock_files = [
+        paths.mysql_data_dir.join("ibdata1.lock"),
+        paths.mysql_data_dir.join("ib_logfile0.lock"),
+        paths.mysql_data_dir.join("mysql.sock.lock"),
+    ];
+
+    for lock_file in &lock_files {
+        if lock_file.exists() {
+            eprintln!("Warning: Found stale lock file at {:?}, removing...", lock_file);
+            let _ = fs::remove_file(lock_file);
+        }
+    }
+
+    // Check for PID files from crashed processes
+    if let Some(entries) = fs::read_dir(&paths.mysql_data_dir).ok() {
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.extension().and_then(|e| e.to_str()) == Some("pid") {
+                if let Ok(content) = fs::read_to_string(&path) {
+                    if let Ok(pid) = content.trim().parse::<u32>() {
+                        if !process_exists(pid) {
+                            eprintln!("Warning: Found stale PID file at {:?}, removing...", path);
+                            let _ = fs::remove_file(&path);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    Ok(())
+}
+
+/// Cleanup duplicate MySQL processes automatically
+/// This prevents the "exit code 1" error caused by multiple MySQL instances
+fn cleanup_duplicate_mysql_processes(paths: &RuntimePaths, port: u16) -> Result<(), String> {
+    let log_path = paths.logs_dir.join("mysql.log");
+    
+    // ค้นหา MySQL processes ทั้งหมดที่กำลังทำงาน
+    let mysql_pids = find_all_mysql_processes(&paths.mysql)?;
+    
+    if mysql_pids.is_empty() {
+        return Ok(());
+    }
+    
+    // ถ้ามีมากกว่า 1 process แสดงว่ามีซ้ำซ้อน
+    if mysql_pids.len() > 1 {
+        append_log_line(
+            &log_path,
+            &format!(
+                "WARNING: Found {} MySQL processes running. Cleaning up duplicates...",
+                mysql_pids.len()
+            ),
+        );
+        
+        // หยุดทุก process
+        let mut stopped = 0;
+        for pid in &mysql_pids {
+            if terminate_process_by_pid(*pid).is_ok() {
+                stopped += 1;
+                append_log_line(
+                    &log_path,
+                    &format!("Stopped duplicate MySQL process (pid {})", pid),
+                );
+            }
+        }
+        
+        if stopped > 0 {
+            append_log_line(
+                &log_path,
+                &format!("Cleaned up {} duplicate MySQL process(es)", stopped),
+            );
+            
+            // รอให้ processes หยุดและ port ว่าง
+            thread::sleep(std::time::Duration::from_secs(2));
+            let _ = wait_for_port_release(port, std::time::Duration::from_secs(5));
+        }
+    } else if mysql_pids.len() == 1 {
+        // มี 1 process แต่อาจจะไม่ใช่ของเรา หรือ port ไม่ตรง
+        let pid = mysql_pids[0];
+        
+        // ตรวจสอบว่า process นี้ใช้ port ที่เราต้องการหรือไม่
+        if !tcp_port_accepts(port) {
+            // Process มีอยู่แต่ไม่ได้ใช้ port ของเรา - อาจจะ crashed หรือ starting
+            if !process_exists(pid) {
+                append_log_line(
+                    &log_path,
+                    &format!("Found stale MySQL PID {} (process not running)", pid),
+                );
+            }
+        }
+    }
+    
+    Ok(())
+}
+
+/// Find all MySQL/MariaDB processes currently running
+fn find_all_mysql_processes(mysql_executable: &Path) -> Result<Vec<u32>, String> {
+    #[cfg(target_os = "windows")]
+    {
+        // บน Windows ใช้ tasklist เพื่อหา mysqld.exe หรือ mariadbd.exe
+        let process_name = mysql_executable
+            .file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or("mysqld.exe");
+        
+        let output = Command::new("tasklist")
+            .args(["/FI", &format!("IMAGENAME eq {}", process_name), "/FO", "CSV", "/NH"])
+            .output()
+            .map_err(|e| format!("Failed to list MySQL processes: {}", e))?;
+        
+        if !output.status.success() {
+            return Ok(Vec::new());
+        }
+        
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        let pids: Vec<u32> = stdout
+            .lines()
+            .filter_map(|line| {
+                // CSV format: "mysqld.exe","1234","Console","1","12,345 K"
+                let parts: Vec<&str> = line.split(',').collect();
+                if parts.len() >= 2 {
+                    parts[1].trim_matches('"').parse::<u32>().ok()
+                } else {
+                    None
+                }
+            })
+            .collect();
+        
+        Ok(pids)
+    }
+    
+    #[cfg(not(target_os = "windows"))]
+    {
+        // บน Unix-like systems ใช้ pgrep
+        let process_name = mysql_executable
+            .file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or("mysqld");
+        
+        let output = Command::new("pgrep")
+            .arg(process_name)
+            .output()
+            .map_err(|e| format!("Failed to list MySQL processes: {}", e))?;
+        
+        if !output.status.success() {
+            return Ok(Vec::new());
+        }
+        
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        let pids: Vec<u32> = stdout
+            .lines()
+            .filter_map(|line| line.trim().parse::<u32>().ok())
+            .collect();
+        
+        Ok(pids)
+    }
+}
+
+/// Force stop all MySQL processes (used when stopping service)
+/// This ensures no MySQL processes are left running
+fn force_stop_all_mysql_processes(mysql_executable: &Path) -> Result<usize, String> {
+    let pids = find_all_mysql_processes(mysql_executable)?;
+    
+    if pids.is_empty() {
+        return Ok(0);
+    }
+    
+    eprintln!("Force stopping {} MySQL process(es)...", pids.len());
+    
+    let mut stopped = 0;
+    for pid in pids {
+        if terminate_process_by_pid(pid).is_ok() {
+            stopped += 1;
+            eprintln!("Stopped MySQL process (pid {})", pid);
+        }
+    }
+    
+    // รอให้ processes หยุดจริงๆ
+    if stopped > 0 {
+        thread::sleep(std::time::Duration::from_secs(2));
+    }
+    
+    Ok(stopped)
 }
 
 /// Initialize MySQL/MariaDB data directory
@@ -2483,6 +2794,47 @@ mod tests {
 
         let mysql = manager.services.get(&ServiceType::MySQL).unwrap();
         assert_eq!(mysql.port, 3306);
+    }
+
+    #[test]
+    fn test_find_available_port_skips_busy_preferred_port() {
+        let listener = TcpListener::bind(("127.0.0.1", 0)).expect("failed to bind temporary port");
+        let preferred_port = listener
+            .local_addr()
+            .expect("failed to read temporary port")
+            .port();
+
+        let selected = find_available_port_excluding(ServiceType::Caddy, preferred_port, &[])
+            .expect("expected fallback port");
+
+        assert_ne!(selected, preferred_port);
+    }
+
+    #[test]
+    fn test_find_available_port_skips_reserved_stack_ports() {
+        let listener = TcpListener::bind(("127.0.0.1", 0)).expect("failed to bind temporary port");
+        let preferred_port = listener
+            .local_addr()
+            .expect("failed to read temporary port")
+            .port();
+        drop(listener);
+
+        let selected =
+            find_available_port_excluding(ServiceType::PhpFpm, preferred_port, &[preferred_port])
+                .expect("expected fallback port");
+
+        assert_ne!(selected, preferred_port);
+    }
+
+    #[test]
+    fn test_mysql_default_fallback_does_not_use_first_adjacent_port() {
+        assert_eq!(
+            first_fallback_port(
+                ServiceType::MySQL,
+                crate::config::DEFAULT_PORTS.mysql
+            ),
+            crate::config::DEFAULT_PORTS.mysql + 2
+        );
     }
 
     #[test]

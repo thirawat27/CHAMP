@@ -139,6 +139,14 @@ export function Dashboard() {
   const busyStackCommand = busy?.startsWith("stack:")
     ? (busy.slice("stack:".length) as keyof typeof STACK_COMMAND_COPY)
     : null;
+  const expectedPorts = useMemo(
+    () => ({
+      [ServiceType.Caddy]: settings?.web_port ?? 8080,
+      [ServiceType.PhpFpm]: settings?.php_port ?? 9000,
+      [ServiceType.MySQL]: settings?.mysql_port ?? 3306,
+    }),
+    [settings]
+  );
 
   const refreshStatuses = useCallback(async () => {
     try {
@@ -170,6 +178,29 @@ export function Dashboard() {
     const interval = window.setInterval(refreshStatuses, 2000);
     return () => window.clearInterval(interval);
   }, [refreshMetadata, refreshStatuses]);
+
+  // Keyboard shortcuts
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Esc to dismiss toast (works in any keyboard layout)
+      if (e.code === "Escape" && notice) {
+        setNotice(null);
+      }
+      // Ctrl/Cmd + Comma to open settings (physical key position)
+      if ((e.ctrlKey || e.metaKey) && e.code === "Comma") {
+        e.preventDefault();
+        setShowSettings((prev) => !prev);
+      }
+      // Ctrl/Cmd + R to restart stack (physical key position)
+      if ((e.ctrlKey || e.metaKey) && e.code === "KeyR" && !busy) {
+        e.preventDefault();
+        runStackCommand("restart_all_services");
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [notice, busy]);
 
   useEffect(() => {
     if (!notice || notice.tone === "info") return undefined;
@@ -223,6 +254,23 @@ export function Dashboard() {
     });
   };
 
+  const fallbackPortMessage = (statuses: ServiceMap, fallbackMessage: string) => {
+    const changedPorts = [ServiceType.Caddy, ServiceType.PhpFpm, ServiceType.MySQL]
+      .map((serviceType) => {
+        const service = statuses[serviceType];
+        const expectedPort = expectedPorts[serviceType];
+        if (!service || service.port === expectedPort) return null;
+        return `${SERVICE_DISPLAY_NAMES[serviceType]} ${service.port}`;
+      })
+      .filter((value): value is string => Boolean(value));
+
+    if (changedPorts.length === 0) {
+      return fallbackMessage;
+    }
+
+    return `Using fallback ports: ${changedPorts.join(", ")}.`;
+  };
+
   const runStackCommand = async (
     command: "start_all_services" | "stop_all_services" | "restart_all_services"
   ) => {
@@ -242,7 +290,7 @@ export function Dashboard() {
         tone: "success",
         action: copy.action,
         title: copy.successTitle,
-        message: copy.successMessage,
+        message: fallbackPortMessage(statuses, copy.successMessage),
       });
     } catch (error) {
       setNotice({
@@ -277,7 +325,7 @@ export function Dashboard() {
         tone: "success",
         action: copy.action,
         title: `${copy.successTitle}: ${displayName}`,
-        message: "The dashboard is refreshing service status.",
+        message: fallbackPortMessage(statuses, "The dashboard is refreshing service status."),
       });
     } catch (error) {
       setNotice({
@@ -296,7 +344,11 @@ export function Dashboard() {
     try {
       await invoke("open_folder", { path });
     } catch (error) {
-      alert(`Failed to open folder:\n${error}`);
+      setNotice({
+        tone: "error",
+        title: "Failed to open folder",
+        message: String(error),
+      });
     }
   };
 
@@ -329,6 +381,7 @@ export function Dashboard() {
             className="btn-command primary"
             onClick={() => runStackCommand("start_all_services")}
             disabled={Boolean(busy) || allRunning}
+            title="Start all services"
           >
             {busyStackCommand === "start_all_services" ? (
               <LoaderCircle size={16} className="spin-icon" />
@@ -343,6 +396,7 @@ export function Dashboard() {
             className="btn-command"
             onClick={() => runStackCommand("restart_all_services")}
             disabled={Boolean(busy)}
+            title="Restart all services (Ctrl+R)"
           >
             {busyStackCommand === "restart_all_services" ? (
               <LoaderCircle size={16} className="spin-icon" />
@@ -357,6 +411,7 @@ export function Dashboard() {
             className="btn-command danger"
             onClick={() => runStackCommand("stop_all_services")}
             disabled={Boolean(busy) || runningCount === 0}
+            title="Stop all services"
           >
             {busyStackCommand === "stop_all_services" ? (
               <LoaderCircle size={15} className="spin-icon" />
@@ -378,7 +433,7 @@ export function Dashboard() {
           <button
             className="icon-button"
             onClick={() => setShowSettings(true)}
-            title="Settings"
+            title="Settings (Ctrl+,)"
             aria-label="Settings"
           >
             <Settings size={18} />
@@ -423,6 +478,7 @@ export function Dashboard() {
               className="btn-quick-action action-site"
               onClick={() => openUrl(webServerUrl)}
               disabled={!isCaddyRunning}
+              title={`Open ${webServerUrl}`}
             >
               <Globe size={16} /> Site
             </button>
@@ -430,19 +486,36 @@ export function Dashboard() {
               className="btn-quick-action action-database"
               onClick={() => openUrl(databaseToolUrl)}
               disabled={!isCaddyRunning}
+              title={`Open ${databaseToolName}`}
             >
               <Database size={16} /> {databaseToolName}
             </button>
-            <button className="btn-quick-action action-projects" onClick={() => openFolder(appPaths?.projects_dir)}>
+            <button 
+              className="btn-quick-action action-projects" 
+              onClick={() => openFolder(appPaths?.projects_dir)}
+              title="Open projects folder"
+            >
               <Folder size={16} /> Projects
             </button>
-            <button className="btn-quick-action action-logs" onClick={() => openFolder(appPaths?.logs_dir)}>
+            <button 
+              className="btn-quick-action action-logs" 
+              onClick={() => openFolder(appPaths?.logs_dir)}
+              title="Open logs folder"
+            >
               <TerminalSquare size={16} /> Logs
             </button>
-            <button className="btn-quick-action action-config" onClick={() => openFolder(appPaths?.config_dir)}>
+            <button 
+              className="btn-quick-action action-config" 
+              onClick={() => openFolder(appPaths?.config_dir)}
+              title="Open config folder"
+            >
               <HardDrive size={16} /> Config
             </button>
-            <button className="btn-quick-action github" onClick={() => openUrl(SOURCE_REPO_URL)}>
+            <button 
+              className="btn-quick-action github" 
+              onClick={() => openUrl(SOURCE_REPO_URL)}
+              title="View source code on GitHub"
+            >
               <GitHubIcon size={16} /> GitHub
             </button>
           </div>

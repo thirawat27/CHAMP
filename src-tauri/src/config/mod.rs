@@ -2,7 +2,7 @@ pub mod ports;
 pub mod settings;
 
 pub use ports::is_port_available;
-pub use settings::AppSettings;
+pub use settings::{AppSettings, DEFAULT_PORTS};
 
 #[cfg(test)]
 mod tests {
