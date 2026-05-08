@@ -25,31 +25,195 @@
       "versions": [
         {
           "id": "php-8.5",
-          "version": "8.5.5",
+          "version": "8.5.6",
           "selected": true,
-          "display_name": "PHP 8.5",
+          "display_name": "PHP 8.5 (Dev)",
           "eol": false,
           "lts": false,
+          "recommended": true,
           "checksums": {},
           "urls": {
-            "windowsX64": "https://downloads.php.net/~windows/releases/archives/php-8.5.5-nts-Win32-vs17-x64.zip",
-            "linuxX64": "https://dl.static-php.dev/static-php-cli/bulk/php-8.5.5-fpm-linux-x86_64.tar.gz",
-            "macOSX64": "https://dl.static-php.dev/static-php-cli/bulk/php-8.5.5-fpm-macos-x86_64.tar.gz",
-            "macOSArm64": "https://dl.static-php.dev/static-php-cli/bulk/php-8.5.5-fpm-macos-aarch64.tar.gz"
+            "windowsX64": "https://windows.php.net/downloads/releases/php-8.5.6-nts-Win32-vs17-x64.zip",
+            "linuxX64": "https://dl.static-php.dev/static-php-cli/bulk/php-8.5.3-fpm-linux-x86_64.tar.gz",
+            "linuxArm64": "https://dl.static-php.dev/static-php-cli/bulk/php-8.5.3-fpm-linux-aarch64.tar.gz",
+            "macOSX64": "https://dl.static-php.dev/static-php-cli/bulk/php-8.5.3-fpm-macos-x86_64.tar.gz",
+            "macOSArm64": "https://dl.static-php.dev/static-php-cli/bulk/php-8.5.3-fpm-macos-aarch64.tar.gz"
+          }
+        },
+        {
+          "id": "php-8.4",
+          "version": "8.4.21",
+          "selected": false,
+          "display_name": "PHP 8.4",
+          "eol": false,
+          "lts": false,
+          "recommended": false,
+          "checksums": {},
+          "urls": {
+            "windowsX64": "https://windows.php.net/downloads/releases/php-8.4.21-nts-Win32-vs17-x64.zip",
+            "linuxX64": "https://dl.static-php.dev/static-php-cli/bulk/php-8.4.20-fpm-linux-x86_64.tar.gz",
+            "linuxArm64": "https://dl.static-php.dev/static-php-cli/bulk/php-8.4.20-fpm-linux-aarch64.tar.gz",
+            "macOSX64": "https://dl.static-php.dev/static-php-cli/bulk/php-8.4.20-fpm-macos-x86_64.tar.gz",
+            "macOSArm64": "https://dl.static-php.dev/static-php-cli/bulk/php-8.4.20-fpm-macos-aarch64.tar.gz"
+          }
+        },
+        {
+          "id": "php-8.3",
+          "version": "8.3.31",
+          "selected": false,
+          "display_name": "PHP 8.3 (LTS)",
+          "eol": false,
+          "lts": true,
+          "recommended": false,
+          "checksums": {},
+          "urls": {
+            "windowsX64": "https://windows.php.net/downloads/releases/php-8.3.31-nts-Win32-vs16-x64.zip",
+            "linuxX64": "https://dl.static-php.dev/static-php-cli/bulk/php-8.3.30-fpm-linux-x86_64.tar.gz",
+            "linuxArm64": "https://dl.static-php.dev/static-php-cli/bulk/php-8.3.30-fpm-linux-aarch64.tar.gz",
+            "macOSX64": "https://dl.static-php.dev/static-php-cli/bulk/php-8.3.30-fpm-macos-x86_64.tar.gz",
+            "macOSArm64": "https://dl.static-php.dev/static-php-cli/bulk/php-8.3.30-fpm-macos-aarch64.tar.gz"
+          }
+        },
+        {
+          "id": "php-8.2",
+          "version": "8.2.31",
+          "selected": false,
+          "display_name": "PHP 8.2",
+          "eol": false,
+          "lts": false,
+          "recommended": false,
+          "checksums": {},
+          "urls": {
+            "windowsX64": "https://windows.php.net/downloads/releases/php-8.2.31-nts-Win32-vs16-x64.zip",
+            "linuxX64": "https://dl.static-php.dev/static-php-cli/bulk/php-8.2.30-fpm-linux-x86_64.tar.gz",
+            "linuxArm64": "https://dl.static-php.dev/static-php-cli/bulk/php-8.2.30-fpm-linux-aarch64.tar.gz",
+            "macOSX64": "https://dl.static-php.dev/static-php-cli/bulk/php-8.2.30-fpm-macos-x86_64.tar.gz",
+            "macOSArm64": "https://dl.static-php.dev/static-php-cli/bulk/php-8.2.30-fpm-macos-aarch64.tar.gz"
+          }
+        },
+        {
+          "id": "php-8.1",
+          "version": "8.1.34",
+          "selected": false,
+          "display_name": "PHP 8.1 (EOL)",
+          "eol": true,
+          "lts": false,
+          "recommended": false,
+          "checksums": {},
+          "urls": {
+            "windowsX64": "https://windows.php.net/downloads/releases/php-8.1.34-nts-Win32-vs16-x64.zip",
+            "linuxX64": "https://dl.static-php.dev/static-php-cli/bulk/php-8.1.34-fpm-linux-x86_64.tar.gz",
+            "linuxArm64": "https://dl.static-php.dev/static-php-cli/bulk/php-8.1.34-fpm-linux-aarch64.tar.gz",
+            "macOSX64": "https://dl.static-php.dev/static-php-cli/bulk/php-8.1.34-fpm-macos-x86_64.tar.gz",
+            "macOSArm64": "https://dl.static-php.dev/static-php-cli/bulk/php-8.1.34-fpm-macos-aarch64.tar.gz"
+          }
+        },
+        {
+          "id": "php-8.0",
+          "version": "8.0.30",
+          "selected": false,
+          "display_name": "PHP 8.0 (EOL)",
+          "eol": true,
+          "lts": false,
+          "recommended": false,
+          "checksums": {},
+          "urls": {
+            "windowsX64": "https://windows.php.net/downloads/releases/php-8.0.30-nts-Win32-vs16-x64.zip",
+            "linuxX64": "https://dl.static-php.dev/static-php-cli/bulk/php-8.0.30-fpm-linux-x86_64.tar.gz",
+            "linuxArm64": "https://dl.static-php.dev/static-php-cli/bulk/php-8.0.30-fpm-linux-aarch64.tar.gz",
+            "macOSX64": "https://dl.static-php.dev/static-php-cli/bulk/php-8.0.30-fpm-macos-x86_64.tar.gz",
+            "macOSArm64": "https://dl.static-php.dev/static-php-cli/bulk/php-8.0.30-fpm-macos-aarch64.tar.gz"
           }
         },
         {
           "id": "php-7.4",
           "version": "7.4.33",
           "selected": false,
-          "display_name": "PHP 7.4.33",
+          "display_name": "PHP 7.4 (EOL)",
           "eol": true,
           "lts": false,
-          "checksums": {
-            "windowsX64": "14ae3250d4447c8ccfc4c45a70d90adfbcd61e728d85f0be56a7ddf8f9c8aace"
-          },
+          "recommended": false,
+          "checksums": {},
           "urls": {
-            "windowsX64": "https://downloads.php.net/~windows/releases/archives/php-7.4.33-nts-Win32-vc15-x64.zip"
+            "windowsX64": "https://windows.php.net/downloads/releases/php-7.4.33-nts-Win32-vc15-x64.zip"
+          }
+        },
+        {
+          "id": "php-7.3",
+          "version": "7.3.33",
+          "selected": false,
+          "display_name": "PHP 7.3 (EOL)",
+          "eol": true,
+          "lts": false,
+          "recommended": false,
+          "checksums": {},
+          "urls": {
+            "windowsX64": "https://windows.php.net/downloads/releases/archives/php-7.3.33-nts-Win32-VC15-x64.zip"
+          }
+        },
+        {
+          "id": "php-7.2",
+          "version": "7.2.34",
+          "selected": false,
+          "display_name": "PHP 7.2 (EOL)",
+          "eol": true,
+          "lts": false,
+          "recommended": false,
+          "checksums": {},
+          "urls": {
+            "windowsX64": "https://windows.php.net/downloads/releases/archives/php-7.2.34-nts-Win32-VC15-x64.zip"
+          }
+        },
+        {
+          "id": "php-7.1",
+          "version": "7.1.33",
+          "selected": false,
+          "display_name": "PHP 7.1 (EOL)",
+          "eol": true,
+          "lts": false,
+          "recommended": false,
+          "checksums": {},
+          "urls": {
+            "windowsX64": "https://windows.php.net/downloads/releases/archives/php-7.1.33-nts-Win32-VC14-x64.zip"
+          }
+        },
+        {
+          "id": "php-7.0",
+          "version": "7.0.33",
+          "selected": false,
+          "display_name": "PHP 7.0 (EOL)",
+          "eol": true,
+          "lts": false,
+          "recommended": false,
+          "checksums": {},
+          "urls": {
+            "windowsX64": "https://windows.php.net/downloads/releases/archives/php-7.0.33-nts-Win32-VC14-x64.zip"
+          }
+        },
+        {
+          "id": "php-5.6",
+          "version": "5.6.40",
+          "selected": false,
+          "display_name": "PHP 5.6 (EOL)",
+          "eol": true,
+          "lts": false,
+          "recommended": false,
+          "checksums": {},
+          "urls": {
+            "windowsX64": "https://windows.php.net/downloads/releases/archives/php-5.6.40-nts-Win32-VC11-x64.zip"
+          }
+        },
+        {
+          "id": "php-5.5",
+          "version": "5.5.38",
+          "selected": false,
+          "display_name": "PHP 5.5 (EOL)",
+          "eol": true,
+          "lts": false,
+          "recommended": false,
+          "checksums": {},
+          "urls": {
+            "windowsX64": "https://windows.php.net/downloads/releases/archives/php-5.5.38-nts-Win32-VC11-x64.zip"
           }
         }
       ]

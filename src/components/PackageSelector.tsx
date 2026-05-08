@@ -36,6 +36,14 @@ export function PackageSelector({ onSelectionChange, initialSelection }: Package
     }
   );
 
+  const getPhpLabel = (pkg: PhpPackage): string => {
+    const badges: string[] = [];
+    if (pkg.lts) badges.push("LTS");
+    if (pkg.eol) badges.push("EOL");
+    if (pkg.recommended) badges.push("Recommended");
+    return badges.length > 0 ? `${pkg.display_name} [${badges.join(", ")}]` : pkg.display_name;
+  };
+
   useEffect(() => {
     loadPackages();
     // Detect platform for database display name
@@ -133,8 +141,7 @@ export function PackageSelector({ onSelectionChange, initialSelection }: Package
         >
           {availablePhpPackages.map((pkg: PhpPackage) => (
             <option key={pkg.id} value={pkg.id}>
-              {pkg.display_name}
-              {pkg.eol && " (EOL)"}
+              {getPhpLabel(pkg)}
             </option>
           ))}
         </select>
@@ -184,7 +191,7 @@ export function PackageSelector({ onSelectionChange, initialSelection }: Package
           <strong>Default:</strong> PHP 8.5, {getDatabaseDisplayName(currentPlatform)} 9.7, phpMyAdmin 5.2
         </p>
         <p style={{ fontSize: "0.875rem", color: "var(--text-secondary)", margin: 0 }}>
-          <strong>Note:</strong> EOL versions may have security vulnerabilities.
+          <strong>Note:</strong> EOL versions are unsupported and may have security vulnerabilities. PHP 5.5–7.3 are available on Windows only.
         </p>
       </div>
     </div>
