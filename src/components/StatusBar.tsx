@@ -1,7 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { Activity, HardDrive } from "lucide-react";
 import { useEffect, useState } from "react";
-import pkg from "../../package.json";
 import { ServiceMap } from "../types/services";
 
 interface StatusBarProps {
@@ -104,7 +103,6 @@ export function StatusBar({ services, appPaths, ...props }: StatusBarProps) {
         </span>
       </span>
       <span>CHAMP By Thirawat27</span>
-      <span>CHAMP v{pkg.version}</span>
     </footer>
   );
 }

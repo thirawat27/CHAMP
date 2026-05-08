@@ -281,13 +281,13 @@ describe("Dashboard Component", () => {
   });
 
   describe("TC-PM-DASH-07: Quick Actions", () => {
-    it("should display version information", async () => {
+    it("should display app name without version", async () => {
       vi.mocked(invoke).mockResolvedValue(mockServiceMap);
 
       render(<Dashboard />);
 
       await waitFor(() => {
-        expect(screen.getByText("CHAMP v1.1.0")).toBeInTheDocument();
+        expect(screen.getByText("CHAMP By Thirawat27")).toBeInTheDocument();
       });
     });
   });
