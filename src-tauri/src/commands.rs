@@ -1,6 +1,22 @@
 //! Tauri IPC Commands
 //!
 //! This module contains all Tauri commands that are exposed to the frontend.
+//! Commands are invoked from the React frontend using the `invoke()` function.
+//!
+//! # Command Categories
+//!
+//! - **Folder Operations**: `open_folder`, `open_manual`
+//! - **Service Control**: `start_service`, `stop_service`, `restart_service`, `start_all_services`, `stop_all_services`, `restart_all_services`
+//! - **Service Status**: `get_all_statuses`
+//! - **Settings**: `get_settings`, `save_settings`, `validate_settings`
+//! - **Port Checking**: `check_ports`
+//! - **Runtime Management**: `check_runtime_installed`, `download_runtime`, `download_runtime_with_packages`, `download_runtime_with_skip`
+//! - **Installation**: `reset_installation`, `get_runtime_dir`, `get_install_dir`, `get_app_paths`
+//! - **System Metrics**: `get_system_metrics`
+//! - **Package Management**: `get_available_packages_cmd`, `get_package_selection`, `update_package_selection`
+//! - **PHP Version Management**: `get_installed_php_versions`, `switch_php_version`, `download_php_version`
+//! - **Version Info**: `get_installed_versions`, `check_existing_components`
+//! - **Dependencies**: `check_system_dependencies`
 
 use crate::config::AppSettings;
 use crate::process::{ServiceMap, ServiceState, ServiceType};
@@ -23,6 +39,21 @@ use tauri::State;
 ///
 /// This is a wrapper function that forwards to the plugin for cross-platform compatibility.
 /// The plugin handles platform-specific operations internally.
+///
+/// # Arguments
+///
+/// * `path` - The folder path to open
+///
+/// # Returns
+///
+/// * `Ok(())` - If the folder was opened successfully
+/// * `Err(String)` - If the operation failed
+///
+/// # Examples
+///
+/// ```rust,ignore
+/// open_folder("/path/to/folder".to_string()).await?;
+/// ```
 #[tauri::command]
 pub async fn open_folder(path: String) -> Result<(), String> {
     use tauri_plugin_opener::reveal_item_in_dir;
@@ -44,6 +75,15 @@ pub async fn open_folder(path: String) -> Result<(), String> {
 /// This command locates the MANUAL.html resource file and reveals it in the
 /// file manager using tauri-plugin-opener for cross-platform compatibility.
 /// Users can then open it with their preferred browser or HTML viewer.
+///
+/// # Arguments
+///
+/// * `app` - Tauri application handle
+///
+/// # Returns
+///
+/// * `Ok(())` - If the manual was opened successfully
+/// * `Err(String)` - If the manual file was not found or could not be opened
 #[tauri::command]
 pub async fn open_manual(app: tauri::AppHandle) -> Result<(), String> {
     use tauri::Manager;
@@ -68,9 +108,10 @@ pub async fn open_manual(app: tauri::AppHandle) -> Result<(), String> {
     Ok(())
 }
 
-// Global state for download progress
+/// Global state for download progress tracking
 static DOWNLOAD_PROGRESS: Mutex<Option<DownloadProgress>> = Mutex::new(None);
 
+/// Data transfer object for application paths
 #[derive(Debug, Serialize)]
 pub struct AppPathsDto {
     pub base_dir: String,
@@ -81,6 +122,7 @@ pub struct AppPathsDto {
     pub projects_dir: String,
 }
 
+/// Data transfer object for installed PHP version information
 #[derive(Debug, Serialize)]
 pub struct InstalledPhpVersionDto {
     pub id: String,
@@ -94,6 +136,7 @@ pub struct InstalledPhpVersionDto {
     pub path: Option<String>,
 }
 
+/// Data transfer object for system metrics (CPU, memory, network)
 #[derive(Clone, Debug, Serialize)]
 pub struct SystemMetricsDto {
     pub cpu_usage: f32,
@@ -103,9 +146,11 @@ pub struct SystemMetricsDto {
     pub network_tx_bps: u64,
 }
 
+/// Minimum interval between system metrics samples to avoid excessive CPU usage
 const SYSTEM_METRICS_MIN_SAMPLE_INTERVAL: std::time::Duration =
     std::time::Duration::from_millis(1500);
 
+/// System metrics monitor with caching to reduce overhead
 struct SystemMetricsMonitor {
     system: System,
     networks: Networks,
@@ -200,6 +245,16 @@ fn marker_version(path: &Path) -> Option<String> {
 }
 
 /// Start a service
+///
+/// # Arguments
+///
+/// * `service` - The service type to start
+/// * `state` - Application state containing the process manager
+///
+/// # Returns
+///
+/// * `Ok(ServiceMap)` - Updated service statuses
+/// * `Err(String)` - If the operation failed
 #[tauri::command]
 pub async fn start_service(
     service: ServiceType,
@@ -224,6 +279,16 @@ pub async fn start_service(
 }
 
 /// Stop a service
+///
+/// # Arguments
+///
+/// * `service` - The service type to stop
+/// * `state` - Application state containing the process manager
+///
+/// # Returns
+///
+/// * `Ok(ServiceMap)` - Updated service statuses
+/// * `Err(String)` - If the operation failed
 #[tauri::command]
 pub async fn stop_service(
     service: ServiceType,
@@ -243,6 +308,16 @@ pub async fn stop_service(
 }
 
 /// Restart a service
+///
+/// # Arguments
+///
+/// * `service` - The service type to restart
+/// * `state` - Application state containing the process manager
+///
+/// # Returns
+///
+/// * `Ok(ServiceMap)` - Updated service statuses
+/// * `Err(String)` - If the operation failed
 #[tauri::command]
 pub async fn restart_service(
     service: ServiceType,
@@ -785,7 +860,7 @@ pub async fn get_installed_versions() -> Result<std::collections::HashMap<String
 
     // Add Caddy version from default config (not in packages)
     if !versions.contains_key("caddy") {
-        versions.insert("caddy".to_string(), "2.11.2".to_string());
+        versions.insert("caddy".to_string(), crate::constants::DEFAULT_CADDY_VERSION.to_string());
     }
 
     Ok(versions)

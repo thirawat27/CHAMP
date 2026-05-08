@@ -1,26 +1,56 @@
+/**
+ * ServiceCard Component
+ * 
+ * Displays a service's status, port, and control buttons.
+ * Shows real-time state updates and error messages.
+ */
+
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { Database, Globe2, LoaderCircle, Play, RefreshCw, Square, Terminal } from "lucide-react";
 import { DEFAULT_PORTS, SERVICE_DESCRIPTIONS, SERVICE_DISPLAY_NAMES, ServiceState, ServiceType } from "../types/services";
 
+/**
+ * Props for the ServiceCard component
+ */
 interface ServiceCardProps {
+  /** Type of service (Caddy, PHP-FPM, or MySQL) */
   serviceType: ServiceType;
+  /** Current state of the service */
   state: ServiceState;
+  /** Port number the service is running on */
   port?: number;
+  /** Error message if service is in error state */
   error?: string;
+  /** Whether the service is currently processing a command */
   busy?: boolean;
+  /** Label to show when busy (e.g., "Starting...", "Stopping...") */
   busyLabel?: string;
+  /** Callback when start button is clicked */
   onStart: () => void;
+  /** Callback when stop button is clicked */
   onStop: () => void;
+  /** Callback when restart button is clicked */
   onRestart: () => void;
+  /** Additional HTML attributes */
   [key: string]: unknown;
 }
 
+/**
+ * Icon mapping for each service type
+ */
 const SERVICE_ICONS = {
   [ServiceType.Caddy]: Globe2,
   [ServiceType.PhpFpm]: Terminal,
   [ServiceType.MySQL]: Database,
 };
 
+/**
+ * Generate the service URL based on service type and port
+ * 
+ * @param serviceType - The type of service
+ * @param port - The port number
+ * @returns The service URL string
+ */
 function getServiceUrl(serviceType: ServiceType, port: number) {
   return {
     [ServiceType.Caddy]: `http://localhost:${port}`,
@@ -29,6 +59,16 @@ function getServiceUrl(serviceType: ServiceType, port: number) {
   }[serviceType];
 }
 
+/**
+ * ServiceCard component displays a service's status and controls
+ * 
+ * Shows the service name, description, current state, port, and URL.
+ * Provides buttons to start, stop, and restart the service.
+ * Displays error messages when the service is in an error state.
+ * 
+ * @param props - Component props
+ * @returns ServiceCard component
+ */
 export function ServiceCard({
   serviceType,
   state,

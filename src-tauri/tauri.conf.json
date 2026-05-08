@@ -15,6 +15,9 @@
         "title": "CHAMP By Thirawat27",
         "width": 1080,
         "height": 720,
+        "minWidth": 800,
+        "minHeight": 560,
+        "resizable": true,
         "devtools": false,
         "dragDropEnabled": true
       }

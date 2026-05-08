@@ -43,4 +43,5 @@ opt-level = 3        # Maximum optimization
 lto = true           # Link-time optimization — reduces binary size significantly
 codegen-units = 1    # Single codegen unit — slower compile but smaller/faster binary
 strip = true         # Strip debug symbols from binary
-panic = "abort"      # Smaller binary, no unwinding tables
+# NOTE: panic = "abort" is intentionally omitted — Tauri and some dependencies
+# rely on unwinding for safe error handling during startup (tray icon, window setup).

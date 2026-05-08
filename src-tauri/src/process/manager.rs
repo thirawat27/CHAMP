@@ -1,4 +1,5 @@
 use super::{ServiceInfo, ServiceMap, ServiceState, ServiceType};
+use crate::constants::*;
 use crate::runtime::locator::{locate_runtime_binaries, RuntimePaths};
 use std::collections::HashMap;
 use std::fs::{self, File, OpenOptions};
@@ -27,10 +28,7 @@ fn configure_no_window(command: Command) -> Command {
 
 /// Open a log file with retry logic for Windows file locking
 fn open_log_file_with_retry(log_path: &PathBuf, service_name: &str) -> Result<File, String> {
-    let max_retries = 5;
-    let retry_delay_ms = 100;
-
-    for attempt in 0..max_retries {
+    for attempt in 0..MAX_LOG_FILE_RETRY {
         // Try to open the file, truncating if it exists (for fresh logs)
         // On subsequent retries, try to append in case another process has it open
         let result = if attempt == 0 {
@@ -42,10 +40,10 @@ fn open_log_file_with_retry(log_path: &PathBuf, service_name: &str) -> Result<Fi
         match result {
             Ok(file) => return Ok(file),
             Err(e) => {
-                if e.raw_os_error() == Some(32) && attempt < max_retries - 1 {
+                if e.raw_os_error() == Some(32) && attempt < MAX_LOG_FILE_RETRY - 1 {
                     // Windows error 32: file is being used by another process
                     // Wait and retry
-                    std::thread::sleep(std::time::Duration::from_millis(retry_delay_ms));
+                    std::thread::sleep(log_file_retry_delay());
                 } else {
                     return Err(format!(
                         "Failed to create {} log file after {} attempts: {}",
@@ -96,7 +94,7 @@ fn format_process_exit_error(summary: &str, status: ExitStatus, log_path: Option
     let mut message = format!("{} ({})", summary, format_exit_status(status));
     if let Some(path) = log_path {
         message.push_str(&format!("\nLog file: {}", path.display()));
-        if let Some(tail) = read_log_tail(path, 40) {
+        if let Some(tail) = read_log_tail(path, MAX_LOG_TAIL_LINES) {
             message.push_str("\nLast log lines:\n");
             message.push_str(&tail);
         }
@@ -354,13 +352,13 @@ impl ProcessManager {
                 // รอให้ port ว่างนานขึ้น
                 let _ = wait_for_port_release(
                     service_process.port, 
-                    std::time::Duration::from_secs(8)
+                    mysql_port_release_timeout()
                 );
             }
         } else {
             let _ = wait_for_port_release(
                 service_process.port, 
-                std::time::Duration::from_secs(4)
+                default_port_release_timeout()
             );
         }
 
@@ -545,14 +543,14 @@ fn start_caddy(
     mysql_port: u16,
     database_tool_id: &str,
 ) -> Result<(), String> {
-    if !wait_for_port_release(service_process.port, std::time::Duration::from_millis(300)) {
+    if !wait_for_port_release(service_process.port, port_check_timeout()) {
         let stopped = stop_runtime_processes_by_executable(&paths.caddy, "Caddy")?;
         if stopped > 0 {
-            let _ = wait_for_port_release(service_process.port, std::time::Duration::from_secs(5));
+            let _ = wait_for_port_release(service_process.port, process_stop_wait_timeout());
         }
     }
 
-    if !wait_for_port_release(service_process.port, std::time::Duration::from_millis(300)) {
+    if !wait_for_port_release(service_process.port, port_check_timeout()) {
         return Err(format!(
             "Port {} is still in use. Stop the existing web server on this port and try again.",
             service_process.port
@@ -695,7 +693,7 @@ fn start_mysql(service_process: &mut ServiceProcess, paths: &RuntimePaths) -> Re
                 &format!("Stopped {} conflicting MySQL process(es)", stopped),
             );
             // รอให้ port ว่าง
-            let _ = wait_for_port_release(service_process.port, std::time::Duration::from_secs(5));
+            let _ = wait_for_port_release(service_process.port, process_stop_wait_timeout());
         }
         
         // ตรวจสอบอีกครั้ง
@@ -804,12 +802,12 @@ fn start_mysql(service_process: &mut ServiceProcess, paths: &RuntimePaths) -> Re
                 let mysql_port = service_process.port;
                 let mysql_client = database_client_binary(&paths.mysql);
                 std::thread::spawn(move || {
-                    for _ in 0..20 {
+                    for _ in 0..MYSQL_INIT_MAX_RETRIES {
                         if mysql_root_tcp_login_works(&mysql_client, mysql_port) {
                             let _ = fs::write(marker_path, "done");
                             break;
                         }
-                        std::thread::sleep(std::time::Duration::from_millis(500));
+                        std::thread::sleep(mysql_init_check_delay());
                     }
                     if let Some(init_file) = init_cleanup_path {
                         let _ = fs::remove_file(init_file);

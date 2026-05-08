@@ -179,39 +179,7 @@ export function Dashboard() {
     return () => window.clearInterval(interval);
   }, [refreshMetadata, refreshStatuses]);
 
-  // Keyboard shortcuts
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      // Esc to dismiss toast (works in any keyboard layout)
-      if (e.code === "Escape" && notice) {
-        setNotice(null);
-      }
-      // Ctrl/Cmd + Comma to open settings (physical key position)
-      if ((e.ctrlKey || e.metaKey) && e.code === "Comma") {
-        e.preventDefault();
-        setShowSettings((prev) => !prev);
-      }
-      // Ctrl/Cmd + R to restart stack (physical key position)
-      if ((e.ctrlKey || e.metaKey) && e.code === "KeyR" && !busy) {
-        e.preventDefault();
-        runStackCommand("restart_all_services");
-      }
-    };
-
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [notice, busy]);
-
-  useEffect(() => {
-    if (!notice || notice.tone === "info") return undefined;
-
-    const timeout = window.setTimeout(() => {
-      setNotice(null);
-    }, 4200);
-
-    return () => window.clearTimeout(timeout);
-  }, [notice]);
-
+  // Helper functions
   const markStackTransition = (
     command: "start_all_services" | "stop_all_services" | "restart_all_services"
   ) => {
@@ -254,24 +222,26 @@ export function Dashboard() {
     });
   };
 
-  const fallbackPortMessage = (statuses: ServiceMap, fallbackMessage: string) => {
-    const changedPorts = [ServiceType.Caddy, ServiceType.PhpFpm, ServiceType.MySQL]
-      .map((serviceType) => {
-        const service = statuses[serviceType];
-        const expectedPort = expectedPorts[serviceType];
-        if (!service || service.port === expectedPort) return null;
-        return `${SERVICE_DISPLAY_NAMES[serviceType]} ${service.port}`;
-      })
-      .filter((value): value is string => Boolean(value));
+  const fallbackPortMessage = useMemo(() => {
+    return (statuses: ServiceMap, fallbackMessage: string) => {
+      const changedPorts = [ServiceType.Caddy, ServiceType.PhpFpm, ServiceType.MySQL]
+        .map((serviceType) => {
+          const service = statuses[serviceType];
+          const expectedPort = expectedPorts[serviceType];
+          if (!service || service.port === expectedPort) return null;
+          return `${SERVICE_DISPLAY_NAMES[serviceType]} ${service.port}`;
+        })
+        .filter((value): value is string => Boolean(value));
 
-    if (changedPorts.length === 0) {
-      return fallbackMessage;
-    }
+      if (changedPorts.length === 0) {
+        return fallbackMessage;
+      }
 
-    return `Using fallback ports: ${changedPorts.join(", ")}.`;
-  };
+      return `Using fallback ports: ${changedPorts.join(", ")}.`;
+    };
+  }, [expectedPorts]);
 
-  const runStackCommand = async (
+  const runStackCommand = useCallback(async (
     command: "start_all_services" | "stop_all_services" | "restart_all_services"
   ) => {
     const copy = STACK_COMMAND_COPY[command];
@@ -302,7 +272,40 @@ export function Dashboard() {
     } finally {
       setBusy(null);
     }
-  };
+  }, [refreshStatuses, fallbackPortMessage]);
+
+  // Keyboard shortcuts
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Esc to dismiss toast (works in any keyboard layout)
+      if (e.code === "Escape" && notice) {
+        setNotice(null);
+      }
+      // Ctrl/Cmd + Comma to open settings (physical key position)
+      if ((e.ctrlKey || e.metaKey) && e.code === "Comma") {
+        e.preventDefault();
+        setShowSettings((prev) => !prev);
+      }
+      // Ctrl/Cmd + R to restart stack (physical key position)
+      if ((e.ctrlKey || e.metaKey) && e.code === "KeyR" && !busy) {
+        e.preventDefault();
+        runStackCommand("restart_all_services");
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [notice, busy, runStackCommand]);
+
+  useEffect(() => {
+    if (!notice || notice.tone === "info") return undefined;
+
+    const timeout = window.setTimeout(() => {
+      setNotice(null);
+    }, 4200);
+
+    return () => window.clearTimeout(timeout);
+  }, [notice]);
 
   const runServiceCommand = async (
     command: "start_service" | "stop_service" | "restart_service",

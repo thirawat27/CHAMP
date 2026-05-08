@@ -1,8 +1,13 @@
 // Modules
 mod commands;
 mod config;
+mod constants;
+mod error;
 mod process;
 mod runtime;
+
+// Re-exports
+pub use error::{ChampError, Result};
 
 // Re-exports
 pub use process::manager::ProcessManager;
@@ -208,7 +213,9 @@ fn handle_menu_event(app: &AppHandle, event: MenuEvent) {
         "tray-quit" => {
             // Cleanup services before quitting
             if let Some(state) = app.try_state::<AppState>() {
-                let _ = state.process_manager.lock().unwrap().stop_all();
+                if let Ok(mut manager) = state.process_manager.lock() {
+                    let _ = manager.stop_all();
+                }
             }
             std::process::exit(0);
         }
@@ -216,21 +223,26 @@ fn handle_menu_event(app: &AppHandle, event: MenuEvent) {
     }
 }
 
-fn setup_system_tray(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>> {
+fn setup_system_tray(app: &tauri::App) -> std::result::Result<(), Box<dyn std::error::Error>> {
     // Embed the icon directly in the binary to ensure it's always available
     #[cfg(target_os = "windows")]
     let icon_bytes = include_bytes!("../icons/icon.ico");
     #[cfg(not(target_os = "windows"))]
     let icon_bytes = include_bytes!("../icons/32x32.png");
 
-    // Load and decode the embedded image
-    let img = image::load_from_memory(icon_bytes)?;
-    let rgba = img.to_rgba8();
-    let dimensions = rgba.dimensions();
-    let raw_bytes = rgba.as_raw().to_vec();
-
-    // Create Tauri Image from raw RGBA bytes
-    let tray_icon = Image::new_owned(raw_bytes, dimensions.0, dimensions.1);
+    // Load and decode the embedded image — fall back to a blank 1×1 icon on failure
+    let tray_icon = match image::load_from_memory(icon_bytes) {
+        Ok(img) => {
+            let rgba = img.to_rgba8();
+            let (w, h) = rgba.dimensions();
+            Image::new_owned(rgba.into_raw(), w, h)
+        }
+        Err(e) => {
+            eprintln!("Warning: failed to decode tray icon: {e}. Using blank icon.");
+            // 1×1 transparent RGBA fallback so the app still starts
+            Image::new_owned(vec![0u8; 4], 1, 1)
+        }
+    };
 
     // Create tray menu items
     let show_item = MenuItem::with_id(app, "tray-show", "Show CHAMP", true, None::<&str>)?;
