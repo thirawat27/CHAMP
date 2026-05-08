@@ -3,6 +3,7 @@ import { openUrl } from "@tauri-apps/plugin-opener";
 import {
   AlertTriangle,
   CheckCircle2,
+  CircleHelp,
   Database,
   Folder,
   Globe,
@@ -23,6 +24,7 @@ import {
   ServiceState,
   ServiceType,
 } from "../types/services";
+import { HelpModal } from "./HelpModal";
 import { ServiceCard } from "./ServiceCard";
 import { SettingsPanel } from "./SettingsPanel";
 import { StatusBar } from "./StatusBar";
@@ -118,6 +120,7 @@ function GitHubIcon({ size = 16 }: { size?: number }) {
 export function Dashboard() {
   const [services, setServices] = useState<Partial<ServiceMap>>({});
   const [showSettings, setShowSettings] = useState(false);
+  const [showHelp, setShowHelp] = useState(false);
   const [appPaths, setAppPaths] = useState<AppPaths | null>(null);
   const [settings, setSettings] = useState<AppSettings | null>(null);
   const [installedVersions, setInstalledVersions] = useState<Record<string, string>>({});
@@ -281,6 +284,11 @@ export function Dashboard() {
       if (e.code === "Escape" && notice) {
         setNotice(null);
       }
+      // ? to show help (Shift + Slash)
+      if (e.key === "?" && !showSettings && !showHelp) {
+        e.preventDefault();
+        setShowHelp(true);
+      }
       // Ctrl/Cmd + Comma to open settings (physical key position)
       if ((e.ctrlKey || e.metaKey) && e.code === "Comma") {
         e.preventDefault();
@@ -291,11 +299,41 @@ export function Dashboard() {
         e.preventDefault();
         runStackCommand("restart_all_services");
       }
+      // Ctrl/Cmd + S to start stack
+      if ((e.ctrlKey || e.metaKey) && e.code === "KeyS" && !busy && !allRunning) {
+        e.preventDefault();
+        runStackCommand("start_all_services");
+      }
+      // Ctrl/Cmd + X to stop stack
+      if ((e.ctrlKey || e.metaKey) && e.code === "KeyX" && !busy && runningCount > 0) {
+        e.preventDefault();
+        runStackCommand("stop_all_services");
+      }
+      // Ctrl/Cmd + O to open projects folder
+      if ((e.ctrlKey || e.metaKey) && e.code === "KeyO") {
+        e.preventDefault();
+        openFolder(appPaths?.projects_dir);
+      }
+      // Ctrl/Cmd + L to open logs folder
+      if ((e.ctrlKey || e.metaKey) && e.code === "KeyL") {
+        e.preventDefault();
+        openFolder(appPaths?.logs_dir);
+      }
+      // Ctrl/Cmd + W to open website
+      if ((e.ctrlKey || e.metaKey) && e.code === "KeyW" && isCaddyRunning) {
+        e.preventDefault();
+        openUrl(webServerUrl);
+      }
+      // Ctrl/Cmd + D to open database tool
+      if ((e.ctrlKey || e.metaKey) && e.code === "KeyD" && isCaddyRunning) {
+        e.preventDefault();
+        openUrl(databaseToolUrl);
+      }
     };
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [notice, busy, runStackCommand]);
+  }, [notice, busy, runStackCommand, allRunning, runningCount, appPaths, isCaddyRunning, webServerUrl, databaseToolUrl, showSettings, showHelp]);
 
   useEffect(() => {
     if (!notice || notice.tone === "info") return undefined;
@@ -384,7 +422,7 @@ export function Dashboard() {
             className="btn-command primary"
             onClick={() => runStackCommand("start_all_services")}
             disabled={Boolean(busy) || allRunning}
-            title="Start all services"
+            title="Start all services (Ctrl+S)"
           >
             {busyStackCommand === "start_all_services" ? (
               <LoaderCircle size={16} className="spin-icon" />
@@ -414,7 +452,7 @@ export function Dashboard() {
             className="btn-command danger"
             onClick={() => runStackCommand("stop_all_services")}
             disabled={Boolean(busy) || runningCount === 0}
-            title="Stop all services"
+            title="Stop all services (Ctrl+X)"
           >
             {busyStackCommand === "stop_all_services" ? (
               <LoaderCircle size={15} className="spin-icon" />
@@ -432,6 +470,14 @@ export function Dashboard() {
             aria-label="Source repository"
           >
             <GitHubIcon size={18} />
+          </button>
+          <button
+            className="icon-button"
+            onClick={() => setShowHelp(true)}
+            title="Keyboard shortcuts (?)"
+            aria-label="Help"
+          >
+            <CircleHelp size={18} />
           </button>
           <button
             className="icon-button"
@@ -481,7 +527,7 @@ export function Dashboard() {
               className="btn-quick-action action-site"
               onClick={() => openUrl(webServerUrl)}
               disabled={!isCaddyRunning}
-              title={`Open ${webServerUrl}`}
+              title={`Open ${webServerUrl} (Ctrl+W)`}
             >
               <Globe size={16} /> Site
             </button>
@@ -489,21 +535,21 @@ export function Dashboard() {
               className="btn-quick-action action-database"
               onClick={() => openUrl(databaseToolUrl)}
               disabled={!isCaddyRunning}
-              title={`Open ${databaseToolName}`}
+              title={`Open ${databaseToolName} (Ctrl+D)`}
             >
               <Database size={16} /> {databaseToolName}
             </button>
             <button 
               className="btn-quick-action action-projects" 
               onClick={() => openFolder(appPaths?.projects_dir)}
-              title="Open projects folder"
+              title="Open projects folder (Ctrl+O)"
             >
               <Folder size={16} /> Projects
             </button>
             <button 
               className="btn-quick-action action-logs" 
               onClick={() => openFolder(appPaths?.logs_dir)}
-              title="Open logs folder"
+              title="Open logs folder (Ctrl+L)"
             >
               <TerminalSquare size={16} /> Logs
             </button>
@@ -570,6 +616,8 @@ export function Dashboard() {
           }}
         />
       )}
+
+      {showHelp && <HelpModal onClose={() => setShowHelp(false)} />}
     </div>
   );
 }

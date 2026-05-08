@@ -8,7 +8,7 @@
 
 **C**addy + **H**TTP(S) + **A**dminer / phpmy**A**dmin + **M**ySQL + **P**HP
 
-[Features](#-features) • [Installation](#-installation) • [Usage](#-usage) • [Development](#-development) • [Configuration](#-configuration)
+[Features](#-features) • [Installation](#-installation) • [Usage](#-usage) • [Keyboard Shortcuts](KEYBOARD_SHORTCUTS.md) • [Developer Experience](DX_FEATURES.md) • [Development](#-development) • [Configuration](#-configuration)
 
 </div>
 
@@ -122,13 +122,33 @@ Download the latest release for your platform from the [Releases](https://github
 
 ### Keyboard Shortcuts
 
+CHAMP provides comprehensive keyboard shortcuts for efficient workflow:
+
+#### Service Control
 | Shortcut | Action |
 | -------- | ------ |
+| `Ctrl / Cmd + S` | Start all services |
 | `Ctrl / Cmd + R` | Restart all services |
-| `Ctrl / Cmd + ,` | Open / close Settings |
-| `Esc` | Dismiss notification · Close Settings |
+| `Ctrl / Cmd + X` | Stop all services |
 
-> Shortcuts use physical key positions (`e.code`) so they work regardless of keyboard language (Thai, English, etc.).
+#### Quick Access
+| Shortcut | Action |
+| -------- | ------ |
+| `Ctrl / Cmd + W` | Open website (localhost) |
+| `Ctrl / Cmd + D` | Open database tool (phpMyAdmin/Adminer) |
+| `Ctrl / Cmd + O` | Open projects folder |
+| `Ctrl / Cmd + L` | Open logs folder |
+
+#### UI Navigation
+| Shortcut | Action |
+| -------- | ------ |
+| `Ctrl / Cmd + ,` | Toggle Settings panel |
+| `?` | Show keyboard shortcuts help |
+| `Esc` | Dismiss notification or close Settings |
+
+> **Language-Independent**: All shortcuts use physical key positions (`e.code`) so they work regardless of keyboard language (Thai, English, etc.).
+
+📖 **[View Complete Keyboard Shortcuts Documentation](KEYBOARD_SHORTCUTS.md)**
 
 ### System Tray
 

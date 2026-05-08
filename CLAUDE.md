@@ -122,10 +122,13 @@ The project follows an 8-phase implementation plan:
 | `src-tauri/src/lib.rs` | Tauri commands and invoke_handler |
 | `src-tauri/Cargo.toml` | Rust dependencies |
 | `vite.config.ts` | Frontend dev server (port 1420) |
-| `DEVELOPMENT_PLAN.md` | Full implementation plan and architecture details |
 | `src/App.css` | Global styles, theme variables, scrollbar styling |
-| `src/components/Dashboard.tsx` | Main dashboard, keyboard shortcuts (Ctrl+R, Ctrl+,, Esc) |
+| `src/components/Dashboard.tsx` | Main dashboard, keyboard shortcuts |
+| `src/components/HelpModal.tsx` | Keyboard shortcuts help modal |
 | `src/components/SettingsPanel.tsx` | Settings UI, ESC-to-close handler |
+| `src/utils/clipboard.ts` | Clipboard utilities for error reporting |
+| `KEYBOARD_SHORTCUTS.md` | Complete keyboard shortcuts documentation |
+| `DX_FEATURES.md` | Developer experience features documentation |
 
 ## UX Conventions
 
@@ -134,9 +137,28 @@ All shortcuts use `e.code` (physical key position) so they work regardless of ke
 
 | Shortcut | Action | Implemented in |
 |----------|--------|----------------|
+| `Ctrl/Cmd + S` | Start all services | `Dashboard.tsx` |
 | `Ctrl/Cmd + R` | Restart all services | `Dashboard.tsx` |
+| `Ctrl/Cmd + X` | Stop all services | `Dashboard.tsx` |
+| `Ctrl/Cmd + W` | Open website (localhost) | `Dashboard.tsx` |
+| `Ctrl/Cmd + D` | Open database tool (phpMyAdmin/Adminer) | `Dashboard.tsx` |
+| `Ctrl/Cmd + O` | Open projects folder | `Dashboard.tsx` |
+| `Ctrl/Cmd + L` | Open logs folder | `Dashboard.tsx` |
 | `Ctrl/Cmd + ,` | Toggle Settings panel | `Dashboard.tsx` |
-| `Esc` | Dismiss toast / Close Settings | `Dashboard.tsx` + `SettingsPanel.tsx` |
+| `?` | Show keyboard shortcuts help | `Dashboard.tsx` + `HelpModal.tsx` |
+| `Esc` | Dismiss toast / Close modal | `Dashboard.tsx` + `SettingsPanel.tsx` + `HelpModal.tsx` |
+
+See [KEYBOARD_SHORTCUTS.md](KEYBOARD_SHORTCUTS.md) for complete documentation.
+
+### Developer Experience (DX)
+CHAMP is designed with developer experience as a priority:
+- **Keyboard-First**: All actions accessible via shortcuts
+- **Visual Feedback**: Toast notifications, loading states, status indicators
+- **Error Transparency**: Clear error messages with context
+- **Help System**: In-app help modal (`?` key)
+- **Accessibility**: ARIA labels, keyboard navigation, screen reader support
+
+See [DX_FEATURES.md](DX_FEATURES.md) for complete DX documentation.
 
 ### Toast Notifications
 - Position: `bottom-center`, `bottom: 48px` (above status bar)
