@@ -225,10 +225,8 @@ fn handle_menu_event(app: &AppHandle, event: MenuEvent) {
 
 fn setup_system_tray(app: &tauri::App) -> std::result::Result<(), Box<dyn std::error::Error>> {
     // Embed the icon directly in the binary to ensure it's always available
-    #[cfg(target_os = "windows")]
-    let icon_bytes = include_bytes!("../icons/icon.ico");
-    #[cfg(not(target_os = "windows"))]
-    let icon_bytes = include_bytes!("../icons/32x32.png");
+    // Use the main icon.png which should contain the CHAMP logo
+    let icon_bytes = include_bytes!("../icons/icon.png");
 
     // Load and decode the embedded image — fall back to a blank 1×1 icon on failure
     let tray_icon = match image::load_from_memory(icon_bytes) {
