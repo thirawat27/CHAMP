@@ -334,7 +334,7 @@ export function SettingsPanel({ onClose, onSettingsChanged, ...props }: Settings
                     <button
                       key={php.id}
                       type="button"
-                      className={`php-version-chip ${php.active ? "active" : ""}`}
+                      className={`php-version-chip ${php.active ? "active" : ""} ${php.id === selectedPhpId ? "selected" : ""}`.trim()}
                       onClick={() => updateSelectedPhpSetting(php.id)}
                     >
                       <strong>{php.display_name}</strong>

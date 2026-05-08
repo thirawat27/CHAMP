@@ -123,8 +123,13 @@ button {
   align-items: center;
   gap: 16px;
   padding: 12px 18px;
-  background: color-mix(in srgb, var(--bg-card) 94%, transparent);
+  background: color-mix(in srgb, var(--bg-card) 80%, transparent);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
   border-bottom: 1px solid var(--border-color);
+  position: sticky;
+  top: 0;
+  z-index: 10;
 }
 
 .brand-mark {
@@ -370,6 +375,14 @@ button {
   border: 1px solid var(--border-color);
   border-radius: 8px;
   box-shadow: var(--shadow-panel);
+  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.overview-band:hover {
+  transform: translateY(-2px);
+  box-shadow: 
+    0 16px 32px rgba(119, 72, 45, 0.12),
+    0 0 0 1px color-mix(in srgb, var(--color-primary) 15%, transparent);
 }
 
 .overview-band h2 {
@@ -551,7 +564,7 @@ button {
 }
 
 button:hover:not(:disabled) {
-  transform: translateY(-1px);
+  transform: translateY(-2px);
   filter: brightness(1.18) saturate(1.2);
   box-shadow:
     0 8px 18px color-mix(in srgb, #000 28%, transparent),
@@ -559,8 +572,9 @@ button:hover:not(:disabled) {
 }
 
 button:active:not(:disabled) {
-  transform: translateY(0);
-  transition: transform 0.05s;
+  transform: translateY(1px) scale(0.97);
+  box-shadow: 0 2px 8px color-mix(in srgb, #000 20%, transparent);
+  transition: all 0.05s;
 }
 
 button:focus-visible {
@@ -609,13 +623,14 @@ button:disabled {
   border: 1px solid var(--border-color);
   border-radius: 8px;
   box-shadow: var(--shadow-panel);
-  transition: all 0.2s ease;
+  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .service-card:hover {
+  transform: translateY(-4px);
   box-shadow: 
-    0 16px 40px rgba(119, 72, 45, 0.14),
-    0 0 0 1px color-mix(in srgb, var(--color-primary) 20%, transparent);
+    0 24px 48px rgba(119, 72, 45, 0.16),
+    0 0 0 1px color-mix(in srgb, var(--color-primary) 30%, transparent);
 }
 
 .service-card.has-error {
@@ -655,8 +670,14 @@ button:disabled {
   place-items: center;
   flex: 0 0 auto;
   border-radius: 8px;
-  background: #f1dfd0;
-  color: #9a5735;
+  background: linear-gradient(135deg, color-mix(in srgb, var(--color-primary) 12%, var(--bg-card)), color-mix(in srgb, var(--color-primary) 24%, var(--bg-card)));
+  color: var(--color-primary);
+  box-shadow: 0 4px 12px color-mix(in srgb, var(--color-primary) 16%, transparent);
+  transition: transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+.service-card:hover .service-icon {
+  transform: scale(1.1) rotate(-5deg);
 }
 
 .service-card h3 {
@@ -842,7 +863,10 @@ button:disabled {
   place-items: center;
   padding: 20px;
   background: rgba(8, 13, 23, 0.46);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
   z-index: 1000;
+  animation: modal-fade-in 0.2s ease;
 }
 
 .settings-panel {
@@ -960,24 +984,46 @@ button:disabled {
 .php-version-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 8px;
+  gap: 6px;
 }
 
 .php-version-chip {
-  display: grid;
-  gap: 3px;
-  min-height: 58px;
-  padding: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: 38px;
+  padding: 6px 12px;
   text-align: left;
   background: var(--bg-card-secondary);
   border: 1px solid var(--border-color);
-  border-radius: 7px;
+  border-radius: 6px;
   color: var(--text-primary);
+  transition: all 0.15s ease;
+  cursor: pointer;
+}
+
+.php-version-chip:hover {
+  background: color-mix(in srgb, var(--color-primary) 8%, var(--bg-card-secondary));
+  border-color: color-mix(in srgb, var(--color-primary) 24%, var(--border-color));
+}
+
+.php-version-chip.selected {
+  background: color-mix(in srgb, var(--color-primary) 6%, var(--bg-card));
+  border-color: color-mix(in srgb, var(--color-primary) 60%, var(--border-color));
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--color-primary) 60%, transparent) inset;
 }
 
 .php-version-chip.active {
   background: color-mix(in srgb, var(--color-accent) 12%, var(--bg-card));
-  border-color: color-mix(in srgb, var(--color-accent) 34%, var(--border-color));
+  border-color: color-mix(in srgb, var(--color-accent) 38%, var(--border-color));
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--color-accent) 38%, transparent) inset;
+}
+
+.php-version-chip.selected.active {
+  background: color-mix(in srgb, var(--color-accent) 18%, var(--bg-card));
+  border-color: var(--color-accent);
+  box-shadow: 0 0 0 1px var(--color-accent) inset;
 }
 
 .php-version-chip strong {
@@ -986,7 +1032,7 @@ button:disabled {
 
 .php-version-chip span {
   color: var(--text-secondary);
-  font-size: 12px;
+  font-size: 11.5px;
 }
 
 .compact {

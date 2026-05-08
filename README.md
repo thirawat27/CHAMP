@@ -89,9 +89,9 @@ CHAMP is a self-contained desktop application that provides a complete local web
 
 Download the latest release for your platform from the [Releases](https://github.com/thirawat27/CHAMP/releases) page:
 
-- **Windows**: `CHAMP_1.1.0_x64_en-US.msi` or `.exe`
-- **macOS**: `CHAMP_1.1.0_aarch64.dmg` (Apple Silicon) or `CHAMP_1.1.0_x64.dmg` (Intel)
-- **Linux**: `CHAMP_1.1.0_amd64.AppImage` or `.deb`
+- **Windows**: `CHAMP_x.x.x_x64_en-US.msi` or `.exe`
+- **macOS**: `CHAMP_x.x.x_aarch64.dmg` (Apple Silicon) or `CHAMP_x.x.x_x64.dmg` (Intel)
+- **Linux**: `CHAMP_x.x.x_amd64.AppImage` or `.deb`
 
 ### First Run Setup
 
