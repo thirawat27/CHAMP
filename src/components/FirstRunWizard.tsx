@@ -10,7 +10,9 @@ import {
 } from "../types/services";
 import { CheckCircle2 } from "lucide-react";
 import champLogo from "../assets/CHAMP.png";
+import { LanguageSelector } from "./LanguageSelector";
 import { PackageSelector } from "./PackageSelector";
+import { AudioManager } from "../utils/audioManager";
 
 // Helper to detect platform
 const detectPlatform = (): string => {
@@ -331,9 +333,14 @@ export function FirstRunWizard({ onComplete, ...props }: FirstRunWizardProps) {
     <div className="setup-shell" {...props}>
       <div className="setup-card">
         <aside className="setup-rail">
-          <div className="setup-brand">
-            <img className="setup-brand-logo" src={champLogo} alt="" />
-            <h1>CHAMP</h1>
+          <div className="setup-brand" style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
+              <img className="setup-brand-logo" src={champLogo} alt="" />
+              <h1>CHAMP</h1>
+            </div>
+            <div onMouseEnter={() => AudioManager.playHover()}>
+              <LanguageSelector variant="toggle" />
+            </div>
           </div>
           <p>Caddy + HTTP(S) + phpMyAdmin/Adminer + MySQL + PHP</p>
           <div className="setup-steps">

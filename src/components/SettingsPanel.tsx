@@ -10,6 +10,8 @@ import {
   PackageSelection,
   hasPackageUrlForPlatform,
 } from "../types/services";
+import { useLanguageStore, useTranslation } from "../stores/languageStore";
+import { AudioManager } from "../utils/audioManager";
 
 interface SettingsPanelProps {
   onClose: () => void;
@@ -30,11 +32,15 @@ const defaultPackageSelection: PackageSelection = {
 };
 
 export function SettingsPanel({ onClose, onSettingsChanged, ...props }: SettingsPanelProps) {
+  const { t } = useTranslation();
+  const { soundEnabled, toggleSound } = useLanguageStore();
+
   // ESC to close
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.code === "Escape") {
         e.preventDefault();
+        AudioManager.playClick();
         onClose();
       }
     };
@@ -227,17 +233,25 @@ export function SettingsPanel({ onClose, onSettingsChanged, ...props }: Settings
       >
         <header className="settings-header">
           <div>
-            <h2>Settings</h2>
-            <p>Ports, project folder, and startup behavior</p>
+            <h2>{t.settingsTitle}</h2>
+            <p>{t.settingsDescription}</p>
           </div>
-          <button className="icon-button" onClick={onClose} aria-label="Close settings">
+          <button 
+            className="icon-button" 
+            onClick={() => {
+              AudioManager.playClick();
+              onClose();
+            }} 
+            aria-label={t.close}
+            onMouseEnter={() => AudioManager.playHover()}
+          >
             <X size={18} />
           </button>
         </header>
 
         <div className="settings-content">
           {loading ? (
-            <div className="empty-state">Loading settings...</div>
+            <div className="empty-state">{t.loading}</div>
           ) : (
             <>
               {error && (
@@ -253,10 +267,10 @@ export function SettingsPanel({ onClose, onSettingsChanged, ...props }: Settings
               )}
 
               <div className="settings-section">
-                <h3>Ports</h3>
+                <h3>{t.ports}</h3>
                 <div className="settings-grid">
                   <label>
-                    <span>HTTP</span>
+                    <span>{t.httpPort}</span>
                     <input
                       className="input"
                       type="number"
@@ -267,12 +281,12 @@ export function SettingsPanel({ onClose, onSettingsChanged, ...props }: Settings
                     />
                     {portCheck && (
                       <small className={portCheck.web.available ? "ok" : "warn"}>
-                        {portCheck.web.available ? "Available" : "In use"}
+                        {portCheck.web.available ? t.portAvailable : t.portInUse}
                       </small>
                     )}
                   </label>
                   <label>
-                    <span>PHP FastCGI</span>
+                    <span>{t.phpPort}</span>
                     <input
                       className="input"
                       type="number"
@@ -283,12 +297,12 @@ export function SettingsPanel({ onClose, onSettingsChanged, ...props }: Settings
                     />
                     {portCheck && (
                       <small className={portCheck.php.available ? "ok" : "warn"}>
-                        {portCheck.php.available ? "Available" : "In use"}
+                        {portCheck.php.available ? t.portAvailable : t.portInUse}
                       </small>
                     )}
                   </label>
                   <label>
-                    <span>MySQL</span>
+                    <span>{t.mysqlPort}</span>
                     <input
                       className="input"
                       type="number"
@@ -299,20 +313,27 @@ export function SettingsPanel({ onClose, onSettingsChanged, ...props }: Settings
                     />
                     {portCheck && (
                       <small className={portCheck.mysql.available ? "ok" : "warn"}>
-                        {portCheck.mysql.available ? "Available" : "In use"}
+                        {portCheck.mysql.available ? t.portAvailable : t.portInUse}
                       </small>
                     )}
                   </label>
                 </div>
-                <button className="btn-secondary compact" onClick={checkPorts}>
-                  Check Ports
+                <button 
+                  className="btn-secondary compact" 
+                  onClick={() => {
+                    AudioManager.playClick();
+                    checkPorts();
+                  }}
+                  onMouseEnter={() => AudioManager.playHover()}
+                >
+                  {t.checkPorts}
                 </button>
               </div>
 
               <div className="settings-section">
-                <h3>PHP Versions</h3>
+                <h3>{t.phpVersions}</h3>
                 <label className="project-row">
-                  <span>Active PHP runtime</span>
+                  <span>{t.activePhpRuntime}</span>
                   <select
                     className="input"
                     value={selectedPhpId}
@@ -339,7 +360,7 @@ export function SettingsPanel({ onClose, onSettingsChanged, ...props }: Settings
                     >
                       <strong>{php.display_name}</strong>
                       <span>
-                        {php.active ? "Active" : php.installed ? "Installed" : "Available"}
+                        {php.active ? t.active : php.installed ? t.installed : t.available}
                         {php.lts ? " · LTS" : ""}
                         {php.eol ? " · EOL" : ""}
                       </span>
@@ -349,31 +370,39 @@ export function SettingsPanel({ onClose, onSettingsChanged, ...props }: Settings
                 <div className="settings-inline-actions">
                   <button
                     className="btn-secondary"
-                    onClick={installPhpVersion}
+                    onClick={() => {
+                      AudioManager.playClick();
+                      installPhpVersion();
+                    }}
                     disabled={
                       phpBusy || phpVersions.find((php) => php.id === selectedPhpId)?.installed
                     }
+                    onMouseEnter={() => AudioManager.playHover()}
                   >
-                    {phpBusy ? "Working..." : "Install Selected"}
+                    {phpBusy ? t.working : t.installSelected}
                   </button>
                   <button
                     className="btn-primary"
-                    onClick={switchPhpVersion}
+                    onClick={() => {
+                      AudioManager.playClick();
+                      switchPhpVersion();
+                    }}
                     disabled={
                       phpBusy ||
                       !phpVersions.find((php) => php.id === selectedPhpId)?.installed ||
                       phpVersions.find((php) => php.id === selectedPhpId)?.active
                     }
+                    onMouseEnter={() => AudioManager.playHover()}
                   >
-                    Switch PHP
+                    {t.switchPhp}
                   </button>
                 </div>
               </div>
 
               <div className="settings-section">
-                <h3>Database Tool</h3>
+                <h3>{t.databaseToolSelect}</h3>
                 <label className="project-row">
-                  <span>Web database manager</span>
+                  <span>{t.webDatabaseManager}</span>
                   <select
                     className="input"
                     value={settings.package_selection?.phpmyadmin ?? defaultPackageSelection.phpmyadmin}
@@ -388,10 +417,29 @@ export function SettingsPanel({ onClose, onSettingsChanged, ...props }: Settings
                 </label>
               </div>
 
+              {/* Sound Effects Section */}
               <div className="settings-section">
-                <h3>Workspace</h3>
+                <h3>{t.soundEffects}</h3>
+                <label className="toggle-row">
+                  <input
+                    type="checkbox"
+                    checked={soundEnabled}
+                    onChange={() => {
+                      toggleSound();
+                      AudioManager.playToggle();
+                    }}
+                  />
+                  <span>{t.enableSoundEffects}</span>
+                </label>
+                <p style={{ fontSize: "0.75rem", color: "var(--text-secondary)", marginTop: "4px", marginLeft: "24px" }}>
+                  {t.soundEffectsDescription}
+                </p>
+              </div>
+
+              <div className="settings-section">
+                <h3>{t.workspace}</h3>
                 <label className="project-row">
-                  <span>Projects folder</span>
+                  <span>{t.projectsFolder}</span>
                   <div className="input-with-button">
                     <input
                       className="input"
@@ -402,10 +450,14 @@ export function SettingsPanel({ onClose, onSettingsChanged, ...props }: Settings
                     />
                     <button
                       className="icon-button"
-                      onClick={openProjectRoot}
+                      onClick={() => {
+                        AudioManager.playClick();
+                        openProjectRoot();
+                      }}
                       type="button"
-                      title="Open projects folder"
-                      aria-label="Open projects folder"
+                      title={t.openProjectsFolder}
+                      aria-label={t.openProjectsFolder}
+                      onMouseEnter={() => AudioManager.playHover()}
                     >
                       <FolderOpen size={18} />
                     </button>
@@ -414,34 +466,55 @@ export function SettingsPanel({ onClose, onSettingsChanged, ...props }: Settings
               </div>
 
               <div className="settings-section">
+                <h3>{t.startup}</h3>
                 <label className="toggle-row">
                   <input
                     type="checkbox"
                     checked={settings.auto_start_services ?? false}
-                    onChange={(e) =>
+                    onChange={(e) => {
+                      AudioManager.playToggle();
                       setSettings((current) => ({
                         ...current,
                         auto_start_services: e.target.checked,
-                      }))
-                    }
+                      }));
+                    }}
                   />
-                  <span>Start stack when CHAMP opens</span>
+                  <span>{t.autoStartServices}</span>
                 </label>
+                <p style={{ fontSize: "0.75rem", color: "var(--text-secondary)", marginTop: "4px", marginLeft: "24px" }}>
+                  {t.autoStartDescription}
+                </p>
               </div>
             </>
           )}
         </div>
 
         <footer className="settings-footer">
-          <button className="btn-secondary danger" onClick={onClose} disabled={saving}>
-            Cancel
+          <button 
+            className="btn-secondary danger" 
+            onClick={() => {
+              AudioManager.playClick();
+              onClose();
+            }} 
+            disabled={saving}
+            onMouseEnter={() => AudioManager.playHover()}
+          >
+            {t.cancel}
           </button>
-          <button className="btn-primary success" onClick={handleSave} disabled={saving || loading}>
+          <button 
+            className="btn-primary success" 
+            onClick={() => {
+              AudioManager.playClick();
+              handleSave();
+            }} 
+            disabled={saving || loading}
+            onMouseEnter={() => AudioManager.playHover()}
+          >
             {saving && saveProgress?.step === "downloading"
-              ? `Downloading ${saveProgress.componentDisplay || "database tool"}`
+              ? `${t.downloading} ${saveProgress.componentDisplay || t.databaseTool}`
               : saving
-                ? "Saving..."
-                : "Save"}
+                ? `${t.save}...`
+                : t.save}
           </button>
         </footer>
       </section>

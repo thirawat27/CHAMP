@@ -17,6 +17,8 @@ import {
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import champLogo from "../assets/CHAMP.png";
+import { useTranslation } from "../stores/languageStore";
+import { AudioManager } from "../utils/audioManager";
 import {
   AppSettings,
   SERVICE_DISPLAY_NAMES,
@@ -25,6 +27,7 @@ import {
   ServiceType,
 } from "../types/services";
 import { HelpModal } from "./HelpModal";
+import { LanguageSelector } from "./LanguageSelector";
 import { ServiceCard } from "./ServiceCard";
 import { SettingsPanel } from "./SettingsPanel";
 import { StatusBar } from "./StatusBar";
@@ -118,6 +121,7 @@ function GitHubIcon({ size = 16 }: { size?: number }) {
 }
 
 export function Dashboard() {
+  const { t } = useTranslation();
   const [services, setServices] = useState<Partial<ServiceMap>>({});
   const [showSettings, setShowSettings] = useState(false);
   const [showHelp, setShowHelp] = useState(false);
@@ -126,6 +130,15 @@ export function Dashboard() {
   const [installedVersions, setInstalledVersions] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState<string | null>(null);
   const [notice, setNotice] = useState<DashboardNotice | null>(null);
+
+  // Initialize audio context on first user interaction
+  useEffect(() => {
+    const initAudio = () => {
+      AudioManager.initialize();
+    };
+    window.addEventListener("click", initAudio, { once: true });
+    return () => window.removeEventListener("click", initAudio);
+  }, []);
 
   const caddyPort = services[ServiceType.Caddy]?.port || 8080;
   const webServerUrl = `http://localhost:${caddyPort}`;
@@ -259,6 +272,7 @@ export function Dashboard() {
     try {
       const statuses = await invoke<ServiceMap>(command);
       setServices(statuses);
+      AudioManager.playNotification("success", copy.action);
       setNotice({
         tone: "success",
         action: copy.action,
@@ -266,6 +280,7 @@ export function Dashboard() {
         message: fallbackPortMessage(statuses, copy.successMessage),
       });
     } catch (error) {
+      AudioManager.playNotification("error");
       setNotice({
         tone: "error",
         title: `${command.replace(/_/g, " ")} failed`,
@@ -362,6 +377,7 @@ export function Dashboard() {
     try {
       const statuses = await invoke<ServiceMap>(command, { service });
       setServices(statuses);
+      AudioManager.playNotification("success", copy.action);
       setNotice({
         tone: "success",
         action: copy.action,
@@ -369,6 +385,7 @@ export function Dashboard() {
         message: fallbackPortMessage(statuses, "The dashboard is refreshing service status."),
       });
     } catch (error) {
+      AudioManager.playNotification("error");
       setNotice({
         tone: "error",
         title: `Failed to ${command.split("_")[0]} ${displayName}`,
@@ -413,16 +430,20 @@ export function Dashboard() {
         </div>
         <div className="titlebar-copy">
           <h1>
-            CHAMP <span>v1.2.0</span>
+            {t.appName} <span>v1.2.0</span>
           </h1>
-          <p>CHAMP By Thirawat27</p>
+          <p>{t.appDescription}</p>
         </div>
         <div className="titlebar-actions">
           <button
             className="btn-command primary"
-            onClick={() => runStackCommand("start_all_services")}
+            onClick={() => {
+              AudioManager.playClick();
+              runStackCommand("start_all_services");
+            }}
             disabled={Boolean(busy) || allRunning}
-            title="Start all services (Ctrl+S)"
+            title={`${t.startAllServices} (Ctrl+S)`}
+            onMouseEnter={() => AudioManager.playHover()}
           >
             {busyStackCommand === "start_all_services" ? (
               <LoaderCircle size={16} className="spin-icon" />
@@ -430,14 +451,18 @@ export function Dashboard() {
               <Play size={16} />
             )}
             {busyStackCommand === "start_all_services"
-              ? STACK_COMMAND_COPY.start_all_services.buttonLabel
-              : "Start Stack"}
+              ? t.starting
+              : t.start}
           </button>
           <button
             className="btn-command"
-            onClick={() => runStackCommand("restart_all_services")}
+            onClick={() => {
+              AudioManager.playClick();
+              runStackCommand("restart_all_services");
+            }}
             disabled={Boolean(busy)}
-            title="Restart all services (Ctrl+R)"
+            title={`${t.restartAllServices} (Ctrl+R)`}
+            onMouseEnter={() => AudioManager.playHover()}
           >
             {busyStackCommand === "restart_all_services" ? (
               <LoaderCircle size={16} className="spin-icon" />
@@ -445,14 +470,18 @@ export function Dashboard() {
               <RefreshCw size={16} />
             )}
             {busyStackCommand === "restart_all_services"
-              ? STACK_COMMAND_COPY.restart_all_services.buttonLabel
-              : "Restart"}
+              ? t.restarting
+              : t.restart}
           </button>
           <button
             className="btn-command danger"
-            onClick={() => runStackCommand("stop_all_services")}
+            onClick={() => {
+              AudioManager.playClick();
+              runStackCommand("stop_all_services");
+            }}
             disabled={Boolean(busy) || runningCount === 0}
-            title="Stop all services (Ctrl+X)"
+            title={`${t.stopAllServices} (Ctrl+X)`}
+            onMouseEnter={() => AudioManager.playHover()}
           >
             {busyStackCommand === "stop_all_services" ? (
               <LoaderCircle size={15} className="spin-icon" />
@@ -460,8 +489,8 @@ export function Dashboard() {
               <Square size={15} />
             )}
             {busyStackCommand === "stop_all_services"
-              ? STACK_COMMAND_COPY.stop_all_services.buttonLabel
-              : "Stop"}
+              ? t.stopping
+              : t.stop}
           </button>
           <button
             className="icon-button github"
@@ -473,20 +502,29 @@ export function Dashboard() {
           </button>
           <button
             className="icon-button"
-            onClick={() => setShowHelp(true)}
-            title="Keyboard shortcuts (?)"
-            aria-label="Help"
+            onClick={() => {
+              AudioManager.playClick();
+              setShowHelp(true);
+            }}
+            title={`${t.help} (?)`}
+            aria-label={t.help}
+            onMouseEnter={() => AudioManager.playHover()}
           >
             <CircleHelp size={18} />
           </button>
           <button
             className="icon-button"
-            onClick={() => setShowSettings(true)}
-            title="Settings (Ctrl+,)"
-            aria-label="Settings"
+            onClick={() => {
+              AudioManager.playClick();
+              setShowSettings(true);
+            }}
+            title={`${t.settings} (Ctrl+,)`}
+            aria-label={t.settings}
+            onMouseEnter={() => AudioManager.playHover()}
           >
             <Settings size={18} />
           </button>
+          <LanguageSelector variant="toggle" />
         </div>
       </header>
 
@@ -504,7 +542,15 @@ export function Dashboard() {
             <strong>{notice.title}</strong>
             <small>{notice.message}</small>
           </span>
-          <button className="notice-close" onClick={() => setNotice(null)} aria-label="Dismiss notification">
+          <button 
+            className="notice-close" 
+            onClick={() => {
+              AudioManager.playClick();
+              setNotice(null);
+            }} 
+            aria-label={t.close}
+            onMouseEnter={() => AudioManager.playHover()}
+          >
             ×
           </button>
         </div>
@@ -516,54 +562,75 @@ export function Dashboard() {
             <span
               className={`stack-state ${allRunning ? "running" : runningCount > 0 ? "partial" : ""}`}
             >
-              {allRunning ? "Running" : runningCount > 0 ? "Partial" : "Stopped"}
+              {allRunning ? t.running : runningCount > 0 ? t.active : t.stopped}
             </span>
             <h2>
-              {runningCount}/{totalCount} services active
+              {runningCount}/{totalCount} {t.services}
             </h2>
           </div>
           <div className="quick-actions">
             <button
               className="btn-quick-action action-site"
-              onClick={() => openUrl(webServerUrl)}
+              onClick={() => {
+                AudioManager.playClick();
+                openUrl(webServerUrl);
+              }}
               disabled={!isCaddyRunning}
-              title={`Open ${webServerUrl} (Ctrl+W)`}
+              title={`${t.openWebsite} (Ctrl+W)`}
+              onMouseEnter={() => AudioManager.playHover()}
             >
-              <Globe size={16} /> Site
+              <Globe size={16} /> {t.website}
             </button>
             <button
               className="btn-quick-action action-database"
-              onClick={() => openUrl(databaseToolUrl)}
+              onClick={() => {
+                AudioManager.playClick();
+                openUrl(databaseToolUrl);
+              }}
               disabled={!isCaddyRunning}
-              title={`Open ${databaseToolName} (Ctrl+D)`}
+              title={`${t.openDatabaseTool} (Ctrl+D)`}
+              onMouseEnter={() => AudioManager.playHover()}
             >
               <Database size={16} /> {databaseToolName}
             </button>
             <button 
               className="btn-quick-action action-projects" 
-              onClick={() => openFolder(appPaths?.projects_dir)}
-              title="Open projects folder (Ctrl+O)"
+              onClick={() => {
+                AudioManager.playClick();
+                openFolder(appPaths?.projects_dir);
+              }}
+              title={`${t.openProjectsFolder} (Ctrl+O)`}
+              onMouseEnter={() => AudioManager.playHover()}
             >
-              <Folder size={16} /> Projects
+              <Folder size={16} /> {t.projects}
             </button>
             <button 
               className="btn-quick-action action-logs" 
-              onClick={() => openFolder(appPaths?.logs_dir)}
-              title="Open logs folder (Ctrl+L)"
+              onClick={() => {
+                AudioManager.playClick();
+                openFolder(appPaths?.logs_dir);
+              }}
+              title={`${t.openLogsFolder} (Ctrl+L)`}
+              onMouseEnter={() => AudioManager.playHover()}
             >
-              <TerminalSquare size={16} /> Logs
+              <TerminalSquare size={16} /> {t.logs}
             </button>
             <button 
               className="btn-quick-action action-config" 
-              onClick={() => openFolder(appPaths?.config_dir)}
-              title="Open config folder"
+              onClick={() => {
+                AudioManager.playClick();
+                openFolder(appPaths?.config_dir);
+              }}
+              title={t.settings}
+              onMouseEnter={() => AudioManager.playHover()}
             >
-              <HardDrive size={16} /> Config
+              <HardDrive size={16} /> {t.settings}
             </button>
             <button 
               className="btn-quick-action github" 
               onClick={() => openUrl(SOURCE_REPO_URL)}
-              title="View source code on GitHub"
+              title="GitHub"
+              onMouseEnter={() => AudioManager.playHover()}
             >
               <GitHubIcon size={16} /> GitHub
             </button>

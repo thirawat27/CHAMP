@@ -1,6 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { Activity, HardDrive } from "lucide-react";
 import { useEffect, useState } from "react";
+import { useTranslation } from "../stores/languageStore";
 import { ServiceMap } from "../types/services";
 
 interface StatusBarProps {
@@ -44,6 +45,7 @@ function formatBytes(bytes: number): string {
 }
 
 export function StatusBar({ services, appPaths, ...props }: StatusBarProps) {
+  const { t } = useTranslation();
   const runningCount = Object.values(services).filter(
     (service) => service?.state === "running"
   ).length;
@@ -84,7 +86,7 @@ export function StatusBar({ services, appPaths, ...props }: StatusBarProps) {
   return (
     <footer className="status-bar" {...props}>
       <span>
-        <Activity size={14} /> {runningCount}/{totalCount} running
+        <Activity size={14} /> {runningCount}/{totalCount} {t.running}
       </span>
       {appPaths?.base_dir && (
         <span className="status-path">

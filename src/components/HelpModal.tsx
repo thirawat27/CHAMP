@@ -1,14 +1,19 @@
 import { X } from "lucide-react";
 import { useEffect } from "react";
+import { useTranslation } from "../stores/languageStore";
+import { AudioManager } from "../utils/audioManager";
 
 interface HelpModalProps {
   onClose: () => void;
 }
 
 export function HelpModal({ onClose }: HelpModalProps) {
+  const { t } = useTranslation();
+
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.code === "Escape") {
+        AudioManager.playClick();
         onClose();
       }
     };
@@ -18,80 +23,87 @@ export function HelpModal({ onClose }: HelpModalProps) {
   }, [onClose]);
 
   return (
-    <div className="modal-overlay" onClick={onClose}>
+    <div className="modal-overlay" onClick={() => { AudioManager.playClick(); onClose(); }}>
       <div className="modal-content help-modal" onClick={(e) => e.stopPropagation()}>
         <header className="modal-header">
-          <h2>Keyboard Shortcuts</h2>
-          <button className="icon-button" onClick={onClose} aria-label="Close help">
+          <h2>{t.shortcutsTitle}</h2>
+          <button 
+            className="icon-button" 
+            onClick={() => { AudioManager.playClick(); onClose(); }} 
+            aria-label={t.close}
+            onMouseEnter={() => AudioManager.playHover()}
+          >
             <X size={20} />
           </button>
         </header>
 
         <div className="modal-body">
           <section className="shortcut-section">
-            <h3>Service Control</h3>
+            <h3>{t.services}</h3>
             <div className="shortcut-list">
               <div className="shortcut-item">
                 <kbd>Ctrl</kbd> + <kbd>S</kbd>
-                <span>Start all services</span>
+                <span>{t.shortcutStart}</span>
               </div>
               <div className="shortcut-item">
                 <kbd>Ctrl</kbd> + <kbd>R</kbd>
-                <span>Restart all services</span>
+                <span>{t.shortcutRestart}</span>
               </div>
               <div className="shortcut-item">
                 <kbd>Ctrl</kbd> + <kbd>X</kbd>
-                <span>Stop all services</span>
+                <span>{t.shortcutStop}</span>
               </div>
             </div>
           </section>
 
           <section className="shortcut-section">
-            <h3>Quick Access</h3>
+            <h3>{t.quickAccess}</h3>
             <div className="shortcut-list">
               <div className="shortcut-item">
                 <kbd>Ctrl</kbd> + <kbd>W</kbd>
-                <span>Open website (localhost)</span>
+                <span>{t.shortcutWebsite}</span>
               </div>
               <div className="shortcut-item">
                 <kbd>Ctrl</kbd> + <kbd>D</kbd>
-                <span>Open database tool</span>
+                <span>{t.shortcutDatabase}</span>
               </div>
               <div className="shortcut-item">
                 <kbd>Ctrl</kbd> + <kbd>O</kbd>
-                <span>Open projects folder</span>
+                <span>{t.shortcutProjects}</span>
               </div>
               <div className="shortcut-item">
                 <kbd>Ctrl</kbd> + <kbd>L</kbd>
-                <span>Open logs folder</span>
+                <span>{t.shortcutLogs}</span>
               </div>
             </div>
           </section>
 
           <section className="shortcut-section">
-            <h3>UI Navigation</h3>
+            <h3>UI</h3>
             <div className="shortcut-list">
               <div className="shortcut-item">
                 <kbd>Ctrl</kbd> + <kbd>,</kbd>
-                <span>Toggle Settings</span>
+                <span>{t.shortcutSettings}</span>
               </div>
               <div className="shortcut-item">
                 <kbd>?</kbd>
-                <span>Show this help</span>
+                <span>{t.shortcutHelp}</span>
               </div>
               <div className="shortcut-item">
                 <kbd>Esc</kbd>
-                <span>Close modal or dismiss notification</span>
+                <span>{t.close}</span>
               </div>
             </div>
           </section>
 
           <footer className="help-footer">
             <p>
-              <strong>Note:</strong> On macOS, use <kbd>Cmd</kbd> instead of <kbd>Ctrl</kbd>
+              <strong>Note:</strong> {t.language === "th" ? "บน macOS ใช้" : "On macOS, use"} <kbd>Cmd</kbd> {t.language === "th" ? "แทน" : "instead of"} <kbd>Ctrl</kbd>
             </p>
             <p className="help-hint">
-              All shortcuts work regardless of keyboard language (Thai, English, etc.)
+              {t.language === "th" 
+                ? "คีย์ลัดทำงานได้ทุกภาษา (ไทย, อังกฤษ, ฯลฯ)" 
+                : "Shortcuts work in any keyboard language (Thai, English, etc.)"}
             </p>
           </footer>
         </div>

@@ -7,6 +7,8 @@
 
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { Database, Globe2, LoaderCircle, Play, RefreshCw, Square, Terminal } from "lucide-react";
+import { useTranslation } from "../stores/languageStore";
+import { AudioManager } from "../utils/audioManager";
 import { DEFAULT_PORTS, SERVICE_DESCRIPTIONS, SERVICE_DISPLAY_NAMES, ServiceState, ServiceType } from "../types/services";
 
 /**
@@ -81,6 +83,7 @@ export function ServiceCard({
   onRestart,
   ...props
 }: ServiceCardProps) {
+  const { t } = useTranslation();
   const Icon = SERVICE_ICONS[serviceType];
   const displayName = SERVICE_DISPLAY_NAMES[serviceType];
   const description = SERVICE_DESCRIPTIONS[serviceType];
@@ -88,7 +91,7 @@ export function ServiceCard({
   const isRunning = state === ServiceState.Running;
   const isTransitioning = busy || state === ServiceState.Starting || state === ServiceState.Stopping;
   const isError = state === ServiceState.Error;
-  const actionLabel = busyLabel || (state === ServiceState.Stopping ? "Stopping..." : "Starting...");
+  const actionLabel = busyLabel || (state === ServiceState.Stopping ? t.stopping : t.starting);
   const statusClass = {
     [ServiceState.Stopped]: "status-gray",
     [ServiceState.Starting]: "status-blue",
@@ -96,6 +99,15 @@ export function ServiceCard({
     [ServiceState.Stopping]: "status-orange",
     [ServiceState.Error]: "status-red",
   }[state];
+
+  // Map service states to translation keys
+  const stateTranslations: Record<ServiceState, string> = {
+    [ServiceState.Stopped]: t.stopped,
+    [ServiceState.Starting]: t.starting,
+    [ServiceState.Running]: t.running,
+    [ServiceState.Stopping]: t.stopping,
+    [ServiceState.Error]: t.error,
+  };
 
   return (
     <article className={`service-card ${isError ? "has-error" : ""}`} data-testid={`service-card-${serviceType}`} {...props}>
@@ -107,17 +119,21 @@ export function ServiceCard({
             <p>{description}</p>
           </div>
         </div>
-        <span className={`status-pill ${state} ${statusClass}`} data-testid={`service-state-${serviceType}`}>{state}</span>
+        <span className={`status-pill ${state} ${statusClass}`} data-testid={`service-state-${serviceType}`}>{stateTranslations[state]}</span>
       </div>
 
       <div className="service-meta">
-        <span>Port: {port}</span>
+        <span>{t.port}: {port}</span>
         <span>
           URL:{" "}
           <button
             type="button"
             className="service-url-button"
-            onClick={() => openUrl(serviceUrl).catch((openError) => console.error("Failed to open service URL:", openError))}
+            onClick={() => {
+              AudioManager.playClick();
+              openUrl(serviceUrl).catch((openError) => console.error("Failed to open service URL:", openError));
+            }}
+            onMouseEnter={() => AudioManager.playHover()}
           >
             {serviceUrl}
           </button>
@@ -132,19 +148,46 @@ export function ServiceCard({
 
       <div className="service-actions">
         {!isRunning ? (
-          <button onClick={onStart} disabled={isTransitioning} className="btn-start" data-testid={`start-button-${serviceType}`}>
+          <button 
+            onClick={() => {
+              AudioManager.playClick();
+              onStart();
+            }} 
+            disabled={isTransitioning} 
+            className="btn-start" 
+            data-testid={`start-button-${serviceType}`}
+            onMouseEnter={() => AudioManager.playHover()}
+          >
             {isTransitioning ? <LoaderCircle size={15} className="spin-icon" /> : <Play size={15} />}
-            {isTransitioning ? actionLabel : "Start"}
+            {isTransitioning ? actionLabel : t.start}
           </button>
         ) : (
           <>
-            <button onClick={onStop} disabled={isTransitioning} className="btn-stop" data-testid={`stop-button-${serviceType}`}>
+            <button 
+              onClick={() => {
+                AudioManager.playClick();
+                onStop();
+              }} 
+              disabled={isTransitioning} 
+              className="btn-stop" 
+              data-testid={`stop-button-${serviceType}`}
+              onMouseEnter={() => AudioManager.playHover()}
+            >
               {isTransitioning ? <LoaderCircle size={14} className="spin-icon" /> : <Square size={14} />}
-              {isTransitioning ? actionLabel : "Stop"}
+              {isTransitioning ? actionLabel : t.stop}
             </button>
-            <button onClick={onRestart} disabled={isTransitioning} className="btn-restart" data-testid={`restart-button-${serviceType}`}>
+            <button 
+              onClick={() => {
+                AudioManager.playClick();
+                onRestart();
+              }} 
+              disabled={isTransitioning} 
+              className="btn-restart" 
+              data-testid={`restart-button-${serviceType}`}
+              onMouseEnter={() => AudioManager.playHover()}
+            >
               {busy ? <LoaderCircle size={15} className="spin-icon" /> : <RefreshCw size={15} />}
-              {busy ? "Restarting..." : "Restart"}
+              {busy ? t.restarting : t.restart}
             </button>
           </>
         )}
