@@ -293,16 +293,9 @@ pub fn runtime_config_search_paths() -> Vec<PathBuf> {
     #[cfg(target_os = "linux")]
     {
         if let Ok(xdg_data_home) = std::env::var("XDG_DATA_HOME") {
-            paths.push(
-                PathBuf::from(xdg_data_home)
-                    .join("CHAMP")
-                    .join("runtime-config.json"),
-            );
-            paths.push(
-                PathBuf::from(xdg_data_home)
-                    .join("champ")
-                    .join("runtime-config.json"),
-            );
+            let xdg_data_home = PathBuf::from(xdg_data_home);
+            paths.push(xdg_data_home.join("CHAMP").join("runtime-config.json"));
+            paths.push(xdg_data_home.join("champ").join("runtime-config.json"));
         }
 
         if let Ok(xdg_data_dirs) = std::env::var("XDG_DATA_DIRS") {
