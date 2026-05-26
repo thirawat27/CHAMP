@@ -6,13 +6,15 @@ import {
   PackageSelection,
   DependencyCheckResult,
   PackagesConfig,
+  EMPTY_PACKAGE_SELECTION,
   getDatabaseDisplayName,
+  isAdminerSelected as isAdminerSelection,
 } from "../types/services";
 import { CheckCircle2 } from "lucide-react";
 import champLogo from "../assets/CHAMP.png";
+import { useTranslation } from "../stores/languageStore";
 import { LanguageSelector } from "./LanguageSelector";
 import { PackageSelector } from "./PackageSelector";
-import { AudioManager } from "../utils/audioManager";
 
 // Helper to detect platform
 const detectPlatform = (): string => {
@@ -21,6 +23,8 @@ const detectPlatform = (): string => {
   if (userAgent.includes("mac")) return "darwin";
   return "linux";
 };
+
+const isTauriRuntime = () => "__TAURI_INTERNALS__" in window;
 
 interface FirstRunWizardProps extends HTMLAttributes<HTMLDivElement> {
   onComplete: () => void;
@@ -35,15 +39,8 @@ interface ExistingComponent {
   isExisting: boolean;
 }
 
-const SETUP_STEPS = [
-  { title: "Welcome", copy: "Runtime overview" },
-  { title: "Packages", copy: "Choose versions" },
-  { title: "Checks", copy: "System readiness" },
-  { title: "Review", copy: "Keep or replace" },
-  { title: "Install", copy: "Download runtime" },
-];
-
 export function FirstRunWizard({ onComplete, ...props }: FirstRunWizardProps) {
+  const { t } = useTranslation();
   const [step, setStep] = useState<WizardStep>("welcome");
   const [currentPlatform, setCurrentPlatform] = useState<string>("linux");
   const [progress, setProgress] = useState<DownloadProgressType>({
@@ -57,11 +54,9 @@ export function FirstRunWizard({ onComplete, ...props }: FirstRunWizardProps) {
     totalBytes: 0,
   });
   const [error, setError] = useState<string | null>(null);
-  const [packageSelection, setPackageSelection] = useState<PackageSelection>({
-    php: "php-8.5",
-    mysql: "mysql-9.7",
-    phpmyadmin: "phpmyadmin-5.2",
-  });
+  const [packageSelection, setPackageSelection] =
+    useState<PackageSelection>(EMPTY_PACKAGE_SELECTION);
+  const [caddyVersion, setCaddyVersion] = useState("");
   const [existingComponents, setExistingComponents] = useState<ExistingComponent[]>([]);
   const [hasExistingOnWelcome, setHasExistingOnWelcome] = useState(false);
   const [availablePackages, setAvailablePackages] = useState<PackagesConfig | null>(null);
@@ -90,13 +85,25 @@ export function FirstRunWizard({ onComplete, ...props }: FirstRunWizardProps) {
   // Detect platform on mount
   useEffect(() => {
     setCurrentPlatform(detectPlatform());
-    invoke<PackagesConfig>("get_available_packages_cmd")
-      .then(setAvailablePackages)
+    Promise.all([
+      invoke<PackagesConfig>("get_available_packages_cmd"),
+      invoke<PackageSelection>("get_selected_package_ids"),
+      invoke<Record<string, string>>("get_installed_versions"),
+    ])
+      .then(([packages, selectedPackages, versions]) => {
+        setAvailablePackages(packages);
+        setPackageSelection(selectedPackages);
+        setCaddyVersion(versions.caddy || "");
+      })
       .catch((err) => console.error("Failed to load package metadata:", err));
   }, []);
 
   // Listen for download progress events
   useEffect(() => {
+    if (!isTauriRuntime()) {
+      return undefined;
+    }
+
     const unlisten = listen<DownloadProgressType>("download-progress", (event) => {
       setProgress(event.payload);
       if (event.payload.step === "complete") {
@@ -148,10 +155,23 @@ export function FirstRunWizard({ onComplete, ...props }: FirstRunWizardProps) {
     try {
       const existing = await invoke<Record<string, string>>("check_existing_components");
 
-      const isAdminerSelected = packageSelection.phpmyadmin.startsWith("adminer");
-      const existingDatabaseToolVersion = isAdminerSelected
+      const adminerSelected = isAdminerSelection(packageSelection);
+      const existingDatabaseToolVersion = adminerSelected
         ? existing.adminer || ""
         : existing.phpmyadmin || "";
+      const activeDatabaseComponent: ExistingComponent = adminerSelected
+        ? {
+            name: "postgresql",
+            version: existing.postgresql || "",
+            displayName: "PostgreSQL",
+            isExisting: !!existing.postgresql,
+          }
+        : {
+            name: "mysql",
+            version: existing.mysql || "",
+            displayName: getDatabaseDisplayName(currentPlatform),
+            isExisting: !!existing.mysql,
+          };
 
       // All components that should be shown
       const allComponents: ExistingComponent[] = [
@@ -167,15 +187,10 @@ export function FirstRunWizard({ onComplete, ...props }: FirstRunWizardProps) {
           displayName: "PHP",
           isExisting: !!existing.php,
         },
+        activeDatabaseComponent,
         {
-          name: "mysql",
-          version: existing.mysql || "",
-          displayName: getDatabaseDisplayName(currentPlatform),
-          isExisting: !!existing.mysql,
-        },
-        {
-          name: packageSelection.phpmyadmin.startsWith("adminer") ? "adminer" : "phpmyadmin",
-          displayName: packageSelection.phpmyadmin.startsWith("adminer") ? "Adminer" : "phpMyAdmin",
+          name: adminerSelected ? "adminer" : "phpmyadmin",
+          displayName: adminerSelected ? "Adminer" : "phpMyAdmin",
           isExisting: !!existingDatabaseToolVersion,
           version: existingDatabaseToolVersion,
         },
@@ -243,9 +258,7 @@ export function FirstRunWizard({ onComplete, ...props }: FirstRunWizardProps) {
       if (existingList.length > 0) {
         onComplete();
       } else {
-        alert(
-          "No existing installation found. Please download the runtime components to continue."
-        );
+        alert(t.wizardNoExistingInstallation);
       }
     } catch (err) {
       console.error("Failed to check existing components:", err);
@@ -274,18 +287,20 @@ export function FirstRunWizard({ onComplete, ...props }: FirstRunWizardProps) {
     switch (progress.step) {
       case "downloading":
         return progress.componentDisplay
-          ? `Download ${progress.componentDisplay}`
-          : "Downloading...";
+          ? `${t.wizardDownloadVerb} ${progress.componentDisplay}`
+          : t.downloading;
       case "extracting":
-        return progress.componentDisplay ? `Extract ${progress.componentDisplay}` : "Extracting...";
+        return progress.componentDisplay
+          ? `${t.wizardExtractVerb} ${progress.componentDisplay}`
+          : t.extracting;
       case "installing":
-        return "Installing...";
+        return t.wizardInstalling;
       case "complete":
-        return "Installation complete!";
+        return t.installationComplete;
       case "error":
-        return "An error occurred";
+        return t.genericError;
       default:
-        return "Preparing...";
+        return t.wizardPreparing;
     }
   };
 
@@ -316,13 +331,30 @@ export function FirstRunWizard({ onComplete, ...props }: FirstRunWizardProps) {
     }
   };
 
+  const setupSteps = [
+    { title: t.welcome, copy: t.wizardRuntimeOverview },
+    { title: t.wizardPackagesStep, copy: t.wizardChooseVersions },
+    { title: t.wizardChecksStep, copy: t.wizardSystemReadiness },
+    { title: t.wizardReviewStep, copy: t.wizardKeepOrReplace },
+    { title: t.wizardInstallStep, copy: t.wizardDownloadRuntime },
+  ];
   const currentStepNum = getStepNumber();
-  const currentStep = SETUP_STEPS[currentStepNum - 1];
+  const currentStep = setupSteps[currentStepNum - 1];
   const selectedPhp = availablePackages?.php.find((pkg) => pkg.id === packageSelection.php);
   const selectedMysql = availablePackages?.mysql.find((pkg) => pkg.id === packageSelection.mysql);
+  const selectedPostgreSQL = availablePackages?.postgresql.find(
+    (pkg) => pkg.id === packageSelection.postgresql
+  );
   const selectedDatabaseTool = availablePackages?.phpmyadmin.find(
     (pkg) => pkg.id === packageSelection.phpmyadmin
   );
+  const adminerSelected = isAdminerSelection(packageSelection);
+  const activeDatabaseName = adminerSelected
+    ? "PostgreSQL"
+    : getDatabaseDisplayName(currentPlatform);
+  const activeDatabaseVersion = adminerSelected
+    ? selectedPostgreSQL?.version || packageSelection.postgresql
+    : selectedMysql?.version || packageSelection.mysql;
   const shownPercent = Math.max(0, Math.min(100, progress.percent));
   const isProgressIndeterminate =
     (progress.step === "downloading" && (shownPercent === 0 || progress.totalBytes === 0)) ||
@@ -332,19 +364,17 @@ export function FirstRunWizard({ onComplete, ...props }: FirstRunWizardProps) {
   return (
     <div className="setup-shell" {...props}>
       <div className="setup-card">
+        <div className="setup-language-switcher">
+          <LanguageSelector variant="toggle" />
+        </div>
         <aside className="setup-rail">
-          <div className="setup-brand" style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-            <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
-              <img className="setup-brand-logo" src={champLogo} alt="" />
-              <h1>CHAMP</h1>
-            </div>
-            <div onMouseEnter={() => AudioManager.playHover()}>
-              <LanguageSelector variant="toggle" />
-            </div>
+          <div className="setup-brand">
+            <img className="setup-brand-logo" src={champLogo} alt="" />
+            <h1>CHAMP</h1>
           </div>
-          <p>Caddy + HTTP(S) + phpMyAdmin/Adminer + MySQL + PHP</p>
+          <p>{t.wizardStackDescription}</p>
           <div className="setup-steps">
-            {SETUP_STEPS.map((setupStep, index) => {
+            {setupSteps.map((setupStep, index) => {
               const stepIndex = index + 1;
               const stateClass =
                 currentStepNum === stepIndex ? "active" : currentStepNum > stepIndex ? "done" : "";
@@ -378,34 +408,35 @@ export function FirstRunWizard({ onComplete, ...props }: FirstRunWizardProps) {
                     marginBottom: "0.75rem",
                   }}
                 >
-                  CHAMP installs Caddy, PHP-FPM, {getDatabaseDisplayName(currentPlatform)}, and
-                  phpMyAdmin or Adminer into your user profile so the stack can run without writing config files
-                  into protected system folders.
+                  {t.wizardWelcomeBody.replace(
+                    "{database}",
+                    getDatabaseDisplayName(currentPlatform)
+                  )}
                 </p>
                 <div className="setup-summary">
                   <div className="setup-summary-item">
-                    <strong>User-space runtime</strong>
-                    <span>No admin write access for generated configs.</span>
+                    <strong>{t.wizardUserSpaceRuntime}</strong>
+                    <span>{t.wizardUserSpaceRuntimeCopy}</span>
                   </div>
                   <div className="setup-summary-item">
-                    <strong>Dev-first ports</strong>
-                    <span>HTTP 8080, PHP 9000, MySQL 3306.</span>
+                    <strong>{t.wizardDevFirstPorts}</strong>
+                    <span>{t.wizardDevFirstPortsCopy}</span>
                   </div>
                   <div className="setup-summary-item">
-                    <strong>phpMyAdmin ready</strong>
-                    <span>Database tools open at /phpmyadmin by default.</span>
+                    <strong>{t.wizardDatabaseToolReady}</strong>
+                    <span>{t.wizardDatabaseToolReadyCopy}</span>
                   </div>
                 </div>
                 {hasExistingOnWelcome ? (
                   <div className="setup-callout">
-                    <strong>Existing installation detected!</strong>
+                    <strong>{t.wizardExistingDetected}</strong>
                   </div>
                 ) : (
                   <div
                     className="info-box"
                     style={{ marginBottom: "0.75rem", padding: "0.5rem", fontSize: "0.875rem" }}
                   >
-                    <strong>Estimated download size:</strong> varies by platform
+                    <strong>{t.wizardEstimatedDownloadSize}</strong> {t.wizardVariesByPlatform}
                   </div>
                 )}
                 <div className="setup-actions">
@@ -415,7 +446,7 @@ export function FirstRunWizard({ onComplete, ...props }: FirstRunWizardProps) {
                       className="btn-secondary setup-btn-existing"
                       style={{ fontSize: "0.875rem", padding: "0.5rem 1rem" }}
                     >
-                      Use Existing
+                      {t.wizardUseExisting}
                     </button>
                   )}
                   <button
@@ -423,7 +454,7 @@ export function FirstRunWizard({ onComplete, ...props }: FirstRunWizardProps) {
                     className="btn-primary setup-btn-next"
                     style={{ fontSize: "0.875rem", padding: "0.5rem 1rem" }}
                   >
-                    {hasExistingOnWelcome ? "Download Fresh" : "Get Started"}
+                    {hasExistingOnWelcome ? t.wizardDownloadFresh : t.wizardGetStarted}
                   </button>
                   <button
                     onClick={async () => {
@@ -434,7 +465,7 @@ export function FirstRunWizard({ onComplete, ...props }: FirstRunWizardProps) {
                       }
                     }}
                     className="btn-secondary setup-btn-help"
-                    title="Read User Manual"
+                    title={t.wizardReadUserManual}
                     style={{ fontSize: "0.875rem", padding: "0.5rem 0.75rem" }}
                   >
                     ?
@@ -447,8 +478,10 @@ export function FirstRunWizard({ onComplete, ...props }: FirstRunWizardProps) {
             {step === "packages" && (
               <div>
                 <p style={{ fontSize: "0.875rem", marginBottom: "0.75rem" }}>
-                  Select the versions of PHP, {getDatabaseDisplayName(currentPlatform)}, and
-                  phpMyAdmin or Adminer.
+                  {t.wizardPackageIntro.replace(
+                    "{database}",
+                    getDatabaseDisplayName(currentPlatform)
+                  )}
                 </p>
                 <PackageSelector
                   onSelectionChange={handlePackageChange}
@@ -460,14 +493,14 @@ export function FirstRunWizard({ onComplete, ...props }: FirstRunWizardProps) {
                     className="btn-secondary setup-btn-back"
                     style={{ fontSize: "0.875rem", padding: "0.5rem 1rem" }}
                   >
-                    Back
+                    {t.back}
                   </button>
                   <button
                     onClick={startDownload}
                     className="btn-primary setup-btn-next"
                     style={{ fontSize: "0.875rem", padding: "0.5rem 1rem" }}
                   >
-                    Download & Install
+                    {t.wizardDownloadAndInstall}
                   </button>
                 </div>
               </div>
@@ -484,7 +517,7 @@ export function FirstRunWizard({ onComplete, ...props }: FirstRunWizardProps) {
                     fontWeight: 600,
                   }}
                 >
-                  Missing System Dependencies
+                  {t.wizardMissingSystemDependencies}
                 </p>
                 <p
                   style={{
@@ -532,7 +565,7 @@ export function FirstRunWizard({ onComplete, ...props }: FirstRunWizardProps) {
                             marginBottom: "0.25rem",
                           }}
                         >
-                          Install command for your distribution:
+                          {t.wizardInstallCommand}
                         </div>
                         <div
                           style={{
@@ -576,7 +609,7 @@ export function FirstRunWizard({ onComplete, ...props }: FirstRunWizardProps) {
                     marginBottom: "0.75rem",
                   }}
                 >
-                  After installing the dependencies, click &quot;Retry Check&quot; to continue.
+                  {t.wizardDependencyRetryCopy}
                 </p>
                 <div className="setup-actions">
                   <button
@@ -584,14 +617,14 @@ export function FirstRunWizard({ onComplete, ...props }: FirstRunWizardProps) {
                     className="btn-secondary setup-btn-back"
                     style={{ fontSize: "0.875rem", padding: "0.5rem 1rem" }}
                   >
-                    Back
+                    {t.back}
                   </button>
                   <button
                     onClick={startDownload}
                     className="btn-primary setup-btn-next"
                     style={{ fontSize: "0.875rem", padding: "0.5rem 1rem" }}
                   >
-                    Retry Check
+                    {t.wizardRetryCheck}
                   </button>
                 </div>
               </div>
@@ -601,7 +634,7 @@ export function FirstRunWizard({ onComplete, ...props }: FirstRunWizardProps) {
             {step === "confirm" && (
               <div>
                 <p style={{ fontSize: "0.875rem", marginBottom: "0.5rem" }}>
-                  Installation summary:
+                  {t.wizardInstallationSummary}
                 </p>
                 <div
                   style={{
@@ -621,11 +654,13 @@ export function FirstRunWizard({ onComplete, ...props }: FirstRunWizardProps) {
                         ? selectedPhp?.version
                         : component.name === "mysql"
                           ? selectedMysql?.version
-                          : component.name === "adminer" || component.name === "phpmyadmin"
-                            ? selectedDatabaseTool?.version
-                            : component.name === "caddy"
-                              ? "2.11.2"
-                              : component.version;
+                          : component.name === "postgresql"
+                            ? selectedPostgreSQL?.version
+                            : component.name === "adminer" || component.name === "phpmyadmin"
+                              ? selectedDatabaseTool?.version
+                              : component.name === "caddy"
+                                ? caddyVersion
+                                : component.version;
 
                     return (
                       <div
@@ -643,9 +678,7 @@ export function FirstRunWizard({ onComplete, ...props }: FirstRunWizardProps) {
                             : "1px solid transparent",
                         }}
                       >
-                        <span style={{ fontWeight: 500 }}>
-                          {component.displayName}
-                        </span>
+                        <span style={{ fontWeight: 500 }}>{component.displayName}</span>
                         <div style={{ display: "flex", alignItems: "center", gap: "0.375rem" }}>
                           <span
                             style={{
@@ -654,7 +687,7 @@ export function FirstRunWizard({ onComplete, ...props }: FirstRunWizardProps) {
                               fontWeight: 500,
                             }}
                           >
-                            {newVersion || "Unknown"}
+                            {newVersion || t.unknownError}
                           </span>
                         </div>
                       </div>
@@ -667,7 +700,7 @@ export function FirstRunWizard({ onComplete, ...props }: FirstRunWizardProps) {
                     style={{ marginBottom: "0.5rem", padding: "0.5rem", fontSize: "0.875rem" }}
                   >
                     <p className="error-box-text" style={{ margin: "0 0 0.375rem 0" }}>
-                      <strong>Error:</strong> {error}
+                      <strong>{t.error}:</strong> {error}
                     </p>
                     <button
                       onClick={() => setError(null)}
@@ -681,7 +714,7 @@ export function FirstRunWizard({ onComplete, ...props }: FirstRunWizardProps) {
                         cursor: "pointer",
                       }}
                     >
-                      Dismiss
+                      {t.close}
                     </button>
                   </div>
                 )}
@@ -691,28 +724,28 @@ export function FirstRunWizard({ onComplete, ...props }: FirstRunWizardProps) {
                     className="btn-secondary setup-btn-back"
                     style={{ fontSize: "0.875rem", padding: "0.5rem 0.75rem" }}
                   >
-                    Back
+                    {t.back}
                   </button>
                   <button
                     onClick={handleSkipToDashboard}
                     className="btn-secondary setup-btn-existing"
                     style={{ fontSize: "0.875rem", padding: "0.5rem 0.75rem" }}
                   >
-                    Use Existing
+                    {t.wizardUseExisting}
                   </button>
                   <button
                     onClick={handleSkipExisting}
                     className="btn-secondary setup-btn-keep"
                     style={{ fontSize: "0.875rem", padding: "0.5rem 0.75rem" }}
                   >
-                    Keep & Install
+                    {t.wizardKeepAndInstall}
                   </button>
                   <button
                     onClick={handleOverwriteAll}
                     className="btn-primary setup-btn-install-all"
                     style={{ fontSize: "0.875rem", padding: "0.5rem 1rem" }}
                   >
-                    Install All
+                    {t.wizardInstallAll}
                   </button>
                 </div>
               </div>
@@ -793,7 +826,7 @@ export function FirstRunWizard({ onComplete, ...props }: FirstRunWizardProps) {
                 {error && (
                   <div className="error-box" style={{ padding: "0.5rem", fontSize: "0.875rem" }}>
                     <p className="error-box-text" style={{ margin: "0 0 0.375rem 0" }}>
-                      Error: {error}
+                      {t.error}: {error}
                     </p>
                     <button
                       onClick={() => setError(null)}
@@ -807,7 +840,7 @@ export function FirstRunWizard({ onComplete, ...props }: FirstRunWizardProps) {
                         cursor: "pointer",
                       }}
                     >
-                      Dismiss
+                      {t.close}
                     </button>
                   </div>
                 )}
@@ -820,18 +853,18 @@ export function FirstRunWizard({ onComplete, ...props }: FirstRunWizardProps) {
                 <div className="setup-complete-icon" aria-hidden="true">
                   <CheckCircle2 size={34} strokeWidth={2.4} />
                 </div>
-                <h3>Runtime installed</h3>
-                <p>CHAMP is ready to start the local web stack.</p>
+                <h3>{t.wizardRuntimeInstalled}</h3>
+                <p>{t.wizardReadyToStartStack}</p>
                 <div className="setup-complete-packages">
                   {[
-                    { name: "Caddy", version: "2.11.2" },
+                    { name: "Caddy", version: caddyVersion },
                     {
                       name: "PHP",
                       version: selectedPhp?.version || packageSelection.php,
                     },
                     {
-                      name: getDatabaseDisplayName(currentPlatform),
-                      version: selectedMysql?.version || packageSelection.mysql,
+                      name: activeDatabaseName,
+                      version: activeDatabaseVersion,
                     },
                     {
                       name: selectedDatabaseTool?.display_name.split(" ")[0] || "phpMyAdmin",
@@ -849,7 +882,7 @@ export function FirstRunWizard({ onComplete, ...props }: FirstRunWizardProps) {
                   className="btn-primary setup-btn-next"
                   style={{ fontSize: "0.875rem", padding: "0.5rem 1rem" }}
                 >
-                  Continue to Dashboard
+                  {t.wizardContinueToDashboard}
                 </button>
               </div>
             )}

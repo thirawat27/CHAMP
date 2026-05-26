@@ -1,6 +1,6 @@
 /**
  * ServiceCard Component
- * 
+ *
  * Displays a service's status, port, and control buttons.
  * Shows real-time state updates and error messages.
  */
@@ -9,7 +9,13 @@ import { openUrl } from "@tauri-apps/plugin-opener";
 import { Database, Globe2, LoaderCircle, Play, RefreshCw, Square, Terminal } from "lucide-react";
 import { useTranslation } from "../stores/languageStore";
 import { AudioManager } from "../utils/audioManager";
-import { DEFAULT_PORTS, SERVICE_DESCRIPTIONS, SERVICE_DISPLAY_NAMES, ServiceState, ServiceType } from "../types/services";
+import {
+  DEFAULT_PORTS,
+  SERVICE_DESCRIPTIONS,
+  SERVICE_DISPLAY_NAMES,
+  ServiceState,
+  ServiceType,
+} from "../types/services";
 
 /**
  * Props for the ServiceCard component
@@ -44,11 +50,12 @@ const SERVICE_ICONS = {
   [ServiceType.Caddy]: Globe2,
   [ServiceType.PhpFpm]: Terminal,
   [ServiceType.MySQL]: Database,
+  [ServiceType.PostgreSQL]: Database,
 };
 
 /**
  * Generate the service URL based on service type and port
- * 
+ *
  * @param serviceType - The type of service
  * @param port - The port number
  * @returns The service URL string
@@ -58,16 +65,17 @@ function getServiceUrl(serviceType: ServiceType, port: number) {
     [ServiceType.Caddy]: `http://localhost:${port}`,
     [ServiceType.PhpFpm]: `tcp://127.0.0.1:${port}`,
     [ServiceType.MySQL]: `mysql://127.0.0.1:${port}`,
+    [ServiceType.PostgreSQL]: `postgresql://127.0.0.1:${port}`,
   }[serviceType];
 }
 
 /**
  * ServiceCard component displays a service's status and controls
- * 
+ *
  * Shows the service name, description, current state, port, and URL.
  * Provides buttons to start, stop, and restart the service.
  * Displays error messages when the service is in an error state.
- * 
+ *
  * @param props - Component props
  * @returns ServiceCard component
  */
@@ -89,7 +97,8 @@ export function ServiceCard({
   const description = SERVICE_DESCRIPTIONS[serviceType];
   const serviceUrl = getServiceUrl(serviceType, port);
   const isRunning = state === ServiceState.Running;
-  const isTransitioning = busy || state === ServiceState.Starting || state === ServiceState.Stopping;
+  const isTransitioning =
+    busy || state === ServiceState.Starting || state === ServiceState.Stopping;
   const isError = state === ServiceState.Error;
   const actionLabel = busyLabel || (state === ServiceState.Stopping ? t.stopping : t.starting);
   const statusClass = {
@@ -110,20 +119,33 @@ export function ServiceCard({
   };
 
   return (
-    <article className={`service-card ${isError ? "has-error" : ""}`} data-testid={`service-card-${serviceType}`} {...props}>
+    <article
+      className={`service-card ${isError ? "has-error" : ""}`}
+      data-testid={`service-card-${serviceType}`}
+      {...props}
+    >
       <div className="service-card-header">
         <div className="service-identity">
-          <span className="service-icon"><Icon size={18} /></span>
+          <span className="service-icon">
+            <Icon size={18} />
+          </span>
           <div>
             <h3>{displayName}</h3>
             <p>{description}</p>
           </div>
         </div>
-        <span className={`status-pill ${state} ${statusClass}`} data-testid={`service-state-${serviceType}`}>{stateTranslations[state]}</span>
+        <span
+          className={`status-pill ${state} ${statusClass}`}
+          data-testid={`service-state-${serviceType}`}
+        >
+          {stateTranslations[state]}
+        </span>
       </div>
 
       <div className="service-meta">
-        <span>{t.port}: {port}</span>
+        <span>
+          {t.port}: {port}
+        </span>
         <span>
           URL:{" "}
           <button
@@ -131,7 +153,9 @@ export function ServiceCard({
             className="service-url-button"
             onClick={() => {
               AudioManager.playClick();
-              openUrl(serviceUrl).catch((openError) => console.error("Failed to open service URL:", openError));
+              openUrl(serviceUrl).catch((openError) =>
+                console.error("Failed to open service URL:", openError)
+              );
             }}
             onMouseEnter={() => AudioManager.playHover()}
           >
@@ -148,41 +172,49 @@ export function ServiceCard({
 
       <div className="service-actions">
         {!isRunning ? (
-          <button 
+          <button
             onClick={() => {
               AudioManager.playClick();
               onStart();
-            }} 
-            disabled={isTransitioning} 
-            className="btn-start" 
+            }}
+            disabled={isTransitioning}
+            className="btn-start"
             data-testid={`start-button-${serviceType}`}
             onMouseEnter={() => AudioManager.playHover()}
           >
-            {isTransitioning ? <LoaderCircle size={15} className="spin-icon" /> : <Play size={15} />}
+            {isTransitioning ? (
+              <LoaderCircle size={15} className="spin-icon" />
+            ) : (
+              <Play size={15} />
+            )}
             {isTransitioning ? actionLabel : t.start}
           </button>
         ) : (
           <>
-            <button 
+            <button
               onClick={() => {
                 AudioManager.playClick();
                 onStop();
-              }} 
-              disabled={isTransitioning} 
-              className="btn-stop" 
+              }}
+              disabled={isTransitioning}
+              className="btn-stop"
               data-testid={`stop-button-${serviceType}`}
               onMouseEnter={() => AudioManager.playHover()}
             >
-              {isTransitioning ? <LoaderCircle size={14} className="spin-icon" /> : <Square size={14} />}
+              {isTransitioning ? (
+                <LoaderCircle size={14} className="spin-icon" />
+              ) : (
+                <Square size={14} />
+              )}
               {isTransitioning ? actionLabel : t.stop}
             </button>
-            <button 
+            <button
               onClick={() => {
                 AudioManager.playClick();
                 onRestart();
-              }} 
-              disabled={isTransitioning} 
-              className="btn-restart" 
+              }}
+              disabled={isTransitioning}
+              className="btn-restart"
               data-testid={`restart-button-${serviceType}`}
               onMouseEnter={() => AudioManager.playHover()}
             >

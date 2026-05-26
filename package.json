@@ -1,7 +1,7 @@
 {
   "name": "champ",
   "private": true,
-  "version": "1.2.0",
+  "version": "1.3.0",
   "author": "Thirawat27",
   "repository": {
     "type": "git",
@@ -24,7 +24,6 @@
   },
   "dependencies": {
     "@fontsource/noto-sans-thai": "^5.2.8",
-    "@tailwindcss/postcss": "^4.2.4",
     "@tauri-apps/api": "^2.11.0",
     "@tauri-apps/plugin-opener": "^2.5.4",
     "lucide-react": "^1.14.0",
@@ -34,6 +33,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^9.39.4",
+    "@tailwindcss/postcss": "^4.2.4",
     "@tauri-apps/cli": "^2.11.0",
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.2",

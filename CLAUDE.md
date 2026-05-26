@@ -50,7 +50,7 @@ cargo clippy                   # Lint Rust code
 ### Frontend Structure (React + TypeScript)
 - **Entry Point**: `src/main.tsx` → `src/App.tsx`
 - **Components**: `src/components/` (Dashboard, ServiceCard, FirstRunWizard, SettingsPanel)
-- **State Management**: Custom hooks in `src/hooks/` (useServices.ts, useConfig.ts)
+- **State Management**: React hooks (`useState`, `useEffect`, `useCallback`) used directly in components; shared language preferences live in `src/stores/languageStore.ts`
 - **Types**: TypeScript interfaces in `src/types/services.ts`
 
 Frontend communicates with Rust backend via Tauri IPC using `invoke()` from `@tauri-apps/api/core`.

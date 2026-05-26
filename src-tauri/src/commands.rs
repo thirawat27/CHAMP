@@ -19,6 +19,7 @@
 //! - **Dependencies**: `check_system_dependencies`
 
 use crate::config::AppSettings;
+use crate::constants::SYSTEM_METRICS_MIN_SAMPLE_INTERVAL_MS;
 use crate::process::{ServiceMap, ServiceState, ServiceType};
 use crate::runtime::deps::DependencyCheckResult;
 use crate::runtime::downloader::Platform;
@@ -115,9 +116,11 @@ static DOWNLOAD_PROGRESS: Mutex<Option<DownloadProgress>> = Mutex::new(None);
 #[derive(Debug, Serialize)]
 pub struct AppPathsDto {
     pub base_dir: String,
+    pub portable: bool,
     pub runtime_dir: String,
     pub config_dir: String,
     pub mysql_data_dir: String,
+    pub postgresql_data_dir: String,
     pub logs_dir: String,
     pub projects_dir: String,
 }
@@ -146,9 +149,16 @@ pub struct SystemMetricsDto {
     pub network_tx_bps: u64,
 }
 
+/// Data transfer object for language and sound preferences.
+#[derive(Debug, Serialize)]
+pub struct LanguageSettingsDto {
+    pub language: String,
+    pub sound_enabled: bool,
+}
+
 /// Minimum interval between system metrics samples to avoid excessive CPU usage
 const SYSTEM_METRICS_MIN_SAMPLE_INTERVAL: std::time::Duration =
-    std::time::Duration::from_millis(1500);
+    std::time::Duration::from_millis(SYSTEM_METRICS_MIN_SAMPLE_INTERVAL_MS);
 
 /// System metrics monitor with caching to reduce overhead
 struct SystemMetricsMonitor {
@@ -361,7 +371,7 @@ pub async fn stop_all_services(state: State<'_, AppState>) -> Result<ServiceMap,
         .lock()
         .map_err(|e| format!("Failed to acquire process manager lock: {}", e))?;
 
-    manager.stop_all()?;
+    manager.stop_stack()?;
     manager.update_health();
     Ok(manager.get_all_statuses())
 }
@@ -424,19 +434,54 @@ pub async fn save_settings(
         .filter(|(_, s)| s.state == ServiceState::Running)
         .map(|(ty, _)| *ty)
         .collect();
+    let web_stack_was_running = running_services.contains(&ServiceType::Caddy)
+        || running_services.contains(&ServiceType::PhpFpm);
 
     // Update ports in the process manager
     manager.update_ports(&settings);
 
-    // Restart any running services with new configuration
-    for service in running_services {
-        // Stop the service
-        let _ = manager.stop(service);
-        // Start it again with new port settings
-        let _ = manager.start(service);
+    if web_stack_was_running {
+        manager.stop_stack()?;
+        manager.start_all()?;
+    } else {
+        // Restart any standalone running database service with new port settings.
+        for service in running_services {
+            let _ = manager.stop(service);
+            let _ = manager.start(service);
+        }
     }
 
     Ok(())
+}
+
+/// Get language and sound preferences.
+#[tauri::command]
+pub async fn get_language_settings() -> Result<LanguageSettingsDto, String> {
+    let settings = AppSettings::load();
+    Ok(LanguageSettingsDto {
+        language: settings.language,
+        sound_enabled: settings.sound_enabled,
+    })
+}
+
+/// Save the selected UI language.
+#[tauri::command]
+pub async fn save_language_setting(language: String) -> Result<(), String> {
+    if language != "en" && language != "th" {
+        return Err(format!("Unsupported language: {}", language));
+    }
+
+    let mut settings = AppSettings::load();
+    settings.language = language;
+    settings.save()
+}
+
+/// Save whether UI sound effects are enabled.
+#[tauri::command]
+pub async fn save_sound_setting(enabled: bool) -> Result<(), String> {
+    let mut settings = AppSettings::load();
+    settings.sound_enabled = enabled;
+    settings.save()
 }
 
 async fn ensure_selected_database_tool_installed(
@@ -453,16 +498,23 @@ async fn ensure_selected_database_tool_installed(
 
     let downloader = RuntimeDownloader::with_packages(settings.package_selection.clone());
     let runtime_dir = downloader.get_runtime_dir()?;
-    if is_database_tool_installed(&runtime_dir, tool_id) {
+    if is_database_tool_installed(&runtime_dir, tool_id)
+        && is_selected_database_installed(&runtime_dir, tool_id)
+    {
         return Ok(());
     }
 
     eprintln!(
-        "{} is selected but not installed. Downloading it now.",
+        "{} is selected but not fully installed. Downloading required components now.",
         package.display_name
     );
 
     let app_clone = app.clone();
+    let skip_list = if tool_id.starts_with("adminer") {
+        ["caddy", "php", "mysql", "phpmyadmin"]
+    } else {
+        ["caddy", "php", "postgresql", "adminer"]
+    };
     downloader
         .download_all_with_skip(
             Box::new(move |progress| {
@@ -471,15 +523,17 @@ async fn ensure_selected_database_tool_installed(
                     *p = Some(progress);
                 }
             }),
-            &["caddy", "php", "mysql"],
+            &skip_list,
         )
         .await?;
 
-    if is_database_tool_installed(&runtime_dir, tool_id) {
+    if is_database_tool_installed(&runtime_dir, tool_id)
+        && is_selected_database_installed(&runtime_dir, tool_id)
+    {
         Ok(())
     } else {
         Err(format!(
-            "{} was downloaded, but CHAMP could not find the installed files in {}",
+            "{} was downloaded, but CHAMP could not find all required files in {}",
             package.display_name,
             runtime_dir.display()
         ))
@@ -495,6 +549,38 @@ fn is_database_tool_installed(runtime_dir: &Path, tool_id: &str) -> bool {
     }
 }
 
+fn is_selected_database_installed(runtime_dir: &Path, tool_id: &str) -> bool {
+    if tool_id.starts_with("adminer") {
+        runtime_dir.join("postgresql_installed.txt").exists()
+            || runtime_dir
+                .join("postgresql")
+                .join("bin")
+                .join("postgres.exe")
+                .exists()
+            || runtime_dir
+                .join("postgresql")
+                .join("bin")
+                .join("postgres")
+                .exists()
+            || runtime_dir.join("bin").join("postgres.exe").exists()
+            || runtime_dir.join("bin").join("postgres").exists()
+    } else {
+        runtime_dir.join("mysql_installed.txt").exists()
+            || runtime_dir
+                .join("mysql")
+                .join("bin")
+                .join("mysqld.exe")
+                .exists()
+            || runtime_dir
+                .join("mysql")
+                .join("bin")
+                .join("mysqld")
+                .exists()
+            || runtime_dir.join("bin").join("mysqld.exe").exists()
+            || runtime_dir.join("bin").join("mysqld").exists()
+    }
+}
+
 /// Validate settings (check port conflicts, valid paths)
 #[tauri::command]
 pub async fn validate_settings(
@@ -505,7 +591,12 @@ pub async fn validate_settings(
 
 /// Check if specific ports are available
 #[tauri::command]
-pub async fn check_ports(web_port: u16, php_port: u16, mysql_port: u16) -> serde_json::Value {
+pub async fn check_ports(
+    web_port: u16,
+    php_port: u16,
+    mysql_port: u16,
+    postgresql_port: u16,
+) -> serde_json::Value {
     use crate::config::is_port_available;
 
     serde_json::json!({
@@ -520,6 +611,10 @@ pub async fn check_ports(web_port: u16, php_port: u16, mysql_port: u16) -> serde
         "mysql": {
             "port": mysql_port,
             "available": is_port_available(mysql_port)
+        },
+        "postgresql": {
+            "port": postgresql_port,
+            "available": is_port_available(postgresql_port)
         }
     })
 }
@@ -577,9 +672,11 @@ pub async fn get_app_paths() -> Result<AppPathsDto, String> {
     let paths = get_app_data_paths()?;
     Ok(AppPathsDto {
         base_dir: paths.base_dir.to_string_lossy().to_string(),
+        portable: paths.portable,
         runtime_dir: paths.runtime_dir.to_string_lossy().to_string(),
         config_dir: paths.config_dir.to_string_lossy().to_string(),
         mysql_data_dir: paths.mysql_data_dir.to_string_lossy().to_string(),
+        postgresql_data_dir: paths.postgresql_data_dir.to_string_lossy().to_string(),
         logs_dir: paths.logs_dir.to_string_lossy().to_string(),
         projects_dir: paths.projects_dir.to_string_lossy().to_string(),
     })
@@ -806,7 +903,7 @@ pub async fn download_php_version(php_id: String, app: tauri::AppHandle) -> Resu
 
     let downloader = RuntimeDownloader::with_packages(settings.package_selection);
     let app_clone = app.clone();
-    let skip_list = ["caddy", "mysql", "adminer", "phpmyadmin"];
+    let skip_list = ["caddy", "mysql", "postgresql", "adminer", "phpmyadmin"];
 
     downloader
         .download_all_with_skip(
@@ -845,7 +942,14 @@ pub async fn get_installed_versions() -> Result<std::collections::HashMap<String
     let mut versions = std::collections::HashMap::new();
 
     // Read version from marker files
-    for component in ["caddy", "php", "mysql", "adminer", "phpmyadmin"] {
+    for component in [
+        "caddy",
+        "php",
+        "mysql",
+        "postgresql",
+        "adminer",
+        "phpmyadmin",
+    ] {
         let marker_file = runtime_dir.join(format!("{}_installed.txt", component));
         if let Ok(content) = fs::read_to_string(&marker_file) {
             // Parse version from format: "version=1.2.3\ninstalled_at=..."
@@ -860,7 +964,10 @@ pub async fn get_installed_versions() -> Result<std::collections::HashMap<String
 
     // Add Caddy version from default config (not in packages)
     if !versions.contains_key("caddy") {
-        versions.insert("caddy".to_string(), crate::constants::DEFAULT_CADDY_VERSION.to_string());
+        versions.insert(
+            "caddy".to_string(),
+            crate::runtime::packages::selected_caddy_version(),
+        );
     }
 
     Ok(versions)
@@ -910,4 +1017,3 @@ pub async fn download_runtime_with_skip(
 pub async fn check_system_dependencies() -> DependencyCheckResult {
     crate::runtime::deps::check_system_dependencies()
 }
-

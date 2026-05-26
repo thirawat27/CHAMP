@@ -100,6 +100,11 @@ pub fn run() {
             // Setup system tray
             setup_system_tray(app)?;
 
+            match app.path().resource_dir() {
+                Ok(resource_dir) => crate::runtime::packages::set_tauri_resource_dir(resource_dir),
+                Err(e) => eprintln!("Warning: failed to get Tauri resource dir: {e}"),
+            }
+
             if crate::config::AppSettings::load().auto_start_services {
                 let app_handle = app.handle().clone();
                 tauri::async_runtime::spawn(async move {
@@ -132,6 +137,9 @@ pub fn run() {
             // Settings commands
             commands::get_settings,
             commands::save_settings,
+            commands::get_language_settings,
+            commands::save_language_setting,
+            commands::save_sound_setting,
             commands::validate_settings,
             commands::check_ports,
             // Runtime download commands

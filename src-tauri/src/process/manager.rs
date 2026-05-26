@@ -1,6 +1,6 @@
 use super::{ServiceInfo, ServiceMap, ServiceState, ServiceType};
 use crate::constants::*;
-use crate::runtime::locator::{locate_runtime_binaries, RuntimePaths};
+use crate::runtime::locator::{locate_runtime_binaries, postgresql_initdb_binary, RuntimePaths};
 use std::collections::HashMap;
 use std::fs::{self, File, OpenOptions};
 use std::io::Write;
@@ -12,6 +12,29 @@ use std::thread;
 // Windows-specific: Constant to hide console window
 #[cfg(target_os = "windows")]
 const CREATE_NO_WINDOW: u32 = 0x08000000;
+
+const ALL_SERVICES: [ServiceType; 4] = [
+    ServiceType::Caddy,
+    ServiceType::PhpFpm,
+    ServiceType::MySQL,
+    ServiceType::PostgreSQL,
+];
+
+fn active_database_service(database_tool_id: &str) -> ServiceType {
+    if database_tool_id.starts_with("adminer") {
+        ServiceType::PostgreSQL
+    } else {
+        ServiceType::MySQL
+    }
+}
+
+fn stack_start_services(database_tool_id: &str) -> [ServiceType; 3] {
+    [
+        ServiceType::PhpFpm,
+        active_database_service(database_tool_id),
+        ServiceType::Caddy,
+    ]
+}
 
 /// Configure command to hide console window on Windows
 #[cfg(target_os = "windows")]
@@ -104,7 +127,6 @@ fn format_process_exit_error(summary: &str, status: ExitStatus, log_path: Option
 
 /// A running service process with its handle and configuration
 pub struct ServiceProcess {
-    #[allow(dead_code)]
     pub name: ServiceType,
     pub child: Option<Child>,
     pub state: ServiceState,
@@ -131,7 +153,7 @@ impl ProcessManager {
     pub fn with_settings(settings: crate::config::AppSettings) -> Self {
         let mut services = HashMap::new();
 
-        for service_type in [ServiceType::Caddy, ServiceType::PhpFpm, ServiceType::MySQL] {
+        for service_type in ALL_SERVICES {
             services.insert(
                 service_type,
                 ServiceProcess {
@@ -158,6 +180,7 @@ impl ProcessManager {
             ServiceType::Caddy => settings.web_port,
             ServiceType::PhpFpm => settings.php_port,
             ServiceType::MySQL => settings.mysql_port,
+            ServiceType::PostgreSQL => settings.postgresql_port,
         }
     }
 
@@ -166,6 +189,7 @@ impl ProcessManager {
             ServiceType::Caddy => self.settings.web_port = port,
             ServiceType::PhpFpm => self.settings.php_port = port,
             ServiceType::MySQL => self.settings.mysql_port = port,
+            ServiceType::PostgreSQL => self.settings.postgresql_port = port,
         }
 
         if let Some(service_process) = self.services.get_mut(&service_type) {
@@ -201,6 +225,13 @@ impl ProcessManager {
             .unwrap_or(self.settings.mysql_port)
     }
 
+    fn postgresql_port(&self) -> u16 {
+        self.services
+            .get(&ServiceType::PostgreSQL)
+            .map(|service| service.port)
+            .unwrap_or(self.settings.postgresql_port)
+    }
+
     pub fn update_ports(&mut self, settings: &crate::config::AppSettings) {
         self.settings = settings.clone();
         for (service_type, service_process) in self.services.iter_mut() {
@@ -231,6 +262,8 @@ impl ProcessManager {
             #[cfg(not(target_os = "linux"))]
             fs::create_dir_all(&paths.mysql_data_dir)
                 .map_err(|e| format!("Failed to create MySQL data dir: {}", e))?;
+            fs::create_dir_all(&paths.postgresql_data_dir)
+                .map_err(|e| format!("Failed to create PostgreSQL data dir: {}", e))?;
             fs::create_dir_all(&paths.projects_dir)
                 .map_err(|e| format!("Failed to create projects dir: {}", e))?;
         }
@@ -264,7 +297,7 @@ impl ProcessManager {
         let reserved_ports = self.reserved_ports_except(service);
         let selected_port = match service {
             ServiceType::Caddy => select_caddy_port(current_port, &paths.caddy, &reserved_ports)?,
-            ServiceType::PhpFpm | ServiceType::MySQL => {
+            ServiceType::PhpFpm | ServiceType::MySQL | ServiceType::PostgreSQL => {
                 select_available_port(service, current_port, &reserved_ports)?
             }
         };
@@ -275,6 +308,7 @@ impl ProcessManager {
         let web_port = self.web_port();
         let php_port = self.php_port();
         let mysql_port = self.mysql_port();
+        let postgresql_port = self.postgresql_port();
         let service_process = self
             .services
             .get_mut(&service)
@@ -289,10 +323,18 @@ impl ProcessManager {
                 &paths,
                 php_port,
                 mysql_port,
+                postgresql_port,
                 &self.settings.package_selection.phpmyadmin,
             ),
-            ServiceType::PhpFpm => start_php_fpm(service_process, &paths, web_port, mysql_port),
+            ServiceType::PhpFpm => start_php_fpm(
+                service_process,
+                &paths,
+                web_port,
+                mysql_port,
+                postgresql_port,
+            ),
             ServiceType::MySQL => start_mysql(service_process, &paths),
+            ServiceType::PostgreSQL => start_postgresql(service_process, &paths),
         };
 
         match result {
@@ -348,27 +390,23 @@ impl ProcessManager {
             if let Some(ref paths) = self.runtime_paths {
                 // หยุด MySQL processes ทั้งหมดที่ยังค้างอยู่
                 let _ = force_stop_all_mysql_processes(&paths.mysql);
-                
+
                 // รอให้ port ว่างนานขึ้น
-                let _ = wait_for_port_release(
-                    service_process.port, 
-                    mysql_port_release_timeout()
-                );
+                let _ = wait_for_port_release(service_process.port, mysql_port_release_timeout());
+            }
+        } else if service == ServiceType::PostgreSQL {
+            if let Some(ref paths) = self.runtime_paths {
+                let _ = stop_runtime_processes_by_executable(&paths.postgresql, "PostgreSQL");
+                let _ = wait_for_port_release(service_process.port, mysql_port_release_timeout());
             }
         } else if service == ServiceType::Caddy {
             // สำหรับ Caddy: ตรวจสอบและหยุด processes ที่เหลือทั้งหมด
             if let Some(ref paths) = self.runtime_paths {
                 let _ = force_stop_all_caddy_processes(&paths.caddy);
-                let _ = wait_for_port_release(
-                    service_process.port,
-                    default_port_release_timeout()
-                );
+                let _ = wait_for_port_release(service_process.port, default_port_release_timeout());
             }
         } else {
-            let _ = wait_for_port_release(
-                service_process.port, 
-                default_port_release_timeout()
-            );
+            let _ = wait_for_port_release(service_process.port, default_port_release_timeout());
         }
 
         service_process.child = None;
@@ -387,14 +425,14 @@ impl ProcessManager {
     pub fn start_all(&mut self) -> Result<(), String> {
         self.initialize()?;
         self.prepare_stack_ports()?;
-        for service in [ServiceType::PhpFpm, ServiceType::MySQL, ServiceType::Caddy] {
+        for service in stack_start_services(&self.settings.package_selection.phpmyadmin) {
             self.start(service)?;
         }
         Ok(())
     }
 
     pub fn restart_all(&mut self) -> Result<(), String> {
-        self.stop_all()?;
+        self.stop_stack()?;
         self.start_all()
     }
 
@@ -405,7 +443,7 @@ impl ProcessManager {
             .ok_or("Runtime paths not initialized")?
             .clone();
 
-        for service in [ServiceType::Caddy, ServiceType::PhpFpm, ServiceType::MySQL] {
+        for service in stack_start_services(&self.settings.package_selection.phpmyadmin) {
             let Some(service_process) = self.services.get(&service) else {
                 continue;
             };
@@ -419,7 +457,7 @@ impl ProcessManager {
                 ServiceType::Caddy => {
                     select_caddy_port(current_port, &paths.caddy, &reserved_ports)?
                 }
-                ServiceType::PhpFpm | ServiceType::MySQL => {
+                ServiceType::PhpFpm | ServiceType::MySQL | ServiceType::PostgreSQL => {
                     select_available_port(service, current_port, &reserved_ports)?
                 }
             };
@@ -526,6 +564,25 @@ impl ProcessManager {
         }
     }
 
+    /// Stop the web stack and any database service that may have been active before a tool switch.
+    pub fn stop_stack(&mut self) -> Result<(), String> {
+        for service in [
+            ServiceType::Caddy,
+            ServiceType::PhpFpm,
+            ServiceType::MySQL,
+            ServiceType::PostgreSQL,
+        ] {
+            let Some(service_process) = self.services.get(&service) else {
+                continue;
+            };
+            if service_process.state.is_running() {
+                let _ = self.stop(service);
+            }
+        }
+
+        Ok(())
+    }
+
     /// Stop all running services (called on app shutdown)
     pub fn stop_all(&mut self) -> Result<(), String> {
         let services_to_stop: Vec<ServiceType> = self
@@ -550,6 +607,7 @@ fn start_caddy(
     paths: &RuntimePaths,
     php_port: u16,
     mysql_port: u16,
+    postgresql_port: u16,
     database_tool_id: &str,
 ) -> Result<(), String> {
     // ตรวจสอบและหยุด Caddy processes ที่ซ้ำซ้อนอัตโนมัติ (เหมือน MySQL)
@@ -571,7 +629,13 @@ fn start_caddy(
 
     // Prepare the selected database tool in the writable config directory. This avoids writing into
     // Program Files or any other install directory that may require elevation.
-    ensure_database_tool(paths, service_process.port, mysql_port, database_tool_id)?;
+    ensure_database_tool(
+        paths,
+        service_process.port,
+        mysql_port,
+        postgresql_port,
+        database_tool_id,
+    )?;
 
     // Always regenerate Caddyfile with current port settings
     let caddyfile_path = paths.config_dir.join("Caddyfile");
@@ -601,9 +665,10 @@ fn start_php_fpm(
     paths: &RuntimePaths,
     web_port: u16,
     mysql_port: u16,
+    postgresql_port: u16,
 ) -> Result<(), String> {
     // Regenerate php.ini on each start because it depends on the selected PHP runtime.
-    generate_php_ini(&paths.php_ini, paths, web_port, mysql_port)?;
+    generate_php_ini(&paths.php_ini, paths, web_port, mysql_port, postgresql_port)?;
 
     // Open log file with retry logic
     let log_path = paths.logs_dir.join("php-fpm.log");
@@ -629,7 +694,7 @@ fn start_php_fpm(
 
         // PHP-FPM requires -F to run in foreground and -y for config
         let mut cmd = configure_no_window(Command::new(&paths.php_cgi));
-        apply_php_database_env(&mut cmd, web_port, mysql_port);
+        apply_php_database_env(&mut cmd, web_port, mysql_port, postgresql_port);
         cmd.arg("-F") // Don't daemonize
             .arg("-y")
             .arg(&fpm_conf_path)
@@ -643,7 +708,7 @@ fn start_php_fpm(
     } else {
         // PHP-CGI (Windows) uses -b for FastCGI mode
         let mut cmd = configure_no_window(Command::new(&paths.php_cgi));
-        apply_php_database_env(&mut cmd, web_port, mysql_port);
+        apply_php_database_env(&mut cmd, web_port, mysql_port, postgresql_port);
         cmd.arg("-b")
             .arg(format!("127.0.0.1:{}", service_process.port))
             .arg("-c")
@@ -697,7 +762,7 @@ fn start_mysql(service_process: &mut ServiceProcess, paths: &RuntimePaths) -> Re
                 service_process.port
             ),
         );
-        
+
         let stopped = stop_runtime_processes_by_executable(&paths.mysql, "MySQL/MariaDB")?;
         if stopped > 0 {
             append_log_line(
@@ -707,7 +772,7 @@ fn start_mysql(service_process: &mut ServiceProcess, paths: &RuntimePaths) -> Re
             // รอให้ port ว่าง
             let _ = wait_for_port_release(service_process.port, process_stop_wait_timeout());
         }
-        
+
         // ตรวจสอบอีกครั้ง
         if !port_can_bind(service_process.port) {
             return Err(format!(
@@ -784,14 +849,14 @@ fn start_mysql(service_process: &mut ServiceProcess, paths: &RuntimePaths) -> Re
             if let Some(init_file) = init_file_path {
                 let _ = fs::remove_file(&init_file);
             }
-            
+
             // Enhanced error message with troubleshooting tips
             let mut error_msg = format_process_exit_error(
                 "MySQL/MariaDB exited immediately",
                 status,
                 Some(&log_path),
             );
-            
+
             // Add troubleshooting suggestions
             error_msg.push_str("\n\n=== Troubleshooting Tips ===");
             error_msg.push_str("\n1. Check if port ");
@@ -800,11 +865,13 @@ fn start_mysql(service_process: &mut ServiceProcess, paths: &RuntimePaths) -> Re
             error_msg.push_str("\n2. Verify data directory permissions at: ");
             error_msg.push_str(&paths.mysql_data_dir.display().to_string());
             error_msg.push_str("\n3. Try stopping all services and restarting CHAMP");
-            error_msg.push_str("\n4. If the problem persists, you may need to reinitialize the database:");
+            error_msg.push_str(
+                "\n4. If the problem persists, you may need to reinitialize the database:",
+            );
             error_msg.push_str("\n   - Stop CHAMP completely");
             error_msg.push_str("\n   - Delete the MySQL data directory");
             error_msg.push_str("\n   - Restart CHAMP to reinitialize");
-            
+
             Err(error_msg)
         }
         Ok(None) => {
@@ -836,6 +903,157 @@ fn start_mysql(service_process: &mut ServiceProcess, paths: &RuntimePaths) -> Re
             Err(format!("Failed to check MariaDB process: {}", e))
         }
     }
+}
+
+fn start_postgresql(
+    service_process: &mut ServiceProcess,
+    paths: &RuntimePaths,
+) -> Result<(), String> {
+    initialize_postgresql_data_dir(paths)?;
+    cleanup_stale_postgresql_pid(paths);
+
+    if let Some(pid) = find_running_postgresql_pid(paths, service_process.port) {
+        let log_path = paths.logs_dir.join("postgresql.log");
+        append_log_line(
+            &log_path,
+            &format!(
+                "CHAMP found an existing PostgreSQL process (pid {}) on 127.0.0.1:{} and will reuse it.",
+                pid, service_process.port
+            ),
+        );
+        service_process.child = None;
+        service_process.external_pid = Some(pid);
+        service_process.log_file = Some(log_path);
+        return Ok(());
+    }
+
+    if !port_can_bind(service_process.port) {
+        let log_path = paths.logs_dir.join("postgresql.log");
+        append_log_line(
+            &log_path,
+            &format!(
+                "Port {} is in use. Attempting to stop conflicting PostgreSQL processes...",
+                service_process.port
+            ),
+        );
+
+        let stopped = stop_runtime_processes_by_executable(&paths.postgresql, "PostgreSQL")?;
+        if stopped > 0 {
+            let _ = wait_for_port_release(service_process.port, process_stop_wait_timeout());
+        }
+
+        if !port_can_bind(service_process.port) {
+            return Err(format!(
+                "Port {} is still in use after cleanup. PostgreSQL cannot start. You can change the PostgreSQL port in Settings.",
+                service_process.port
+            ));
+        }
+    }
+
+    let log_path = paths.logs_dir.join("postgresql.log");
+    let log_file = open_log_file_with_retry(&log_path, "PostgreSQL")?;
+
+    let mut cmd = configure_no_window(Command::new(&paths.postgresql));
+    cmd.arg("-D")
+        .arg(&paths.postgresql_data_dir)
+        .arg("-p")
+        .arg(service_process.port.to_string())
+        .arg("-h")
+        .arg("127.0.0.1")
+        .stdout(Stdio::from(log_file.try_clone().unwrap()))
+        .stderr(Stdio::from(log_file));
+
+    let child = cmd.spawn().map_err(|e| {
+        let log_content =
+            fs::read_to_string(&log_path).unwrap_or_else(|_| "Could not read log".to_string());
+        format!(
+            "Failed to start PostgreSQL: {}\n\nPostgreSQL log:\n{}",
+            e, log_content
+        )
+    })?;
+
+    attach_started_process(service_process, child, log_path, "PostgreSQL")
+}
+
+fn initialize_postgresql_data_dir(paths: &RuntimePaths) -> Result<(), String> {
+    if paths.postgresql_data_dir.join("PG_VERSION").exists() {
+        return Ok(());
+    }
+
+    fs::create_dir_all(&paths.postgresql_data_dir)
+        .map_err(|e| format!("Failed to create PostgreSQL data directory: {}", e))?;
+
+    let initdb = postgresql_initdb_binary(&paths.postgresql);
+    if !initdb.exists() {
+        return Err(format!(
+            "PostgreSQL initdb binary not found at {}. Please ensure the PostgreSQL runtime was downloaded correctly.",
+            initdb.display()
+        ));
+    }
+
+    let init_log_path = paths.logs_dir.join("postgresql_init.log");
+    let init_log_file = File::create(&init_log_path)
+        .map_err(|e| format!("Failed to create PostgreSQL init log file: {}", e))?;
+
+    let mut cmd = configure_no_window(Command::new(&initdb));
+    cmd.arg("-D")
+        .arg(&paths.postgresql_data_dir)
+        .arg("-U")
+        .arg("postgres")
+        .arg("--auth=trust")
+        .arg("-E")
+        .arg("UTF8")
+        .stdout(Stdio::from(init_log_file.try_clone().unwrap()))
+        .stderr(Stdio::from(init_log_file));
+
+    let status = cmd
+        .status()
+        .map_err(|e| format!("Failed to initialize PostgreSQL data directory: {}", e))?;
+    if status.success() {
+        return Ok(());
+    }
+
+    Err(format_process_exit_error(
+        "PostgreSQL initialization failed",
+        status,
+        Some(&init_log_path),
+    ))
+}
+
+fn cleanup_stale_postgresql_pid(paths: &RuntimePaths) {
+    let pid_file = paths.postgresql_data_dir.join("postmaster.pid");
+    let Some(pid) = read_postgresql_pid_file(&pid_file) else {
+        return;
+    };
+    if !process_exists(pid) {
+        let _ = fs::remove_file(pid_file);
+    }
+}
+
+fn find_running_postgresql_pid(paths: &RuntimePaths, port: u16) -> Option<u32> {
+    let pid = read_postgresql_pid_file(&paths.postgresql_data_dir.join("postmaster.pid"))?;
+    if !process_exists(pid) {
+        return None;
+    }
+
+    for _ in 0..20 {
+        if tcp_port_accepts(port) {
+            return Some(pid);
+        }
+        thread::sleep(std::time::Duration::from_millis(250));
+    }
+
+    None
+}
+
+fn read_postgresql_pid_file(pid_file: &Path) -> Option<u32> {
+    fs::read_to_string(pid_file)
+        .ok()?
+        .lines()
+        .next()?
+        .trim()
+        .parse::<u32>()
+        .ok()
 }
 
 fn attach_existing_mysql_process(
@@ -955,9 +1173,7 @@ fn find_available_port_excluding(
 }
 
 fn first_fallback_port(service_type: ServiceType, preferred_port: u16) -> u16 {
-    if service_type == ServiceType::MySQL
-        && preferred_port == crate::config::DEFAULT_PORTS.mysql
-    {
+    if service_type == ServiceType::MySQL && preferred_port == crate::config::DEFAULT_PORTS.mysql {
         preferred_port.saturating_add(2)
     } else {
         preferred_port.saturating_add(1)
@@ -1118,13 +1334,16 @@ fn find_process_ids_by_executable(executable: &Path) -> Result<Vec<u32>, String>
                     Ok(o) => {
                         let text = String::from_utf8_lossy(&o.stdout);
                         text.lines().any(|line| {
-                            let cols: Vec<&str> = line.splitn(10, char::is_whitespace)
+                            let cols: Vec<&str> = line
+                                .splitn(10, char::is_whitespace)
                                 .filter(|s| !s.is_empty())
                                 .collect();
                             // lsof columns: COMMAND PID USER FD TYPE DEVICE SIZE/OFF NODE NAME
                             // FD == "txt" identifies the executable
                             cols.get(3).copied() == Some("txt")
-                                && cols.last().map(|name| *name == canonical_str.as_ref())
+                                && cols
+                                    .last()
+                                    .map(|name| *name == canonical_str.as_ref())
                                     .unwrap_or(false)
                         })
                     }
@@ -1274,7 +1493,7 @@ fn mysql_root_tcp_login_works(mysql_client: &Path, port: u16) -> bool {
 /// Checks for common issues that cause MySQL to fail on startup
 fn verify_mysql_data_integrity(paths: &RuntimePaths) -> Result<(), String> {
     let mysql_dir = paths.mysql_data_dir.join("mysql");
-    
+
     // Check if mysql system directory exists
     if !mysql_dir.exists() {
         return Err(format!(
@@ -1294,13 +1513,16 @@ fn verify_mysql_data_integrity(paths: &RuntimePaths) -> Result<(), String> {
 
     for lock_file in &lock_files {
         if lock_file.exists() {
-            eprintln!("Warning: Found stale lock file at {:?}, removing...", lock_file);
+            eprintln!(
+                "Warning: Found stale lock file at {:?}, removing...",
+                lock_file
+            );
             let _ = fs::remove_file(lock_file);
         }
     }
 
     // Check for PID files from crashed processes
-    if let Some(entries) = fs::read_dir(&paths.mysql_data_dir).ok() {
+    if let Ok(entries) = fs::read_dir(&paths.mysql_data_dir) {
         for entry in entries.flatten() {
             let path = entry.path();
             if path.extension().and_then(|e| e.to_str()) == Some("pid") {
@@ -1414,14 +1636,14 @@ fn force_stop_all_caddy_processes(caddy_executable: &Path) -> Result<usize, Stri
 /// This prevents the "exit code 1" error caused by multiple MySQL instances
 fn cleanup_duplicate_mysql_processes(paths: &RuntimePaths, port: u16) -> Result<(), String> {
     let log_path = paths.logs_dir.join("mysql.log");
-    
+
     // ค้นหา MySQL processes ทั้งหมดที่กำลังทำงาน
     let mysql_pids = find_all_mysql_processes(&paths.mysql)?;
-    
+
     if mysql_pids.is_empty() {
         return Ok(());
     }
-    
+
     // ถ้ามีมากกว่า 1 process แสดงว่ามีซ้ำซ้อน
     if mysql_pids.len() > 1 {
         append_log_line(
@@ -1431,7 +1653,7 @@ fn cleanup_duplicate_mysql_processes(paths: &RuntimePaths, port: u16) -> Result<
                 mysql_pids.len()
             ),
         );
-        
+
         // หยุดทุก process
         let mut stopped = 0;
         for pid in &mysql_pids {
@@ -1443,13 +1665,13 @@ fn cleanup_duplicate_mysql_processes(paths: &RuntimePaths, port: u16) -> Result<
                 );
             }
         }
-        
+
         if stopped > 0 {
             append_log_line(
                 &log_path,
                 &format!("Cleaned up {} duplicate MySQL process(es)", stopped),
             );
-            
+
             // รอให้ processes หยุดและ port ว่าง
             thread::sleep(std::time::Duration::from_secs(2));
             let _ = wait_for_port_release(port, std::time::Duration::from_secs(5));
@@ -1457,7 +1679,7 @@ fn cleanup_duplicate_mysql_processes(paths: &RuntimePaths, port: u16) -> Result<
     } else if mysql_pids.len() == 1 {
         // มี 1 process แต่อาจจะไม่ใช่ของเรา หรือ port ไม่ตรง
         let pid = mysql_pids[0];
-        
+
         // ตรวจสอบว่า process นี้ใช้ port ที่เราต้องการหรือไม่
         if !tcp_port_accepts(port) {
             // Process มีอยู่แต่ไม่ได้ใช้ port ของเรา - อาจจะ crashed หรือ starting
@@ -1469,7 +1691,7 @@ fn cleanup_duplicate_mysql_processes(paths: &RuntimePaths, port: u16) -> Result<
             }
         }
     }
-    
+
     Ok(())
 }
 
@@ -1482,16 +1704,22 @@ fn find_all_mysql_processes(mysql_executable: &Path) -> Result<Vec<u32>, String>
             .file_name()
             .and_then(|n| n.to_str())
             .unwrap_or("mysqld.exe");
-        
+
         let output = Command::new("tasklist")
-            .args(["/FI", &format!("IMAGENAME eq {}", process_name), "/FO", "CSV", "/NH"])
+            .args([
+                "/FI",
+                &format!("IMAGENAME eq {}", process_name),
+                "/FO",
+                "CSV",
+                "/NH",
+            ])
             .output()
             .map_err(|e| format!("Failed to list MySQL processes: {}", e))?;
-        
+
         if !output.status.success() {
             return Ok(Vec::new());
         }
-        
+
         let stdout = String::from_utf8_lossy(&output.stdout);
         let pids: Vec<u32> = stdout
             .lines()
@@ -1505,10 +1733,10 @@ fn find_all_mysql_processes(mysql_executable: &Path) -> Result<Vec<u32>, String>
                 }
             })
             .collect();
-        
+
         Ok(pids)
     }
-    
+
     #[cfg(not(target_os = "windows"))]
     {
         // บน Unix-like systems ใช้ pgrep
@@ -1516,22 +1744,22 @@ fn find_all_mysql_processes(mysql_executable: &Path) -> Result<Vec<u32>, String>
             .file_name()
             .and_then(|n| n.to_str())
             .unwrap_or("mysqld");
-        
+
         let output = Command::new("pgrep")
             .arg(process_name)
             .output()
             .map_err(|e| format!("Failed to list MySQL processes: {}", e))?;
-        
+
         if !output.status.success() {
             return Ok(Vec::new());
         }
-        
+
         let stdout = String::from_utf8_lossy(&output.stdout);
         let pids: Vec<u32> = stdout
             .lines()
             .filter_map(|line| line.trim().parse::<u32>().ok())
             .collect();
-        
+
         Ok(pids)
     }
 }
@@ -1540,13 +1768,13 @@ fn find_all_mysql_processes(mysql_executable: &Path) -> Result<Vec<u32>, String>
 /// This ensures no MySQL processes are left running
 fn force_stop_all_mysql_processes(mysql_executable: &Path) -> Result<usize, String> {
     let pids = find_all_mysql_processes(mysql_executable)?;
-    
+
     if pids.is_empty() {
         return Ok(0);
     }
-    
+
     eprintln!("Force stopping {} MySQL process(es)...", pids.len());
-    
+
     let mut stopped = 0;
     for pid in pids {
         if terminate_process_by_pid(pid).is_ok() {
@@ -1554,12 +1782,12 @@ fn force_stop_all_mysql_processes(mysql_executable: &Path) -> Result<usize, Stri
             eprintln!("Stopped MySQL process (pid {})", pid);
         }
     }
-    
+
     // รอให้ processes หยุดจริงๆ
     if stopped > 0 {
         thread::sleep(std::time::Duration::from_secs(2));
     }
-    
+
     Ok(stopped)
 }
 
@@ -2399,6 +2627,7 @@ fn generate_php_ini(
     paths: &RuntimePaths,
     web_port: u16,
     mysql_port: u16,
+    postgresql_port: u16,
 ) -> Result<(), String> {
     // Get the PHP directory (parent of php_cgi binary) to find the ext folder
     let php_dir = paths
@@ -2428,7 +2657,7 @@ fn generate_php_ini(
     let session_path = session_dir.to_string_lossy().replace('\\', "/");
 
     let extension_lines = php_ini_extension_lines(&ext_dir);
-    let env_file = generate_php_env_file(paths, web_port, mysql_port)?;
+    let env_file = generate_php_env_file(paths, web_port, mysql_port, postgresql_port)?;
     let env_file_path = env_file.to_string_lossy().replace('\\', "/");
 
     let php_ini_content = format!(
@@ -2467,6 +2696,8 @@ extension_dir = "{}"
 auto_prepend_file = "{}"
 mysqli.default_host = 127.0.0.1
 mysqli.default_port = {}
+pgsql.default_host = 127.0.0.1
+pgsql.default_port = {}
 
 ; Session settings - use absolute path for Windows compatibility
 session.save_path = "{}"
@@ -2500,6 +2731,7 @@ realpath_cache_ttl=300
         extension_lines,
         env_file_path,
         mysql_port,
+        postgresql_port,
         session_path,
         session_path
     );
@@ -2515,6 +2747,7 @@ fn generate_php_env_file(
     paths: &RuntimePaths,
     web_port: u16,
     mysql_port: u16,
+    postgresql_port: u16,
 ) -> Result<PathBuf, String> {
     let env_file = paths.config_dir.join("champ-env.php");
     let content = format!(
@@ -2522,28 +2755,46 @@ fn generate_php_env_file(
 // Generated by CHAMP. This file is loaded before project PHP scripts.
 $champMysqlHost = '127.0.0.1';
 $champMysqlPort = '{}';
+$champPostgresHost = '127.0.0.1';
+$champPostgresPort = '{}';
 $champWebPort = '{}';
 
 putenv('CHAMP_MYSQL_HOST=' . $champMysqlHost);
 putenv('CHAMP_MYSQL_PORT=' . $champMysqlPort);
 putenv('CHAMP_MYSQL_USER=root');
 putenv('CHAMP_MYSQL_PASSWORD=');
+putenv('CHAMP_POSTGRES_HOST=' . $champPostgresHost);
+putenv('CHAMP_POSTGRES_PORT=' . $champPostgresPort);
+putenv('CHAMP_POSTGRES_USER=postgres');
+putenv('CHAMP_POSTGRES_PASSWORD=');
 putenv('CHAMP_WEB_PORT=' . $champWebPort);
 putenv('MYSQL_TCP_PORT=' . $champMysqlPort);
+putenv('PGHOST=' . $champPostgresHost);
+putenv('PGPORT=' . $champPostgresPort);
+putenv('PGUSER=postgres');
+putenv('PGPASSWORD=');
 
 $_SERVER['CHAMP_MYSQL_HOST'] = $champMysqlHost;
 $_SERVER['CHAMP_MYSQL_PORT'] = $champMysqlPort;
 $_SERVER['CHAMP_MYSQL_USER'] = 'root';
 $_SERVER['CHAMP_MYSQL_PASSWORD'] = '';
+$_SERVER['CHAMP_POSTGRES_HOST'] = $champPostgresHost;
+$_SERVER['CHAMP_POSTGRES_PORT'] = $champPostgresPort;
+$_SERVER['CHAMP_POSTGRES_USER'] = 'postgres';
+$_SERVER['CHAMP_POSTGRES_PASSWORD'] = '';
 $_SERVER['CHAMP_WEB_PORT'] = $champWebPort;
 
 defined('CHAMP_MYSQL_HOST') || define('CHAMP_MYSQL_HOST', $champMysqlHost);
 defined('CHAMP_MYSQL_PORT') || define('CHAMP_MYSQL_PORT', (int) $champMysqlPort);
 defined('CHAMP_MYSQL_USER') || define('CHAMP_MYSQL_USER', 'root');
 defined('CHAMP_MYSQL_PASSWORD') || define('CHAMP_MYSQL_PASSWORD', '');
+defined('CHAMP_POSTGRES_HOST') || define('CHAMP_POSTGRES_HOST', $champPostgresHost);
+defined('CHAMP_POSTGRES_PORT') || define('CHAMP_POSTGRES_PORT', (int) $champPostgresPort);
+defined('CHAMP_POSTGRES_USER') || define('CHAMP_POSTGRES_USER', 'postgres');
+defined('CHAMP_POSTGRES_PASSWORD') || define('CHAMP_POSTGRES_PASSWORD', '');
 defined('CHAMP_WEB_PORT') || define('CHAMP_WEB_PORT', (int) $champWebPort);
 "#,
-        mysql_port, web_port
+        mysql_port, postgresql_port, web_port
     );
 
     fs::write(&env_file, content).map_err(|e| {
@@ -2557,24 +2808,46 @@ defined('CHAMP_WEB_PORT') || define('CHAMP_WEB_PORT', (int) $champWebPort);
     Ok(env_file)
 }
 
-fn apply_php_database_env(command: &mut Command, web_port: u16, mysql_port: u16) {
+fn apply_php_database_env(
+    command: &mut Command,
+    web_port: u16,
+    mysql_port: u16,
+    postgresql_port: u16,
+) {
     let mysql_port = mysql_port.to_string();
+    let postgresql_port = postgresql_port.to_string();
     command
         .env("CHAMP_MYSQL_HOST", "127.0.0.1")
         .env("CHAMP_MYSQL_PORT", &mysql_port)
         .env("CHAMP_MYSQL_USER", "root")
         .env("CHAMP_MYSQL_PASSWORD", "")
+        .env("CHAMP_POSTGRES_HOST", "127.0.0.1")
+        .env("CHAMP_POSTGRES_PORT", &postgresql_port)
+        .env("CHAMP_POSTGRES_USER", "postgres")
+        .env("CHAMP_POSTGRES_PASSWORD", "")
         .env("CHAMP_WEB_PORT", web_port.to_string())
-        .env("MYSQL_TCP_PORT", mysql_port);
+        .env("MYSQL_TCP_PORT", mysql_port)
+        .env("PGHOST", "127.0.0.1")
+        .env("PGPORT", postgresql_port)
+        .env("PGUSER", "postgres")
+        .env("PGPASSWORD", "");
 }
 
 fn php_ini_extension_lines(ext_dir: &Path) -> String {
-    ["curl", "mbstring", "mysqli", "openssl", "pdo_mysql"]
-        .iter()
-        .filter(|extension| php_extension_available(ext_dir, extension))
-        .map(|extension| format!("extension={}", extension))
-        .collect::<Vec<_>>()
-        .join("\n")
+    [
+        "curl",
+        "mbstring",
+        "mysqli",
+        "openssl",
+        "pdo_mysql",
+        "pgsql",
+        "pdo_pgsql",
+    ]
+    .iter()
+    .filter(|extension| php_extension_available(ext_dir, extension))
+    .map(|extension| format!("extension={}", extension))
+    .collect::<Vec<_>>()
+    .join("\n")
 }
 
 #[cfg(target_os = "windows")]
@@ -2647,6 +2920,7 @@ fn ensure_database_tool(
     paths: &RuntimePaths,
     web_port: u16,
     mysql_port: u16,
+    postgresql_port: u16,
     database_tool_id: &str,
 ) -> Result<(), String> {
     if paths.adminer.exists() {
@@ -2685,6 +2959,17 @@ fn ensure_database_tool(
     } else {
         "/phpmyadmin"
     };
+    let default_connection = if database_tool_id.starts_with("adminer") {
+        format!(
+            "Default PostgreSQL connection: server <code>127.0.0.1:{}</code>, user <code>postgres</code>, empty password.",
+            postgresql_port
+        )
+    } else {
+        format!(
+            "Default MySQL connection: server <code>127.0.0.1:{}</code>, user <code>root</code>, empty password.",
+            mysql_port
+        )
+    };
 
     let placeholder = format!(
         r#"<?php
@@ -2704,11 +2989,11 @@ header('Content-Type: text/html; charset=utf-8');
 <body>
   <h1>{tool_name} is not installed</h1>
   <p>Run the CHAMP runtime installer to install {tool_name}. After installation, open <code>{tool_path}</code> again.</p>
-  <p>Default MySQL connection: server <code>127.0.0.1:{}</code>, user <code>root</code>, empty password.</p>
+  <p>{default_connection}</p>
 </body>
 </html>
 "#,
-        mysql_port,
+        default_connection = default_connection,
         tool_name = tool_name,
         tool_path = tool_path
     );
@@ -2918,19 +3203,24 @@ mod tests {
     fn test_process_manager_new() {
         let manager = ProcessManager::new();
 
-        assert_eq!(manager.services.len(), 3);
+        assert_eq!(manager.services.len(), 4);
 
         let caddy = manager.services.get(&ServiceType::Caddy).unwrap();
         assert_eq!(caddy.name, ServiceType::Caddy);
         assert_eq!(caddy.state, ServiceState::Stopped);
         assert_eq!(caddy.port, 8080);
         assert!(caddy.child.is_none());
+
+        let postgresql = manager.services.get(&ServiceType::PostgreSQL).unwrap();
+        assert_eq!(postgresql.name, ServiceType::PostgreSQL);
+        assert_eq!(postgresql.state, ServiceState::Stopped);
+        assert_eq!(postgresql.port, 5432);
     }
 
     #[test]
     fn test_process_manager_default() {
         let manager = ProcessManager::default();
-        assert_eq!(manager.services.len(), 3);
+        assert_eq!(manager.services.len(), 4);
         assert!(manager.runtime_paths.is_none());
     }
 
@@ -2941,6 +3231,10 @@ mod tests {
         assert_eq!(manager.status(ServiceType::Caddy), ServiceState::Stopped);
         assert_eq!(manager.status(ServiceType::PhpFpm), ServiceState::Stopped);
         assert_eq!(manager.status(ServiceType::MySQL), ServiceState::Stopped);
+        assert_eq!(
+            manager.status(ServiceType::PostgreSQL),
+            ServiceState::Stopped
+        );
     }
 
     #[test]
@@ -2948,7 +3242,7 @@ mod tests {
         let manager = ProcessManager::new();
         let statuses = manager.get_all_statuses();
 
-        assert_eq!(statuses.len(), 3);
+        assert_eq!(statuses.len(), 4);
 
         let caddy_info = statuses.get(&ServiceType::Caddy).unwrap();
         assert_eq!(caddy_info.service_type, ServiceType::Caddy);
@@ -2990,6 +3284,10 @@ mod tests {
         assert_eq!(manager.status(ServiceType::Caddy), ServiceState::Stopped);
         assert_eq!(manager.status(ServiceType::PhpFpm), ServiceState::Stopped);
         assert_eq!(manager.status(ServiceType::MySQL), ServiceState::Stopped);
+        assert_eq!(
+            manager.status(ServiceType::PostgreSQL),
+            ServiceState::Stopped
+        );
     }
 
     #[test]
@@ -3004,6 +3302,9 @@ mod tests {
 
         let mysql = manager.services.get(&ServiceType::MySQL).unwrap();
         assert_eq!(mysql.port, 3306);
+
+        let postgresql = manager.services.get(&ServiceType::PostgreSQL).unwrap();
+        assert_eq!(postgresql.port, 5432);
     }
 
     #[test]
@@ -3039,10 +3340,7 @@ mod tests {
     #[test]
     fn test_mysql_default_fallback_does_not_use_first_adjacent_port() {
         assert_eq!(
-            first_fallback_port(
-                ServiceType::MySQL,
-                crate::config::DEFAULT_PORTS.mysql
-            ),
+            first_fallback_port(ServiceType::MySQL, crate::config::DEFAULT_PORTS.mysql),
             crate::config::DEFAULT_PORTS.mysql + 2
         );
     }
@@ -3144,9 +3442,10 @@ Options -Indexes
             php_cgi: temp.path().join("php-cgi"),
             php_ini: temp.path().join("php.ini"),
             mysql: temp.path().join("mysql"),
+            postgresql: temp.path().join("postgres"),
             adminer,
-            php_ext_dir: temp.path().join("ext"),
             mysql_data_dir: temp.path().join("mysql-data"),
+            postgresql_data_dir: temp.path().join("postgresql-data"),
             logs_dir: logs,
             config_dir: config.clone(),
             projects_dir: projects,
@@ -3269,6 +3568,7 @@ mod integration_tests {
                 ServiceType::Caddy => "caddy.log",
                 ServiceType::PhpFpm => "php-fpm.log",
                 ServiceType::MySQL => "mysql.log",
+                ServiceType::PostgreSQL => "postgresql.log",
             };
             let log_path = paths.logs_dir.join(log_name);
             if log_path.exists() {

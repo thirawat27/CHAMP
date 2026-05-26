@@ -9,6 +9,7 @@
     "availableVersions": {
       "php": "8.5 latest - Windows from php.net, Linux/macOS portable FPM from static-php.dev",
       "mysql": "9.7.0 LTS - Available from https://dev.mysql.com/downloads/mysql/",
+      "postgresql": "16.14 - Windows/macOS from EnterpriseDB binaries, Linux from Percona portable tarballs",
       "phpmyadmin": "5.2.3 - Available from https://www.phpmyadmin.net/downloads/",
       "adminer": "5.4.2 - Available from https://www.adminer.org/",
       "caddy": "2.11.2 - Available from https://github.com/caddyserver/caddy/releases"
@@ -85,6 +86,26 @@
       ]
     },
 
+    "postgresql": {
+      "versions": [
+        {
+          "id": "postgresql-16",
+          "version": "16.14",
+          "selected": true,
+          "display_name": "PostgreSQL 16.14",
+          "eol": false,
+          "lts": true,
+          "urls": {
+            "windowsX64": "https://get.enterprisedb.com/postgresql/postgresql-16.14-1-windows-x64-binaries.zip",
+            "linuxX64": "https://downloads.percona.com/downloads/postgresql-distribution-16/16.14/binary/tarball/percona-postgresql-16.14-ssl3-linux-x86_64.tar.gz",
+            "linuxArm64": "https://downloads.percona.com/downloads/postgresql-distribution-16/16.14/binary/tarball/percona-postgresql-16.14-ssl3-linux-aarch64.tar.gz",
+            "macOSX64": "https://get.enterprisedb.com/postgresql/postgresql-16.14-1-osx-binaries.zip",
+            "macOSArm64": "https://get.enterprisedb.com/postgresql/postgresql-16.14-1-osx-binaries.zip"
+          }
+        }
+      ]
+    },
+
     "phpmyadmin": {
       "versions": [
         {
@@ -103,7 +124,7 @@
           "display_name": "Adminer 5.4.2",
           "eol": false,
           "lts": false,
-          "url": "https://www.adminer.org/latest-mysql.php"
+          "url": "https://www.adminer.org/latest.php"
         }
       ]
     }

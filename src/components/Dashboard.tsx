@@ -16,6 +16,7 @@ import {
   TerminalSquare,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import packageInfo from "../../package.json";
 import champLogo from "../assets/CHAMP.png";
 import { useTranslation } from "../stores/languageStore";
 import { AudioManager } from "../utils/audioManager";
@@ -25,6 +26,8 @@ import {
   ServiceMap,
   ServiceState,
   ServiceType,
+  getStackServiceTypes,
+  isAdminerSelected as isAdminerSelection,
 } from "../types/services";
 import { HelpModal } from "./HelpModal";
 import { LanguageSelector } from "./LanguageSelector";
@@ -34,15 +37,22 @@ import { StatusBar } from "./StatusBar";
 
 interface AppPaths {
   base_dir: string;
+  portable: boolean;
   runtime_dir: string;
   config_dir: string;
   mysql_data_dir: string;
+  postgresql_data_dir: string;
   logs_dir: string;
   projects_dir: string;
 }
 
 const SOURCE_REPO_URL = "https://github.com/thirawat27/CHAMP";
-const DEFAULT_DATABASE_TOOL_ID = "phpmyadmin-5.2";
+const DASHBOARD_SERVICE_TYPES = [
+  ServiceType.Caddy,
+  ServiceType.PhpFpm,
+  ServiceType.MySQL,
+  ServiceType.PostgreSQL,
+] as const;
 
 type NoticeTone = "info" | "success" | "error";
 type NoticeAction = "start" | "restart" | "stop";
@@ -57,7 +67,7 @@ interface DashboardNotice {
 const STACK_COMMAND_COPY = {
   start_all_services: {
     pendingTitle: "Starting stack",
-    pendingMessage: "Caddy, PHP-FPM, and MySQL are starting. This can take a few seconds.",
+    pendingMessage: "The selected CHAMP stack is starting. This can take a few seconds.",
     successTitle: "Stack started",
     successMessage: "All stack commands finished. Statuses are refreshing now.",
     buttonLabel: "Starting...",
@@ -65,7 +75,8 @@ const STACK_COMMAND_COPY = {
   },
   restart_all_services: {
     pendingTitle: "Restarting stack",
-    pendingMessage: "Services are stopping and starting again. The dashboard will update automatically.",
+    pendingMessage:
+      "Services are stopping and starting again. The dashboard will update automatically.",
     successTitle: "Stack restarted",
     successMessage: "Restart command finished. Statuses are refreshing now.",
     buttonLabel: "Restarting...",
@@ -142,14 +153,18 @@ export function Dashboard() {
 
   const caddyPort = services[ServiceType.Caddy]?.port || 8080;
   const webServerUrl = `http://localhost:${caddyPort}`;
-  const databaseToolId = settings?.package_selection?.phpmyadmin ?? DEFAULT_DATABASE_TOOL_ID;
-  const isAdminerSelected = databaseToolId.startsWith("adminer");
+  const packageSelection = settings?.package_selection ?? null;
+  const isAdminerSelected = isAdminerSelection(packageSelection);
   const databaseToolName = isAdminerSelected ? "Adminer" : "phpMyAdmin";
   const databaseToolUrl = `${webServerUrl}/${isAdminerSelected ? "adminer" : "phpmyadmin"}`;
-  const runningCount = Object.values(services).filter(
-    (service) => service?.state === ServiceState.Running
+  const stackServiceTypes = useMemo(
+    () => getStackServiceTypes(packageSelection),
+    [packageSelection]
+  );
+  const runningCount = stackServiceTypes.filter(
+    (serviceType) => services[serviceType]?.state === ServiceState.Running
   ).length;
-  const totalCount = Object.keys(services).length || 3;
+  const totalCount = stackServiceTypes.length;
   const isCaddyRunning = services[ServiceType.Caddy]?.state === ServiceState.Running;
   const allRunning = runningCount === totalCount;
   const busyStackCommand = busy?.startsWith("stack:")
@@ -160,6 +175,7 @@ export function Dashboard() {
       [ServiceType.Caddy]: settings?.web_port ?? 8080,
       [ServiceType.PhpFpm]: settings?.php_port ?? 9000,
       [ServiceType.MySQL]: settings?.mysql_port ?? 3306,
+      [ServiceType.PostgreSQL]: settings?.postgresql_port ?? 5432,
     }),
     [settings]
   );
@@ -196,26 +212,27 @@ export function Dashboard() {
   }, [refreshMetadata, refreshStatuses]);
 
   // Helper functions
-  const markStackTransition = (
-    command: "start_all_services" | "stop_all_services" | "restart_all_services"
-  ) => {
-    const transitionState =
-      command === "stop_all_services" ? ServiceState.Stopping : ServiceState.Starting;
+  const markStackTransition = useCallback(
+    (command: "start_all_services" | "stop_all_services" | "restart_all_services") => {
+      const transitionState =
+        command === "stop_all_services" ? ServiceState.Stopping : ServiceState.Starting;
 
-    setServices((current) => {
-      const next = { ...current };
-      for (const serviceType of [ServiceType.Caddy, ServiceType.PhpFpm, ServiceType.MySQL]) {
-        const service = next[serviceType];
-        if (!service) continue;
-        next[serviceType] = {
-          ...service,
-          state: transitionState,
-          error_message: undefined,
-        };
-      }
-      return next;
-    });
-  };
+      setServices((current) => {
+        const next = { ...current };
+        for (const serviceType of stackServiceTypes) {
+          const service = next[serviceType];
+          if (!service) continue;
+          next[serviceType] = {
+            ...service,
+            state: transitionState,
+            error_message: undefined,
+          };
+        }
+        return next;
+      });
+    },
+    [stackServiceTypes]
+  );
 
   const markServiceTransition = (
     command: "start_service" | "stop_service" | "restart_service",
@@ -240,7 +257,12 @@ export function Dashboard() {
 
   const fallbackPortMessage = useMemo(() => {
     return (statuses: ServiceMap, fallbackMessage: string) => {
-      const changedPorts = [ServiceType.Caddy, ServiceType.PhpFpm, ServiceType.MySQL]
+      const changedPorts = [
+        ServiceType.Caddy,
+        ServiceType.PhpFpm,
+        ServiceType.MySQL,
+        ServiceType.PostgreSQL,
+      ]
         .map((serviceType) => {
           const service = statuses[serviceType];
           const expectedPort = expectedPorts[serviceType];
@@ -257,40 +279,41 @@ export function Dashboard() {
     };
   }, [expectedPorts]);
 
-  const runStackCommand = useCallback(async (
-    command: "start_all_services" | "stop_all_services" | "restart_all_services"
-  ) => {
-    const copy = STACK_COMMAND_COPY[command];
-    setBusy(`stack:${command}`);
-    setNotice({
-      tone: "info",
-      action: copy.action,
-      title: copy.pendingTitle,
-      message: copy.pendingMessage,
-    });
-    markStackTransition(command);
-    try {
-      const statuses = await invoke<ServiceMap>(command);
-      setServices(statuses);
-      AudioManager.playNotification("success", copy.action);
+  const runStackCommand = useCallback(
+    async (command: "start_all_services" | "stop_all_services" | "restart_all_services") => {
+      const copy = STACK_COMMAND_COPY[command];
+      setBusy(`stack:${command}`);
       setNotice({
-        tone: "success",
+        tone: "info",
         action: copy.action,
-        title: copy.successTitle,
-        message: fallbackPortMessage(statuses, copy.successMessage),
+        title: copy.pendingTitle,
+        message: copy.pendingMessage,
       });
-    } catch (error) {
-      AudioManager.playNotification("error");
-      setNotice({
-        tone: "error",
-        title: `${command.replace(/_/g, " ")} failed`,
-        message: String(error),
-      });
-      await refreshStatuses();
-    } finally {
-      setBusy(null);
-    }
-  }, [refreshStatuses, fallbackPortMessage]);
+      markStackTransition(command);
+      try {
+        const statuses = await invoke<ServiceMap>(command);
+        setServices(statuses);
+        AudioManager.playNotification("success", copy.action);
+        setNotice({
+          tone: "success",
+          action: copy.action,
+          title: copy.successTitle,
+          message: fallbackPortMessage(statuses, copy.successMessage),
+        });
+      } catch (error) {
+        AudioManager.playNotification("error");
+        setNotice({
+          tone: "error",
+          title: `${command.replace(/_/g, " ")} failed`,
+          message: String(error),
+        });
+        await refreshStatuses();
+      } finally {
+        setBusy(null);
+      }
+    },
+    [refreshStatuses, fallbackPortMessage, markStackTransition]
+  );
 
   // Keyboard shortcuts
   useEffect(() => {
@@ -348,7 +371,19 @@ export function Dashboard() {
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [notice, busy, runStackCommand, allRunning, runningCount, appPaths, isCaddyRunning, webServerUrl, databaseToolUrl, showSettings, showHelp]);
+  }, [
+    notice,
+    busy,
+    runStackCommand,
+    allRunning,
+    runningCount,
+    appPaths,
+    isCaddyRunning,
+    webServerUrl,
+    databaseToolUrl,
+    showSettings,
+    showHelp,
+  ]);
 
   useEffect(() => {
     if (!notice || notice.tone === "info") return undefined;
@@ -415,6 +450,7 @@ export function Dashboard() {
       ["Caddy", installedVersions.caddy],
       ["PHP", installedVersions.php],
       ["MySQL", installedVersions.mysql],
+      ["PostgreSQL", installedVersions.postgresql],
       [databaseToolName, installedVersions.phpmyadmin || installedVersions.adminer],
     ];
     return entries.filter(
@@ -430,7 +466,7 @@ export function Dashboard() {
         </div>
         <div className="titlebar-copy">
           <h1>
-            {t.appName} <span>v1.2.0</span>
+            {t.appName} <span>v{packageInfo.version}</span>
           </h1>
           <p>{t.appDescription}</p>
         </div>
@@ -450,9 +486,7 @@ export function Dashboard() {
             ) : (
               <Play size={16} />
             )}
-            {busyStackCommand === "start_all_services"
-              ? t.starting
-              : t.start}
+            {busyStackCommand === "start_all_services" ? t.starting : t.start}
           </button>
           <button
             className="btn-command"
@@ -469,9 +503,7 @@ export function Dashboard() {
             ) : (
               <RefreshCw size={16} />
             )}
-            {busyStackCommand === "restart_all_services"
-              ? t.restarting
-              : t.restart}
+            {busyStackCommand === "restart_all_services" ? t.restarting : t.restart}
           </button>
           <button
             className="btn-command danger"
@@ -488,9 +520,7 @@ export function Dashboard() {
             ) : (
               <Square size={15} />
             )}
-            {busyStackCommand === "stop_all_services"
-              ? t.stopping
-              : t.stop}
+            {busyStackCommand === "stop_all_services" ? t.stopping : t.stop}
           </button>
           <button
             className="icon-button github"
@@ -542,12 +572,12 @@ export function Dashboard() {
             <strong>{notice.title}</strong>
             <small>{notice.message}</small>
           </span>
-          <button 
-            className="notice-close" 
+          <button
+            className="notice-close"
             onClick={() => {
               AudioManager.playClick();
               setNotice(null);
-            }} 
+            }}
             aria-label={t.close}
             onMouseEnter={() => AudioManager.playHover()}
           >
@@ -593,8 +623,8 @@ export function Dashboard() {
             >
               <Database size={16} /> {databaseToolName}
             </button>
-            <button 
-              className="btn-quick-action action-projects" 
+            <button
+              className="btn-quick-action action-projects"
               onClick={() => {
                 AudioManager.playClick();
                 openFolder(appPaths?.projects_dir);
@@ -604,8 +634,8 @@ export function Dashboard() {
             >
               <Folder size={16} /> {t.projects}
             </button>
-            <button 
-              className="btn-quick-action action-logs" 
+            <button
+              className="btn-quick-action action-logs"
               onClick={() => {
                 AudioManager.playClick();
                 openFolder(appPaths?.logs_dir);
@@ -615,8 +645,8 @@ export function Dashboard() {
             >
               <TerminalSquare size={16} /> {t.logs}
             </button>
-            <button 
-              className="btn-quick-action action-config" 
+            <button
+              className="btn-quick-action action-config"
               onClick={() => {
                 AudioManager.playClick();
                 openFolder(appPaths?.config_dir);
@@ -626,8 +656,8 @@ export function Dashboard() {
             >
               <HardDrive size={16} /> {t.settings}
             </button>
-            <button 
-              className="btn-quick-action github" 
+            <button
+              className="btn-quick-action github"
               onClick={() => openUrl(SOURCE_REPO_URL)}
               title="GitHub"
               onMouseEnter={() => AudioManager.playHover()}
@@ -648,7 +678,7 @@ export function Dashboard() {
         )}
 
         <section className="service-grid-responsive">
-          {[ServiceType.Caddy, ServiceType.PhpFpm, ServiceType.MySQL].map((serviceType) => {
+          {DASHBOARD_SERVICE_TYPES.map((serviceType) => {
             const service = services[serviceType];
             if (!service) return null;
             const busyServiceCommand = busy?.endsWith(serviceType)
@@ -662,7 +692,11 @@ export function Dashboard() {
                 port={service.port}
                 error={service.error_message}
                 busy={Boolean(busyServiceCommand)}
-                busyLabel={busyServiceCommand ? SERVICE_COMMAND_COPY[busyServiceCommand].buttonLabel : undefined}
+                busyLabel={
+                  busyServiceCommand
+                    ? SERVICE_COMMAND_COPY[busyServiceCommand].buttonLabel
+                    : undefined
+                }
                 onStart={() => runServiceCommand("start_service", serviceType)}
                 onStop={() => runServiceCommand("stop_service", serviceType)}
                 onRestart={() => runServiceCommand("restart_service", serviceType)}
@@ -672,7 +706,12 @@ export function Dashboard() {
         </section>
       </main>
 
-      <StatusBar services={services} appPaths={appPaths || undefined} data-testid="status-bar" />
+      <StatusBar
+        services={services}
+        appPaths={appPaths || undefined}
+        packageSelection={packageSelection}
+        data-testid="status-bar"
+      />
 
       {showSettings && (
         <SettingsPanel

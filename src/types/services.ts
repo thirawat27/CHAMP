@@ -6,6 +6,7 @@ export enum ServiceType {
   Caddy = "caddy",
   PhpFpm = "php-fpm",
   MySQL = "mysql",
+  PostgreSQL = "postgresql",
 }
 
 export enum ServiceState {
@@ -28,6 +29,7 @@ export type ServiceMap = Record<ServiceType, ServiceInfo>;
 export interface AppSettings {
   web_port: number;
   mysql_port: number;
+  postgresql_port: number;
   php_port: number;
   project_root: string;
   auto_start_services?: boolean;
@@ -89,14 +91,35 @@ export interface PhpMyAdminPackage {
 export interface PackagesConfig {
   php: PhpPackage[];
   mysql: MySQLPackage[];
+  postgresql: MySQLPackage[];
   phpmyadmin: PhpMyAdminPackage[];
 }
 
 export interface PackageSelection {
   php: string;
   mysql: string;
+  postgresql: string;
   phpmyadmin: string;
 }
+
+export const EMPTY_PACKAGE_SELECTION: PackageSelection = {
+  php: "",
+  mysql: "",
+  postgresql: "",
+  phpmyadmin: "",
+};
+
+export const isAdminerSelected = (
+  selection?: Pick<PackageSelection, "phpmyadmin"> | null
+): boolean => selection?.phpmyadmin?.startsWith("adminer") ?? false;
+
+export const getActiveDatabaseService = (
+  selection?: Pick<PackageSelection, "phpmyadmin"> | null
+): ServiceType => (isAdminerSelected(selection) ? ServiceType.PostgreSQL : ServiceType.MySQL);
+
+export const getStackServiceTypes = (
+  selection?: Pick<PackageSelection, "phpmyadmin"> | null
+): ServiceType[] => [ServiceType.Caddy, ServiceType.PhpFpm, getActiveDatabaseService(selection)];
 
 export type RuntimePlatformKey =
   | "windowsX64"
@@ -155,12 +178,14 @@ export const DEFAULT_PORTS = {
   [ServiceType.Caddy]: 8080,
   [ServiceType.PhpFpm]: 9000,
   [ServiceType.MySQL]: 3306,
+  [ServiceType.PostgreSQL]: 5432,
 } as const;
 
 export const SERVICE_DISPLAY_NAMES = {
   [ServiceType.Caddy]: "Caddy",
   [ServiceType.PhpFpm]: "PHP-FPM",
   [ServiceType.MySQL]: "MySQL",
+  [ServiceType.PostgreSQL]: "PostgreSQL",
 } as const;
 
 // CHAMP currently ships official MySQL portable packages for supported platforms.
@@ -173,6 +198,7 @@ export const SERVICE_DESCRIPTIONS = {
   [ServiceType.Caddy]: "Web Server",
   [ServiceType.PhpFpm]: "PHP Runtime",
   [ServiceType.MySQL]: "Database Server",
+  [ServiceType.PostgreSQL]: "PostgreSQL Server",
 } as const;
 
 // System dependency types

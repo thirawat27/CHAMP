@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useCallback, useState, useEffect } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import {
   PackagesConfig,
@@ -6,9 +6,12 @@ import {
   PhpPackage,
   MySQLPackage,
   PhpMyAdminPackage,
+  EMPTY_PACKAGE_SELECTION,
   getDatabaseDisplayName,
   hasPackageUrlForPlatform,
+  isAdminerSelected,
 } from "../types/services";
+import { useTranslation } from "../stores/languageStore";
 
 // Helper to detect platform
 const detectPlatform = (): string => {
@@ -24,31 +27,46 @@ interface PackageSelectorProps {
 }
 
 export function PackageSelector({ onSelectionChange, initialSelection }: PackageSelectorProps) {
+  const { t } = useTranslation();
   const [packages, setPackages] = useState<PackagesConfig | null>(null);
   const [loading, setLoading] = useState(true);
   const [currentPlatform, setCurrentPlatform] = useState<string>("");
   const [runtimePlatformKey, setRuntimePlatformKey] = useState<string>("");
   const [selection, setSelection] = useState<PackageSelection>(
-    initialSelection || {
-      php: "php-8.5",
-      mysql: "mysql-9.7",
-      phpmyadmin: "phpmyadmin-5.2",
-    }
+    initialSelection || EMPTY_PACKAGE_SELECTION
   );
 
   const getPhpLabel = (pkg: PhpPackage): string => {
     const badges: string[] = [];
     if (pkg.lts) badges.push("LTS");
     if (pkg.eol) badges.push("EOL");
-    if (pkg.recommended) badges.push("Recommended");
+    if (pkg.recommended) badges.push(t.wizardRecommended);
     return badges.length > 0 ? `${pkg.display_name} [${badges.join(", ")}]` : pkg.display_name;
   };
+
+  const loadPackages = useCallback(async () => {
+    try {
+      const [data, platformKey] = await Promise.all([
+        invoke<PackagesConfig>("get_available_packages_cmd"),
+        invoke<string>("get_runtime_platform"),
+      ]);
+      setPackages(data);
+      setRuntimePlatformKey(platformKey);
+      if (!initialSelection) {
+        setSelection(await invoke<PackageSelection>("get_selected_package_ids"));
+      }
+    } catch (err) {
+      console.error("Failed to load packages:", err);
+    } finally {
+      setLoading(false);
+    }
+  }, [initialSelection]);
 
   useEffect(() => {
     loadPackages();
     // Detect platform for database display name
     setCurrentPlatform(detectPlatform());
-  }, []);
+  }, [loadPackages]);
 
   useEffect(() => {
     if (!packages || !runtimePlatformKey) return;
@@ -59,6 +77,10 @@ export function PackageSelector({ onSelectionChange, initialSelection }: Package
     const availableMysql = packages.mysql.filter((pkg) =>
       hasPackageUrlForPlatform(pkg, runtimePlatformKey)
     );
+    const availablePostgreSQL = packages.postgresql.filter((pkg) =>
+      hasPackageUrlForPlatform(pkg, runtimePlatformKey)
+    );
+    const availableDatabaseTools = packages.phpmyadmin;
     const nextSelection = { ...selection };
 
     if (!availablePhp.some((pkg) => pkg.id === nextSelection.php) && availablePhp[0]) {
@@ -67,29 +89,31 @@ export function PackageSelector({ onSelectionChange, initialSelection }: Package
     if (!availableMysql.some((pkg) => pkg.id === nextSelection.mysql) && availableMysql[0]) {
       nextSelection.mysql = availableMysql[0].id;
     }
+    if (
+      !availablePostgreSQL.some((pkg) => pkg.id === nextSelection.postgresql) &&
+      availablePostgreSQL[0]
+    ) {
+      nextSelection.postgresql = availablePostgreSQL[0].id;
+    }
+    if (
+      !availableDatabaseTools.some((pkg) => pkg.id === nextSelection.phpmyadmin) &&
+      availableDatabaseTools[0]
+    ) {
+      nextSelection.phpmyadmin = availableDatabaseTools[0].id;
+    }
 
-    if (nextSelection.php !== selection.php || nextSelection.mysql !== selection.mysql) {
+    if (
+      nextSelection.php !== selection.php ||
+      nextSelection.mysql !== selection.mysql ||
+      nextSelection.postgresql !== selection.postgresql ||
+      nextSelection.phpmyadmin !== selection.phpmyadmin
+    ) {
       setSelection(nextSelection);
       return;
     }
 
     onSelectionChange(selection);
   }, [selection, packages, runtimePlatformKey, onSelectionChange]);
-
-  const loadPackages = async () => {
-    try {
-      const [data, platformKey] = await Promise.all([
-        invoke<PackagesConfig>("get_available_packages_cmd"),
-        invoke<string>("get_runtime_platform"),
-      ]);
-      setPackages(data);
-      setRuntimePlatformKey(platformKey);
-    } catch (err) {
-      console.error("Failed to load packages:", err);
-    } finally {
-      setLoading(false);
-    }
-  };
 
   const handlePhpChange = (value: string) => {
     setSelection({ ...selection, php: value });
@@ -99,14 +123,25 @@ export function PackageSelector({ onSelectionChange, initialSelection }: Package
     setSelection({ ...selection, mysql: value });
   };
 
+  const handlePostgreSQLChange = (value: string) => {
+    setSelection({ ...selection, postgresql: value });
+  };
+
   const handleDatabaseToolChange = (value: string) => {
     setSelection({ ...selection, phpmyadmin: value });
   };
 
   if (loading) {
     return (
-      <div style={{ textAlign: "center", color: "var(--text-secondary)", fontSize: "0.875rem", padding: "1rem" }}>
-        Loading available packages...
+      <div
+        style={{
+          textAlign: "center",
+          color: "var(--text-secondary)",
+          fontSize: "0.875rem",
+          padding: "1rem",
+        }}
+      >
+        {t.wizardLoadingPackages}
       </div>
     );
   }
@@ -114,7 +149,7 @@ export function PackageSelector({ onSelectionChange, initialSelection }: Package
   if (!packages) {
     return (
       <div style={{ textAlign: "center", color: "var(--color-error)", fontSize: "0.875rem" }}>
-        Failed to load available packages
+        {t.wizardFailedToLoadPackages}
       </div>
     );
   }
@@ -125,19 +160,36 @@ export function PackageSelector({ onSelectionChange, initialSelection }: Package
   const availableMysqlPackages = packages.mysql.filter((pkg) =>
     hasPackageUrlForPlatform(pkg, runtimePlatformKey)
   );
+  const availablePostgreSQLPackages = packages.postgresql.filter((pkg) =>
+    hasPackageUrlForPlatform(pkg, runtimePlatformKey)
+  );
+  const adminerSelected = isAdminerSelected(selection);
+  const activeDatabaseName = adminerSelected
+    ? "PostgreSQL"
+    : getDatabaseDisplayName(currentPlatform);
+  const activeDatabasePackages = adminerSelected
+    ? availablePostgreSQLPackages
+    : availableMysqlPackages;
+  const activeDatabaseValue = adminerSelected ? selection.postgresql : selection.mysql;
+  const handleActiveDatabaseChange = adminerSelected ? handlePostgreSQLChange : handleMySQLChange;
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
       {/* PHP Version Selector */}
       <div style={{ display: "flex", flexDirection: "column", gap: "0.25rem" }}>
         <label style={{ fontSize: "0.875rem", fontWeight: 500, color: "var(--text-primary)" }}>
-          PHP Version
+          {t.phpVersion}
         </label>
         <select
           value={selection.php}
           onChange={(e) => handlePhpChange(e.target.value)}
           className="input"
-          style={{ cursor: "pointer", padding: "0.375rem 0.5rem", fontSize: "0.875rem", width: "100%" }}
+          style={{
+            cursor: "pointer",
+            padding: "0.375rem 0.5rem",
+            fontSize: "0.875rem",
+            width: "100%",
+          }}
         >
           {availablePhpPackages.map((pkg: PhpPackage) => (
             <option key={pkg.id} value={pkg.id}>
@@ -147,35 +199,21 @@ export function PackageSelector({ onSelectionChange, initialSelection }: Package
         </select>
       </div>
 
-      {/* Database Version Selector */}
-      <div style={{ display: "flex", flexDirection: "column", gap: "0.25rem" }}>
-        <label style={{ fontSize: "0.875rem", fontWeight: 500, color: "var(--text-primary)" }}>
-          {getDatabaseDisplayName(currentPlatform)} Version
-        </label>
-        <select
-          value={selection.mysql}
-          onChange={(e) => handleMySQLChange(e.target.value)}
-          className="input"
-          style={{ cursor: "pointer", padding: "0.375rem 0.5rem", fontSize: "0.875rem", width: "100%" }}
-        >
-          {availableMysqlPackages.map((pkg: MySQLPackage) => (
-            <option key={pkg.id} value={pkg.id}>
-              {pkg.display_name}
-            </option>
-          ))}
-        </select>
-      </div>
-
       {/* Database Tool Selector */}
       <div style={{ display: "flex", flexDirection: "column", gap: "0.25rem" }}>
         <label style={{ fontSize: "0.875rem", fontWeight: 500, color: "var(--text-primary)" }}>
-          Database Tool
+          {t.databaseTool}
         </label>
         <select
           value={selection.phpmyadmin}
           onChange={(e) => handleDatabaseToolChange(e.target.value)}
           className="input"
-          style={{ cursor: "pointer", padding: "0.375rem 0.5rem", fontSize: "0.875rem", width: "100%" }}
+          style={{
+            cursor: "pointer",
+            padding: "0.375rem 0.5rem",
+            fontSize: "0.875rem",
+            width: "100%",
+          }}
         >
           {packages.phpmyadmin.map((pkg: PhpMyAdminPackage) => (
             <option key={pkg.id} value={pkg.id}>
@@ -185,13 +223,40 @@ export function PackageSelector({ onSelectionChange, initialSelection }: Package
         </select>
       </div>
 
+      {/* Active Database Version Selector */}
+      <div style={{ display: "flex", flexDirection: "column", gap: "0.25rem" }}>
+        <label style={{ fontSize: "0.875rem", fontWeight: 500, color: "var(--text-primary)" }}>
+          {activeDatabaseName} {t.version}
+        </label>
+        <select
+          value={activeDatabaseValue}
+          onChange={(e) => handleActiveDatabaseChange(e.target.value)}
+          className="input"
+          style={{
+            cursor: "pointer",
+            padding: "0.375rem 0.5rem",
+            fontSize: "0.875rem",
+            width: "100%",
+          }}
+        >
+          {activeDatabasePackages.map((pkg: MySQLPackage) => (
+            <option key={pkg.id} value={pkg.id}>
+              {pkg.display_name}
+            </option>
+          ))}
+        </select>
+      </div>
+
       {/* Package Info Box */}
       <div className="info-box" style={{ padding: "0.5rem", fontSize: "0.875rem" }}>
-        <p style={{ fontSize: "0.875rem", color: "var(--text-secondary)", margin: "0 0 0.375rem 0" }}>
-          <strong>Default:</strong> PHP 8.5, {getDatabaseDisplayName(currentPlatform)} 9.7, phpMyAdmin 5.2
+        <p
+          style={{ fontSize: "0.875rem", color: "var(--text-secondary)", margin: "0 0 0.375rem 0" }}
+        >
+          <strong>{t.wizardDefault}:</strong> PHP 8.5, {activeDatabaseName},{" "}
+          {adminerSelected ? "Adminer" : "phpMyAdmin"}
         </p>
         <p style={{ fontSize: "0.875rem", color: "var(--text-secondary)", margin: 0 }}>
-          <strong>Note:</strong> EOL versions are unsupported and may have security vulnerabilities. PHP 5.5–7.3 are available on Windows only.
+          <strong>{t.wizardNote}:</strong> {t.wizardEolNote}
         </p>
       </div>
     </div>

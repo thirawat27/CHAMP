@@ -14,14 +14,13 @@ use tokio::task::JoinSet;
 
 use crate::runtime::locator::get_app_data_paths;
 use crate::runtime::packages::{
-    get_mysql_package, get_php_package, get_phpmyadmin_package, PackageSelection,
+    get_mysql_package, get_php_package, get_phpmyadmin_package, get_postgresql_package,
+    PackageSelection,
 };
 use sha2::{Digest, Sha256};
 
 /// Runtime configuration loaded from runtime-config.json (shared with packages.rs)
-pub use crate::runtime::packages::{
-    BinariesConfig, BinaryConfig, Checksums, PhpMyAdminConfig, RuntimeConfig, Urls, VersionInfo,
-};
+pub use crate::runtime::packages::RuntimeConfig;
 
 /// Global runtime config (loaded once)
 static RUNTIME_CONFIG: OnceLock<RuntimeConfig> = OnceLock::new();
@@ -59,39 +58,7 @@ pub fn load_runtime_config() -> RuntimeConfig {
 
 /// Try to load config content from various locations
 fn load_config_content() -> Option<String> {
-    // 1. Try current directory (for development)
-    if let Ok(content) = fs::read_to_string("runtime-config.json") {
-        return Some(content);
-    }
-
-    // 2. Try src-tauri directory (for development)
-    if let Ok(content) = fs::read_to_string("src-tauri/runtime-config.json") {
-        return Some(content);
-    }
-
-    // 3. Try alongside the executable (for production)
-    if let Ok(exe_path) = std::env::current_exe() {
-        if let Some(exe_dir) = exe_path.parent() {
-            let config_path = exe_dir.join("runtime-config.json");
-            if let Ok(content) = fs::read_to_string(&config_path) {
-                return Some(content);
-            }
-        }
-    }
-
-    // 4. Try AppData/resources (Windows)
-    #[cfg(target_os = "windows")]
-    {
-        if let Some(local_app_data) = dirs::data_local_dir() {
-            // Check in the app installation directory
-            let config_path = local_app_data.join("campp").join("runtime-config.json");
-            if let Ok(content) = fs::read_to_string(&config_path) {
-                return Some(content);
-            }
-        }
-    }
-
-    None
+    crate::runtime::packages::read_runtime_config_content().map(|(_, content)| content)
 }
 
 /// Get the global runtime config (loads once, then caches)
@@ -101,100 +68,7 @@ fn get_config() -> &'static RuntimeConfig {
 
 /// Default hardcoded configuration (fallback when config file is not available)
 fn get_default_config() -> RuntimeConfig {
-    use crate::runtime::packages::VersionInfoSingleUrl;
-
-    RuntimeConfig {
-        version: "1.0".to_string(),
-        binaries: BinariesConfig {
-            caddy: BinaryConfig {
-                versions: vec![
-                    VersionInfo {
-                        id: "caddy-2.11".to_string(),
-                        version: "2.11.2".to_string(),
-                        selected: true,
-                        display_name: "Caddy 2.11.2".to_string(),
-                        eol: false,
-                        lts: false,
-                        checksums: Checksums::default(),
-                        urls: Urls {
-                            windows_x64: Some("https://github.com/caddyserver/caddy/releases/download/v2.11.2/caddy_2.11.2_windows_amd64.zip".to_string()),
-                            windows_arm64: Some("https://github.com/caddyserver/caddy/releases/download/v2.11.2/caddy_2.11.2_windows_arm64.zip".to_string()),
-                            linux_x64: Some("https://github.com/caddyserver/caddy/releases/download/v2.11.2/caddy_2.11.2_linux_amd64.tar.gz".to_string()),
-                            linux_arm64: Some("https://github.com/caddyserver/caddy/releases/download/v2.11.2/caddy_2.11.2_linux_arm64.tar.gz".to_string()),
-                            macos_x64: Some("https://github.com/caddyserver/caddy/releases/download/v2.11.2/caddy_2.11.2_mac_amd64.tar.gz".to_string()),
-                            macos_arm64: Some("https://github.com/caddyserver/caddy/releases/download/v2.11.2/caddy_2.11.2_mac_arm64.tar.gz".to_string()),
-                        },
-                    },
-                ],
-            },
-            php: BinaryConfig {
-                versions: vec![
-                    VersionInfo {
-                        id: "php-8.5".to_string(),
-                        version: "8.5.5".to_string(),
-                        selected: true,
-                        display_name: "PHP 8.5".to_string(),
-                        eol: false,
-                        lts: false,
-                        checksums: Checksums::default(),
-                        urls: Urls {
-                            windows_x64: Some("https://downloads.php.net/~windows/releases/archives/php-8.5.5-nts-Win32-vs17-x64.zip".to_string()),
-                            windows_arm64: None,
-                            linux_x64: Some("https://dl.static-php.dev/static-php-cli/bulk/php-8.5.5-fpm-linux-x86_64.tar.gz".to_string()),
-                            linux_arm64: None,
-                            macos_x64: Some("https://dl.static-php.dev/static-php-cli/bulk/php-8.5.5-fpm-macos-x86_64.tar.gz".to_string()),
-                            macos_arm64: Some("https://dl.static-php.dev/static-php-cli/bulk/php-8.5.5-fpm-macos-aarch64.tar.gz".to_string()),
-                        },
-                    },
-                ],
-            },
-            mysql: BinaryConfig {
-                versions: vec![
-                    VersionInfo {
-                        id: "mysql-9.7".to_string(),
-                        version: "9.7.0".to_string(),
-                        selected: true,
-                        display_name: "MySQL 9.7.0".to_string(),
-                        eol: false,
-                        lts: true,
-                        checksums: Checksums::default(),
-                        urls: Urls {
-                            windows_x64: Some("https://cdn.mysql.com/Downloads/MySQL-9.7/mysql-9.7.0-winx64.zip".to_string()),
-                            windows_arm64: None,
-                            linux_x64: Some("https://cdn.mysql.com/Downloads/MySQL-9.7/mysql-9.7.0-linux-glibc2.28-x86_64.tar.xz".to_string()),
-                            linux_arm64: Some("https://cdn.mysql.com/Downloads/MySQL-9.7/mysql-9.7.0-linux-glibc2.28-aarch64.tar.xz".to_string()),
-                            macos_x64: Some("https://cdn.mysql.com/Downloads/MySQL-9.7/mysql-9.7.0-macos15-x86_64.tar.gz".to_string()),
-                            macos_arm64: Some("https://cdn.mysql.com/Downloads/MySQL-9.7/mysql-9.7.0-macos15-arm64.tar.gz".to_string()),
-                        },
-                    },
-                ],
-            },
-            phpmyadmin: PhpMyAdminConfig {
-                versions: vec![
-                    VersionInfoSingleUrl {
-                        id: "phpmyadmin-5.2".to_string(),
-                        version: "5.2.3".to_string(),
-                        selected: true,
-                        display_name: "phpMyAdmin 5.2.3".to_string(),
-                        eol: false,
-                        lts: false,
-                        checksum: Some("2d2e13c735366d318425c78e4ee2cc8fc648d77faba3ddea2cd516e43885733f".to_string()),
-                        url: "https://files.phpmyadmin.net/phpMyAdmin/5.2.3/phpMyAdmin-5.2.3-all-languages.zip".to_string(),
-                    },
-                    VersionInfoSingleUrl {
-                        id: "adminer-5.4".to_string(),
-                        version: "5.4.2".to_string(),
-                        selected: false,
-                        display_name: "Adminer 5.4.2".to_string(),
-                        eol: false,
-                        lts: false,
-                        checksum: None,
-                        url: "https://www.adminer.org/latest-mysql.php".to_string(),
-                    },
-                ],
-            },
-        },
-    }
+    crate::runtime::packages::embedded_default_runtime_config()
 }
 
 /// Binary component types
@@ -203,6 +77,7 @@ pub enum BinaryComponent {
     Caddy,
     Php,
     MySQL,
+    PostgreSQL,
     PhpMyAdmin,
 }
 
@@ -212,6 +87,7 @@ impl BinaryComponent {
             BinaryComponent::Caddy => "Caddy",
             BinaryComponent::Php => "PHP",
             BinaryComponent::MySQL => "MySQL",
+            BinaryComponent::PostgreSQL => "PostgreSQL",
             BinaryComponent::PhpMyAdmin => "phpMyAdmin",
         }
     }
@@ -267,6 +143,22 @@ impl BinaryComponent {
                         .map(|v| v.version.clone())
                         .unwrap_or_default()
                 }),
+            BinaryComponent::PostgreSQL => config
+                .binaries
+                .postgresql
+                .versions
+                .iter()
+                .find(|v| v.selected)
+                .map(|v| v.version.clone())
+                .unwrap_or_else(|| {
+                    config
+                        .binaries
+                        .postgresql
+                        .versions
+                        .first()
+                        .map(|v| v.version.clone())
+                        .unwrap_or_default()
+                }),
             BinaryComponent::PhpMyAdmin => config
                 .binaries
                 .phpmyadmin
@@ -295,6 +187,7 @@ impl BinaryComponent {
             BinaryComponent::Caddy => "caddy",
             BinaryComponent::Php => "php",
             BinaryComponent::MySQL => "mysql",
+            BinaryComponent::PostgreSQL => "postgresql",
             BinaryComponent::PhpMyAdmin => "adminer",
         }
     }
@@ -315,6 +208,11 @@ impl RuntimeDownloader {
                         return pkg.version;
                     }
                 }
+                BinaryComponent::PostgreSQL => {
+                    if let Some(pkg) = get_postgresql_package(&selection.postgresql) {
+                        return pkg.version;
+                    }
+                }
                 BinaryComponent::PhpMyAdmin => {
                     if let Some(pkg) = get_phpmyadmin_package(&selection.phpmyadmin) {
                         return pkg.version;
@@ -332,7 +230,10 @@ impl RuntimeDownloader {
 }
 
 /// Platform information
-#[allow(dead_code)]
+#[expect(
+    dead_code,
+    reason = "Cross-platform variants are selected by cfg on their target OS/architecture"
+)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Platform {
     WindowsX64,
@@ -601,6 +502,18 @@ impl RuntimeDownloader {
                         };
                     }
                 }
+                BinaryComponent::PostgreSQL => {
+                    if let Some(pkg) = get_postgresql_package(&selection.postgresql) {
+                        return match self.platform {
+                            Platform::WindowsX64 => pkg.windows_x64,
+                            Platform::WindowsArm64 => pkg.windows_arm64,
+                            Platform::MacOSX64 => pkg.macos_x64,
+                            Platform::MacOSArm64 => pkg.macos_arm64,
+                            Platform::LinuxX64 => pkg.linux_x64,
+                            Platform::LinuxArm64 => pkg.linux_arm64,
+                        };
+                    }
+                }
                 BinaryComponent::PhpMyAdmin => {
                     if let Some(pkg) = get_phpmyadmin_package(&selection.phpmyadmin) {
                         return pkg.url;
@@ -676,6 +589,32 @@ impl RuntimeDownloader {
                     .iter()
                     .find(|v| v.selected)
                     .or_else(|| config.binaries.mysql.versions.first())
+                    .unwrap();
+                match self.platform {
+                    Platform::WindowsX64 => {
+                        version_info.urls.windows_x64.clone().unwrap_or_default()
+                    }
+                    Platform::WindowsArm64 => {
+                        version_info.urls.windows_arm64.clone().unwrap_or_default()
+                    }
+                    Platform::MacOSX64 => version_info.urls.macos_x64.clone().unwrap_or_default(),
+                    Platform::MacOSArm64 => {
+                        version_info.urls.macos_arm64.clone().unwrap_or_default()
+                    }
+                    Platform::LinuxX64 => version_info.urls.linux_x64.clone().unwrap_or_default(),
+                    Platform::LinuxArm64 => {
+                        version_info.urls.linux_arm64.clone().unwrap_or_default()
+                    }
+                }
+            }
+            BinaryComponent::PostgreSQL => {
+                let version_info = config
+                    .binaries
+                    .postgresql
+                    .versions
+                    .iter()
+                    .find(|v| v.selected)
+                    .or_else(|| config.binaries.postgresql.versions.first())
                     .unwrap();
                 match self.platform {
                     Platform::WindowsX64 => {
@@ -1370,11 +1309,15 @@ impl RuntimeDownloader {
         let platform_key = self.platform.url_key();
 
         match component {
-            BinaryComponent::Php | BinaryComponent::MySQL | BinaryComponent::Caddy => {
+            BinaryComponent::Php
+            | BinaryComponent::MySQL
+            | BinaryComponent::PostgreSQL
+            | BinaryComponent::Caddy => {
                 let version_info = match component {
                     BinaryComponent::Caddy => config.binaries.caddy.versions.iter(),
                     BinaryComponent::Php => config.binaries.php.versions.iter(),
                     BinaryComponent::MySQL => config.binaries.mysql.versions.iter(),
+                    BinaryComponent::PostgreSQL => config.binaries.postgresql.versions.iter(),
                     _ => return None,
                 };
 
@@ -1383,6 +1326,7 @@ impl RuntimeDownloader {
                     match component {
                         BinaryComponent::Php => Some(selection.php.as_str()),
                         BinaryComponent::MySQL => Some(selection.mysql.as_str()),
+                        BinaryComponent::PostgreSQL => Some(selection.postgresql.as_str()),
                         _ => None,
                     }
                 } else {
@@ -1511,6 +1455,10 @@ impl RuntimeDownloader {
                 dest_dir.join("buildroot/bin/php"),
                 dest_dir.join("mysql/bin/mysqld"),
                 dest_dir.join("bin/mysqld"),
+                dest_dir.join("pgsql/bin/postgres"),
+                dest_dir.join("postgresql/bin/postgres"),
+                dest_dir.join("bin/postgres"),
+                dest_dir.join("bin/initdb"),
             ];
 
             for path in &binary_paths {
@@ -1561,6 +1509,10 @@ impl RuntimeDownloader {
                 dest_dir.join("buildroot/bin/php"),
                 dest_dir.join("mysql/bin/mysqld"),
                 dest_dir.join("bin/mysqld"),
+                dest_dir.join("pgsql/bin/postgres"),
+                dest_dir.join("postgresql/bin/postgres"),
+                dest_dir.join("bin/postgres"),
+                dest_dir.join("bin/initdb"),
             ];
 
             for path in &binary_paths {
@@ -1611,12 +1563,7 @@ impl RuntimeDownloader {
         &self,
         progress_cb: ProgressCallback,
     ) -> Result<Vec<PathBuf>, String> {
-        let components = [
-            BinaryComponent::Caddy,
-            BinaryComponent::Php,
-            BinaryComponent::MySQL,
-            BinaryComponent::PhpMyAdmin,
-        ];
+        let components = self.selected_stack_components();
         let total = components.len() as u8;
 
         // Create temp directory for downloads
@@ -1634,9 +1581,6 @@ impl RuntimeDownloader {
                 .download_component(*component, &temp_dir, &progress_cb, current, total)
                 .await?;
 
-            // Verify checksum (TODO: add expected checksums)
-            // For now, skip checksum verification since we'd need to pre-calculate them
-            // In production, download from a trusted source with known checksums
             progress_cb(DownloadProgress {
                 step: DownloadStep::Extracting,
                 percent: 0,
@@ -1657,7 +1601,7 @@ impl RuntimeDownloader {
             downloaded_files.push(downloaded_path);
         }
 
-        // Create all application directories (config, logs, mysql/data, projects)
+        // Create all application directories (config, logs, database data, projects)
         if let Ok(app_paths) = get_app_data_paths() {
             if let Err(e) = app_paths.ensure_directories() {
                 eprintln!("Warning: Failed to create app directories: {}", e);
@@ -1687,12 +1631,7 @@ impl RuntimeDownloader {
         progress_cb: ProgressCallback,
         skip_list: &[&str], // Component names to skip (e.g., ["php", "mysql"])
     ) -> Result<Vec<PathBuf>, String> {
-        let components = [
-            BinaryComponent::Caddy,
-            BinaryComponent::Php,
-            BinaryComponent::MySQL,
-            BinaryComponent::PhpMyAdmin,
-        ];
+        let components = self.selected_stack_components();
         let total = components.len() as u8;
 
         // Create temp directory for downloads
@@ -1729,9 +1668,6 @@ impl RuntimeDownloader {
                 .download_component(*component, &temp_dir, &progress_cb, current, total)
                 .await?;
 
-            // Verify checksum (TODO: add expected checksums)
-            // For now, skip checksum verification since we'd need to pre-calculate them
-            // In production, download from a trusted source with known checksums
             progress_cb(DownloadProgress {
                 step: DownloadStep::Extracting,
                 percent: 0,
@@ -1752,7 +1688,7 @@ impl RuntimeDownloader {
             downloaded_files.push(downloaded_path);
         }
 
-        // Create all application directories (config, logs, mysql/data, projects)
+        // Create all application directories (config, logs, database data, projects)
         if let Ok(app_paths) = get_app_data_paths() {
             if let Err(e) = app_paths.ensure_directories() {
                 eprintln!("Warning: Failed to create app directories: {}", e);
@@ -1899,6 +1835,23 @@ impl RuntimeDownloader {
             })
     }
 
+    fn selected_database_component(&self) -> BinaryComponent {
+        if self.selected_database_tool_id().starts_with("adminer") {
+            BinaryComponent::PostgreSQL
+        } else {
+            BinaryComponent::MySQL
+        }
+    }
+
+    fn selected_stack_components(&self) -> [BinaryComponent; 4] {
+        [
+            BinaryComponent::Caddy,
+            BinaryComponent::Php,
+            self.selected_database_component(),
+            BinaryComponent::PhpMyAdmin,
+        ]
+    }
+
     fn normalize_phpmyadmin_install(&self, runtime_dir: &Path) -> Result<(), String> {
         let target_dir = runtime_dir.join("phpmyadmin");
         let source_dir = fs::read_dir(runtime_dir)
@@ -1985,6 +1938,7 @@ impl RuntimeDownloader {
         let caddy_marker = runtime_dir.join("caddy_installed.txt");
         let php_marker = runtime_dir.join("php_installed.txt");
         let mysql_marker = runtime_dir.join("mysql_installed.txt");
+        let postgresql_marker = runtime_dir.join("postgresql_installed.txt");
         let adminer_marker = runtime_dir.join("adminer_installed.txt");
         let legacy_phpmyadmin_marker = runtime_dir.join("phpmyadmin_installed.txt");
 
@@ -1996,6 +1950,7 @@ impl RuntimeDownloader {
         caddy_marker.exists()
             || php_marker.exists()
             || mysql_marker.exists()
+            || postgresql_marker.exists()
             || adminer_marker.exists()
             || legacy_phpmyadmin_marker.exists()
             || caddy_exe.exists()
@@ -2011,7 +1966,14 @@ impl RuntimeDownloader {
             Err(_) => return installed,
         };
 
-        for component in ["caddy", "php", "mysql", "adminer", "phpmyadmin"] {
+        for component in [
+            "caddy",
+            "php",
+            "mysql",
+            "postgresql",
+            "adminer",
+            "phpmyadmin",
+        ] {
             let marker_file = runtime_dir.join(format!("{}_installed.txt", component));
             if let Ok(content) = fs::read_to_string(&marker_file) {
                 // Parse version from format: "version=1.2.3\ninstalled_at=..."
@@ -2044,5 +2006,9 @@ fn is_executable(name: &str) -> bool {
         || name.ends_with("mysqld")
         || name.ends_with("mysql")
         || name.ends_with("mysqld")
+        || name.ends_with("postgres")
+        || name.ends_with("initdb")
+        || name.ends_with("pg_ctl")
+        || name.ends_with("psql")
         || name.contains("bin/")
 }

@@ -34,10 +34,10 @@
           "checksums": {},
           "urls": {
             "windowsX64": "https://windows.php.net/downloads/releases/php-8.5.6-nts-Win32-vs17-x64.zip",
-            "linuxX64": "https://dl.static-php.dev/static-php-cli/bulk/php-8.5.3-fpm-linux-x86_64.tar.gz",
-            "linuxArm64": "https://dl.static-php.dev/static-php-cli/bulk/php-8.5.3-fpm-linux-aarch64.tar.gz",
-            "macOSX64": "https://dl.static-php.dev/static-php-cli/bulk/php-8.5.3-fpm-macos-x86_64.tar.gz",
-            "macOSArm64": "https://dl.static-php.dev/static-php-cli/bulk/php-8.5.3-fpm-macos-aarch64.tar.gz"
+            "linuxX64": "https://dl.static-php.dev/static-php-cli/bulk/php-8.5.6-fpm-linux-x86_64.tar.gz",
+            "linuxArm64": "https://dl.static-php.dev/static-php-cli/bulk/php-8.5.6-fpm-linux-aarch64.tar.gz",
+            "macOSX64": "https://dl.static-php.dev/static-php-cli/bulk/php-8.5.6-fpm-macos-x86_64.tar.gz",
+            "macOSArm64": "https://dl.static-php.dev/static-php-cli/bulk/php-8.5.6-fpm-macos-aarch64.tar.gz"
           }
         },
         {
@@ -238,6 +238,26 @@
         }
       ]
     },
+    "postgresql": {
+      "versions": [
+        {
+          "id": "postgresql-16",
+          "version": "16.14",
+          "selected": true,
+          "display_name": "PostgreSQL 16.14",
+          "eol": false,
+          "lts": true,
+          "checksums": {},
+          "urls": {
+            "windowsX64": "https://get.enterprisedb.com/postgresql/postgresql-16.14-1-windows-x64-binaries.zip",
+            "linuxX64": "https://downloads.percona.com/downloads/postgresql-distribution-16/16.14/binary/tarball/percona-postgresql-16.14-ssl3-linux-x86_64.tar.gz",
+            "linuxArm64": "https://downloads.percona.com/downloads/postgresql-distribution-16/16.14/binary/tarball/percona-postgresql-16.14-ssl3-linux-aarch64.tar.gz",
+            "macOSX64": "https://get.enterprisedb.com/postgresql/postgresql-16.14-1-osx-binaries.zip",
+            "macOSArm64": "https://get.enterprisedb.com/postgresql/postgresql-16.14-1-osx-binaries.zip"
+          }
+        }
+      ]
+    },
     "phpmyadmin": {
       "versions": [
         {
@@ -258,7 +278,7 @@
           "eol": false,
           "lts": false,
           "checksum": null,
-          "url": "https://www.adminer.org/latest-mysql.php"
+          "url": "https://www.adminer.org/latest.php"
         }
       ]
     }

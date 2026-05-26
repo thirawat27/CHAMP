@@ -4,13 +4,17 @@ import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { Dashboard } from "./components/Dashboard";
 import { FirstRunWizard } from "./components/FirstRunWizard";
+import { initializeLanguage } from "./stores/languageStore";
 import "./App.css";
+
+const isTauriRuntime = () => "__TAURI_INTERNALS__" in window;
 
 function App() {
   const [isFirstRun, setIsFirstRun] = useState<boolean | null>(null);
   const [showDebugMenu, setShowDebugMenu] = useState(false);
 
   useEffect(() => {
+    initializeLanguage();
     checkRuntimeInstalled();
 
     const blockDevtoolsShortcuts = (e: KeyboardEvent) => {
@@ -35,20 +39,22 @@ function App() {
     window.addEventListener("keydown", blockDevtoolsShortcuts, true);
     window.addEventListener("keydown", handleKeyPress);
 
-    // Listen for show-wizard event from menu
-    const unlistenWizard = listen("show-wizard", () => {
-      setIsFirstRun(true);
-    });
+    const tauriRuntime = isTauriRuntime();
+    const unlistenWizard = tauriRuntime
+      ? listen("show-wizard", () => {
+          setIsFirstRun(true);
+        })
+      : Promise.resolve(() => {});
 
-    // Use Tauri's window API for proper cleanup on close
-    const appWindow = getCurrentWindow();
-    const unlistenClose = appWindow.onCloseRequested(async () => {
-      try {
-        await invoke("cleanup_all_services");
-      } catch (error) {
-        console.error("Failed to cleanup services:", error);
-      }
-    });
+    const unlistenClose = tauriRuntime
+      ? getCurrentWindow().onCloseRequested(async () => {
+          try {
+            await invoke("cleanup_all_services");
+          } catch (error) {
+            console.error("Failed to cleanup services:", error);
+          }
+        })
+      : Promise.resolve(() => {});
 
     return () => {
       window.removeEventListener("keydown", handleKeyPress);

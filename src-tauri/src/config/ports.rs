@@ -3,7 +3,7 @@ use std::net::{TcpListener, TcpStream};
 use std::time::Duration;
 
 /// Find an available port starting from the preferred port
-#[allow(dead_code)]
+#[cfg(test)]
 pub fn find_available_port(preferred: u16) -> u16 {
     if is_port_available(preferred) {
         return preferred;
@@ -34,14 +34,6 @@ pub fn is_port_available(port: u16) -> bool {
 
     // If we can't connect, try to bind to make sure we can use it
     TcpListener::bind(&addr).is_ok()
-}
-
-/// Check if a port is in use (something is listening on it)
-#[allow(dead_code)]
-pub fn is_port_in_use(port: u16) -> bool {
-    let addr = format!("127.0.0.1:{}", port);
-
-    TcpStream::connect_timeout(&addr.parse().unwrap(), Duration::from_millis(100)).is_ok()
 }
 
 #[cfg(test)]

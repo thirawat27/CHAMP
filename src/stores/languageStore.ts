@@ -42,6 +42,7 @@ const getSavedLanguage = (): Language => {
 };
 
 const initialLanguage = getSavedLanguage();
+const isTauriRuntime = () => "__TAURI_INTERNALS__" in window;
 
 /**
  * Language store for managing i18n
@@ -76,7 +77,9 @@ export const useLanguageStore = create<LanguageState>()((set, get) => ({
       // Ignore localStorage errors
     }
     // Save to backend settings
-    invoke("save_language_setting", { language: lang }).catch(console.error);
+    if (isTauriRuntime()) {
+      invoke("save_language_setting", { language: lang }).catch(console.error);
+    }
   },
 
   toggleSound: () => {
@@ -91,7 +94,9 @@ export const useLanguageStore = create<LanguageState>()((set, get) => ({
       // Ignore localStorage errors
     }
     // Save to backend settings
-    invoke("save_sound_setting", { enabled: newState }).catch(console.error);
+    if (isTauriRuntime()) {
+      invoke("save_sound_setting", { enabled: newState }).catch(console.error);
+    }
   },
 
   setSoundEnabled: (enabled: boolean) => {
@@ -105,7 +110,9 @@ export const useLanguageStore = create<LanguageState>()((set, get) => ({
       // Ignore localStorage errors
     }
     // Save to backend settings
-    invoke("save_sound_setting", { enabled }).catch(console.error);
+    if (isTauriRuntime()) {
+      invoke("save_sound_setting", { enabled }).catch(console.error);
+    }
   },
 
   translate: (key: keyof Translations) => {
@@ -125,6 +132,10 @@ export function useTranslation(): { t: Translations; language: Language } {
  * Initialize language from backend settings
  */
 export async function initializeLanguage(): Promise<void> {
+  if (!isTauriRuntime()) {
+    return;
+  }
+
   try {
     const settings = await invoke<{ language: Language; sound_enabled: boolean }>("get_language_settings");
     const store = useLanguageStore.getState();

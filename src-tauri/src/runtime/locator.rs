@@ -3,6 +3,9 @@ use std::path::{Path, PathBuf};
 
 const APP_DIR_NAME: &str = "CHAMP";
 const LEGACY_APP_DIR_NAME: &str = "campp";
+const PORTABLE_DATA_DIR_NAME: &str = "data";
+const PORTABLE_MARKER_NAMES: [&str; 3] =
+    [".champ-portable", "champ-portable", "champ-portable.json"];
 
 /// Runtime binary paths
 #[derive(Debug, Clone)]
@@ -11,12 +14,12 @@ pub struct RuntimePaths {
     pub php_cgi: PathBuf,
     pub php_ini: PathBuf,
     pub mysql: PathBuf,
+    pub postgresql: PathBuf,
     pub adminer: PathBuf,
-    /// Directory where PHP extensions are located (same as php_cgi)
-    #[allow(dead_code)]
-    pub php_ext_dir: PathBuf,
     /// Data directory for MySQL
     pub mysql_data_dir: PathBuf,
+    /// Data directory for PostgreSQL
+    pub postgresql_data_dir: PathBuf,
     /// Logs directory
     pub logs_dir: PathBuf,
     /// Config directory
@@ -30,12 +33,16 @@ pub struct RuntimePaths {
 pub struct AppDataPaths {
     /// Base data directory (e.g., %LOCALAPPDATA%/CHAMP)
     pub base_dir: PathBuf,
+    /// True when all writable CHAMP data is stored beside the app or in a user-specified portable directory.
+    pub portable: bool,
     /// Runtime binaries directory
     pub runtime_dir: PathBuf,
     /// Configuration files directory
     pub config_dir: PathBuf,
     /// MySQL data directory
     pub mysql_data_dir: PathBuf,
+    /// PostgreSQL data directory
+    pub postgresql_data_dir: PathBuf,
     /// Logs directory
     pub logs_dir: PathBuf,
     /// Projects directory
@@ -48,6 +55,7 @@ impl AppDataPaths {
         for dir in [
             &self.config_dir,
             &self.mysql_data_dir,
+            &self.postgresql_data_dir,
             &self.logs_dir,
             &self.projects_dir,
         ] {
@@ -62,19 +70,125 @@ impl AppDataPaths {
 
 /// Get the application data directory paths
 pub fn get_app_data_paths() -> Result<AppDataPaths, String> {
+    let (data_dir, portable) = resolve_app_data_base_dir()?;
+    Ok(app_data_paths_from_base(data_dir, portable))
+}
+
+fn app_data_paths_from_base(data_dir: PathBuf, portable: bool) -> AppDataPaths {
+    AppDataPaths {
+        base_dir: data_dir.clone(),
+        portable,
+        runtime_dir: data_dir.join("runtime"),
+        config_dir: data_dir.join("config"),
+        mysql_data_dir: data_dir.join("mysql").join("data"),
+        postgresql_data_dir: data_dir.join("postgresql").join("data"),
+        logs_dir: data_dir.join("logs"),
+        projects_dir: data_dir.join("projects"),
+    }
+}
+
+fn resolve_app_data_base_dir() -> Result<(PathBuf, bool), String> {
+    if let Some(path) = env_path("CHAMP_DATA_DIR").or_else(|| env_path("CHAMP_PORTABLE_DIR")) {
+        return Ok((path, true));
+    }
+
+    if env_flag("CHAMP_PORTABLE") {
+        return Ok((portable_base_from_exe()?.join(PORTABLE_DATA_DIR_NAME), true));
+    }
+
+    if let Some(path) = portable_marker_base_dir() {
+        return Ok((path, true));
+    }
+
     let data_dir = dirs::data_local_dir()
         .or_else(dirs::home_dir)
         .ok_or_else(|| "Cannot find a writable user data directory".to_string())?
         .join(APP_DIR_NAME);
 
-    Ok(AppDataPaths {
-        base_dir: data_dir.clone(),
-        runtime_dir: data_dir.join("runtime"),
-        config_dir: data_dir.join("config"),
-        mysql_data_dir: data_dir.join("mysql").join("data"),
-        logs_dir: data_dir.join("logs"),
-        projects_dir: data_dir.join("projects"),
-    })
+    Ok((data_dir, false))
+}
+
+fn env_path(name: &str) -> Option<PathBuf> {
+    std::env::var_os(name)
+        .map(PathBuf::from)
+        .filter(|path| !path.as_os_str().is_empty())
+}
+
+fn env_flag(name: &str) -> bool {
+    std::env::var(name)
+        .map(|value| {
+            matches!(
+                value.to_ascii_lowercase().as_str(),
+                "1" | "true" | "yes" | "on"
+            )
+        })
+        .unwrap_or(false)
+}
+
+fn portable_base_from_exe() -> Result<PathBuf, String> {
+    std::env::current_exe()
+        .ok()
+        .and_then(|path| path.parent().map(Path::to_path_buf))
+        .or_else(|| std::env::current_dir().ok())
+        .ok_or_else(|| "Cannot determine CHAMP portable base directory".to_string())
+}
+
+fn portable_marker_base_dir() -> Option<PathBuf> {
+    for dir in portable_marker_dirs() {
+        for marker_name in PORTABLE_MARKER_NAMES {
+            let marker = dir.join(marker_name);
+            if marker.exists() {
+                return Some(resolve_portable_marker_data_dir(&marker, &dir));
+            }
+        }
+    }
+
+    None
+}
+
+fn portable_marker_dirs() -> Vec<PathBuf> {
+    let mut dirs = Vec::new();
+    if let Ok(exe_path) = std::env::current_exe() {
+        if let Some(dir) = exe_path.parent() {
+            dirs.push(dir.to_path_buf());
+        }
+    }
+    if let Ok(current_dir) = std::env::current_dir() {
+        if !dirs.iter().any(|dir| dir == &current_dir) {
+            dirs.push(current_dir);
+        }
+    }
+    dirs
+}
+
+fn resolve_portable_marker_data_dir(marker: &Path, marker_dir: &Path) -> PathBuf {
+    let configured_dir = fs::read_to_string(marker)
+        .ok()
+        .and_then(|content| portable_marker_configured_dir(&content));
+
+    match configured_dir {
+        Some(path) if path.is_absolute() => path,
+        Some(path) => marker_dir.join(path),
+        None => marker_dir.join(PORTABLE_DATA_DIR_NAME),
+    }
+}
+
+fn portable_marker_configured_dir(content: &str) -> Option<PathBuf> {
+    let trimmed = content.trim();
+    if trimmed.is_empty() {
+        return None;
+    }
+
+    serde_json::from_str::<serde_json::Value>(trimmed)
+        .ok()
+        .and_then(|value| {
+            value
+                .get("data_dir")
+                .or_else(|| value.get("dataDir"))
+                .and_then(|value| value.as_str())
+                .map(PathBuf::from)
+        })
+        .or_else(|| Some(PathBuf::from(trimmed)))
 }
 
 /// Locate runtime binaries after download
@@ -96,10 +210,11 @@ pub fn locate_runtime_binaries() -> Result<RuntimePaths, String> {
         caddy: detect_caddy_binary(&runtime_dir)?,
         php_cgi: detect_php_binary(&runtime_dir)?,
         php_ini: detect_php_ini(&runtime_dir)?,
-        php_ext_dir: detect_php_ext_dir(&runtime_dir)?,
         mysql: detect_mysql_binary(&runtime_dir)?,
+        postgresql: detect_postgresql_binary(&runtime_dir)?,
         adminer: adminer_path,
         mysql_data_dir: app_paths.mysql_data_dir.clone(),
+        postgresql_data_dir: app_paths.postgresql_data_dir.clone(),
         logs_dir: app_paths.logs_dir.clone(),
         config_dir: app_paths.config_dir.clone(),
         projects_dir: app_paths.projects_dir.clone(),
@@ -109,6 +224,13 @@ pub fn locate_runtime_binaries() -> Result<RuntimePaths, String> {
 fn resolve_runtime_dir(app_paths: &AppDataPaths) -> Result<PathBuf, String> {
     if app_paths.runtime_dir.exists() {
         return Ok(app_paths.runtime_dir.clone());
+    }
+
+    if app_paths.portable {
+        return Err(format!(
+            "Runtime directory not found for portable CHAMP. Please download runtime binaries first. Expected: {}",
+            app_paths.runtime_dir.display()
+        ));
     }
 
     #[cfg(target_os = "windows")]
@@ -315,72 +437,6 @@ fn detect_php_ini(_runtime_dir: &Path) -> Result<PathBuf, String> {
     Ok(php_ini_path)
 }
 
-/// Detect PHP extension directory
-fn detect_php_ext_dir(runtime_dir: &Path) -> Result<PathBuf, String> {
-    let runtime_dir =
-        active_php_runtime_dir(runtime_dir).unwrap_or_else(|| runtime_dir.to_path_buf());
-
-    #[cfg(target_os = "windows")]
-    {
-        // First, look for versioned PHP directories (like php-8.4.16-Win32-vs17-x64)
-        if let Ok(entries) = fs::read_dir(&runtime_dir) {
-            for entry in entries.flatten() {
-                if let Ok(name) = entry.file_name().into_string() {
-                    if name.starts_with("php-") && name.contains("Win32") && entry.path().is_dir() {
-                        let ext_path = entry.path().join("ext");
-                        if ext_path.exists() {
-                            return Ok(ext_path);
-                        }
-                    }
-                }
-            }
-        }
-
-        // Fallback paths
-        let paths_to_check = vec![runtime_dir.join("php").join("ext"), runtime_dir.join("ext")];
-
-        for path in paths_to_check {
-            if path.exists() {
-                return Ok(path);
-            }
-        }
-
-        // Fallback: return the expected path even if it doesn't exist yet
-        Ok(runtime_dir.join("php").join("ext"))
-    }
-
-    #[cfg(not(target_os = "windows"))]
-    {
-        // On Unix, static-php bundles extensions differently
-        // Extensions are typically built-in, but check common locations
-        let paths_to_check = vec![
-            runtime_dir
-                .join("php")
-                .join("lib")
-                .join("php")
-                .join("extensions"),
-            runtime_dir
-                .join("buildroot")
-                .join("lib")
-                .join("php")
-                .join("extensions"),
-        ];
-
-        for path in paths_to_check {
-            if path.exists() {
-                return Ok(path);
-            }
-        }
-
-        // Fallback: return a reasonable default
-        Ok(runtime_dir
-            .join("php")
-            .join("lib")
-            .join("php")
-            .join("extensions"))
-    }
-}
-
 /// Detect MySQL/MariaDB server binary based on platform
 ///
 /// **IMPORTANT Platform Differences:**
@@ -547,9 +603,65 @@ fn detect_mysql_binary(runtime_dir: &Path) -> Result<PathBuf, String> {
     ))
 }
 
-/// Check if a binary is valid (exists and is executable)
-#[allow(dead_code)]
-pub fn is_valid_binary(path: &Path) -> bool {
+/// Detect PostgreSQL server binary based on common archive layouts.
+fn detect_postgresql_binary(runtime_dir: &Path) -> Result<PathBuf, String> {
+    let executable = if cfg!(target_os = "windows") {
+        "postgres.exe"
+    } else {
+        "postgres"
+    };
+
+    let mut paths_to_check = vec![
+        runtime_dir.join("postgresql").join("bin").join(executable),
+        runtime_dir.join("pgsql").join("bin").join(executable),
+        runtime_dir.join("bin").join(executable),
+        runtime_dir.join(executable),
+    ];
+
+    if let Ok(entries) = fs::read_dir(runtime_dir) {
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if !path.is_dir() {
+                continue;
+            }
+            let Some(name) = path.file_name().and_then(|name| name.to_str()) else {
+                continue;
+            };
+            let lower = name.to_ascii_lowercase();
+            if lower.contains("postgres") || lower == "pgsql" {
+                paths_to_check.push(path.join("bin").join(executable));
+                paths_to_check.push(path.join("pgsql").join("bin").join(executable));
+            }
+        }
+    }
+
+    for path in paths_to_check {
+        if path.exists() {
+            return Ok(path);
+        }
+    }
+
+    Err(format!(
+        "PostgreSQL binary not found in {}. Please ensure runtime binaries are downloaded.",
+        runtime_dir.display()
+    ))
+}
+
+pub fn postgresql_initdb_binary(postgres_binary: &Path) -> PathBuf {
+    let initdb_name = if cfg!(target_os = "windows") {
+        "initdb.exe"
+    } else {
+        "initdb"
+    };
+
+    postgres_binary
+        .parent()
+        .map(|bin_dir| bin_dir.join(initdb_name))
+        .unwrap_or_else(|| PathBuf::from(initdb_name))
+}
+
+#[cfg(test)]
+fn is_valid_binary(path: &Path) -> bool {
     if !path.exists() {
         return false;
     }
@@ -575,41 +687,12 @@ pub fn is_valid_binary(path: &Path) -> bool {
     }
 }
 
-/// Verify all runtime binaries are present and valid
-#[allow(dead_code)]
-pub fn verify_runtime_binaries() -> Result<RuntimePaths, String> {
-    let paths = locate_runtime_binaries()?;
-
-    if !is_valid_binary(&paths.caddy) {
-        return Err(format!(
-            "Caddy binary not found or not executable: {}",
-            paths.caddy.display()
-        ));
-    }
-
-    if !is_valid_binary(&paths.php_cgi) {
-        return Err(format!(
-            "PHP binary not found or not executable: {}",
-            paths.php_cgi.display()
-        ));
-    }
-
-    if !is_valid_binary(&paths.mysql) {
-        return Err(format!(
-            "MariaDB binary not found or not executable: {}",
-            paths.mysql.display()
-        ));
-    }
-
-    Ok(paths)
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
     use std::fs::File;
     use std::io::Write;
-    use std::path::Path;
+    use std::path::{Path, PathBuf};
     use tempfile::TempDir;
 
     fn create_mock_binary(path: &Path) -> Result<(), String> {
@@ -634,9 +717,11 @@ mod tests {
 
         let paths = AppDataPaths {
             base_dir: base_dir.clone(),
+            portable: false,
             runtime_dir: base_dir.join("runtime"),
             config_dir: base_dir.join("config"),
             mysql_data_dir: base_dir.join("mysql").join("data"),
+            postgresql_data_dir: base_dir.join("postgresql").join("data"),
             logs_dir: base_dir.join("logs"),
             projects_dir: base_dir.join("projects"),
         };
@@ -646,8 +731,35 @@ mod tests {
 
         assert!(paths.config_dir.exists());
         assert!(paths.mysql_data_dir.exists());
+        assert!(paths.postgresql_data_dir.exists());
         assert!(paths.logs_dir.exists());
         assert!(paths.projects_dir.exists());
+    }
+
+    #[test]
+    fn test_app_data_paths_from_portable_base() {
+        let temp_dir = TempDir::new().unwrap();
+        let base_dir = temp_dir.path().join("portable-data");
+
+        let paths = app_data_paths_from_base(base_dir.clone(), true);
+
+        assert_eq!(paths.base_dir, base_dir);
+        assert!(paths.portable);
+        assert_eq!(paths.runtime_dir, paths.base_dir.join("runtime"));
+        assert_eq!(paths.config_dir, paths.base_dir.join("config"));
+        assert_eq!(paths.projects_dir, paths.base_dir.join("projects"));
+    }
+
+    #[test]
+    fn test_portable_marker_config_supports_json_data_dir() {
+        let path = portable_marker_configured_dir(r#"{ "data_dir": "champ-data" }"#).unwrap();
+        assert_eq!(path, PathBuf::from("champ-data"));
+    }
+
+    #[test]
+    fn test_portable_marker_config_supports_plain_path() {
+        let path = portable_marker_configured_dir("custom-data").unwrap();
+        assert_eq!(path, PathBuf::from("custom-data"));
     }
 
     #[test]
@@ -684,10 +796,15 @@ mod tests {
             caddy: temp_dir.path().join("caddy.exe"),
             php_cgi: temp_dir.path().join("php").join("php.exe"),
             php_ini: temp_dir.path().join("config").join("php.ini"),
-            php_ext_dir: temp_dir.path().join("php").join("ext"),
             mysql: temp_dir.path().join("mysql").join("bin").join("mysqld.exe"),
+            postgresql: temp_dir
+                .path()
+                .join("pgsql")
+                .join("bin")
+                .join("postgres.exe"),
             adminer: temp_dir.path().join("adminer"),
             mysql_data_dir: temp_dir.path().join("mysql").join("data"),
+            postgresql_data_dir: temp_dir.path().join("postgresql").join("data"),
             logs_dir: temp_dir.path().join("logs"),
             config_dir: temp_dir.path().join("config"),
             projects_dir: temp_dir.path().join("projects"),
@@ -697,6 +814,7 @@ mod tests {
         assert!(paths.php_cgi.ends_with("php.exe"));
         assert!(paths.php_ini.ends_with("php.ini"));
         assert!(paths.mysql.ends_with("mysqld.exe"));
+        assert!(paths.postgresql.ends_with("postgres.exe"));
         assert!(paths.adminer.ends_with("adminer"));
     }
 
@@ -708,10 +826,15 @@ mod tests {
             caddy: temp_dir.path().join("caddy.exe"),
             php_cgi: temp_dir.path().join("php").join("php.exe"),
             php_ini: temp_dir.path().join("config").join("php.ini"),
-            php_ext_dir: temp_dir.path().join("php").join("ext"),
             mysql: temp_dir.path().join("mysql").join("bin").join("mysqld.exe"),
+            postgresql: temp_dir
+                .path()
+                .join("pgsql")
+                .join("bin")
+                .join("postgres.exe"),
             adminer: temp_dir.path().join("adminer"),
             mysql_data_dir: temp_dir.path().join("mysql").join("data"),
+            postgresql_data_dir: temp_dir.path().join("postgresql").join("data"),
             logs_dir: temp_dir.path().join("logs"),
             config_dir: temp_dir.path().join("config"),
             projects_dir: temp_dir.path().join("projects"),
@@ -722,6 +845,7 @@ mod tests {
         assert_eq!(paths1.caddy, paths2.caddy);
         assert_eq!(paths1.php_cgi, paths2.php_cgi);
         assert_eq!(paths1.mysql, paths2.mysql);
+        assert_eq!(paths1.postgresql, paths2.postgresql);
     }
 
     #[test]
@@ -731,9 +855,11 @@ mod tests {
 
         let paths1 = AppDataPaths {
             base_dir: base_dir.clone(),
+            portable: true,
             runtime_dir: base_dir.join("runtime"),
             config_dir: base_dir.join("config"),
             mysql_data_dir: base_dir.join("mysql").join("data"),
+            postgresql_data_dir: base_dir.join("postgresql").join("data"),
             logs_dir: base_dir.join("logs"),
             projects_dir: base_dir.join("projects"),
         };
@@ -741,7 +867,10 @@ mod tests {
         let paths2 = paths1.clone();
 
         assert_eq!(paths1.base_dir, paths2.base_dir);
+        assert_eq!(paths1.portable, paths2.portable);
         assert_eq!(paths1.runtime_dir, paths2.runtime_dir);
         assert_eq!(paths1.config_dir, paths2.config_dir);
+        assert_eq!(paths1.mysql_data_dir, paths2.mysql_data_dir);
+        assert_eq!(paths1.postgresql_data_dir, paths2.postgresql_data_dir);
     }
 }

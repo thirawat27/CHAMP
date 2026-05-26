@@ -8,7 +8,9 @@ import {
   InstalledPhpVersion,
   PackagesConfig,
   PackageSelection,
+  EMPTY_PACKAGE_SELECTION,
   hasPackageUrlForPlatform,
+  isAdminerSelected,
 } from "../types/services";
 import { useLanguageStore, useTranslation } from "../stores/languageStore";
 import { AudioManager } from "../utils/audioManager";
@@ -23,13 +25,10 @@ interface PortCheck {
   web: { port: number; available: boolean };
   php: { port: number; available: boolean };
   mysql: { port: number; available: boolean };
+  postgresql: { port: number; available: boolean };
 }
 
-const defaultPackageSelection: PackageSelection = {
-  php: "php-8.5",
-  mysql: "mysql-9.7",
-  phpmyadmin: "phpmyadmin-5.2",
-};
+const defaultPackageSelection: PackageSelection = EMPTY_PACKAGE_SELECTION;
 
 export function SettingsPanel({ onClose, onSettingsChanged, ...props }: SettingsPanelProps) {
   const { t } = useTranslation();
@@ -51,6 +50,7 @@ export function SettingsPanel({ onClose, onSettingsChanged, ...props }: Settings
     web_port: 8080,
     php_port: 9000,
     mysql_port: 3306,
+    postgresql_port: 5432,
     project_root: "",
     auto_start_services: false,
     package_selection: defaultPackageSelection,
@@ -79,12 +79,40 @@ export function SettingsPanel({ onClose, onSettingsChanged, ...props }: Settings
       const availablePhpPackages = availablePackages.php.filter((pkg) =>
         hasPackageUrlForPlatform(pkg, platformKey)
       );
+      const availableMysqlPackages = availablePackages.mysql.filter((pkg) =>
+        hasPackageUrlForPlatform(pkg, platformKey)
+      );
+      const availablePostgreSQLPackages = availablePackages.postgresql.filter((pkg) =>
+        hasPackageUrlForPlatform(pkg, platformKey)
+      );
       const normalizedPackageSelection = { ...packageSelection };
       if (
         !availablePhpPackages.some((pkg) => pkg.id === normalizedPackageSelection.php) &&
         availablePhpPackages[0]
       ) {
         normalizedPackageSelection.php = availablePhpPackages[0].id;
+      }
+      if (
+        !availableMysqlPackages.some((pkg) => pkg.id === normalizedPackageSelection.mysql) &&
+        availableMysqlPackages[0]
+      ) {
+        normalizedPackageSelection.mysql = availableMysqlPackages[0].id;
+      }
+      if (
+        !availablePostgreSQLPackages.some(
+          (pkg) => pkg.id === normalizedPackageSelection.postgresql
+        ) &&
+        availablePostgreSQLPackages[0]
+      ) {
+        normalizedPackageSelection.postgresql = availablePostgreSQLPackages[0].id;
+      }
+      if (
+        !availablePackages.phpmyadmin.some(
+          (pkg) => pkg.id === normalizedPackageSelection.phpmyadmin
+        ) &&
+        availablePackages.phpmyadmin[0]
+      ) {
+        normalizedPackageSelection.phpmyadmin = availablePackages.phpmyadmin[0].id;
       }
       setSettings({
         ...loaded,
@@ -116,7 +144,10 @@ export function SettingsPanel({ onClose, onSettingsChanged, ...props }: Settings
     };
   }, []);
 
-  const handlePortChange = (field: "web_port" | "php_port" | "mysql_port", value: string) => {
+  const handlePortChange = (
+    field: "web_port" | "php_port" | "mysql_port" | "postgresql_port",
+    value: string
+  ) => {
     const next = Number.parseInt(value, 10);
     if (Number.isNaN(next) || next < 1 || next > 65535) return;
     setSettings((current) => ({ ...current, [field]: next }));
@@ -128,6 +159,7 @@ export function SettingsPanel({ onClose, onSettingsChanged, ...props }: Settings
       webPort: settings.web_port,
       phpPort: settings.php_port,
       mysqlPort: settings.mysql_port,
+      postgresqlPort: settings.postgresql_port,
     });
     setPortCheck(result);
   };
@@ -221,6 +253,9 @@ export function SettingsPanel({ onClose, onSettingsChanged, ...props }: Settings
   );
   const availablePhpIds = new Set(availablePhpPackages.map((pkg) => pkg.id));
   const visiblePhpVersions = phpVersions.filter((php) => availablePhpIds.has(php.id));
+  const selectedDatabaseToolId =
+    settings.package_selection?.phpmyadmin ?? defaultPackageSelection.phpmyadmin;
+  const activeDatabaseName = isAdminerSelected(settings.package_selection) ? "PostgreSQL" : "MySQL";
 
   return (
     <div className="modal-backdrop" onClick={onClose} {...props}>
@@ -236,12 +271,12 @@ export function SettingsPanel({ onClose, onSettingsChanged, ...props }: Settings
             <h2>{t.settingsTitle}</h2>
             <p>{t.settingsDescription}</p>
           </div>
-          <button 
-            className="icon-button" 
+          <button
+            className="icon-button"
             onClick={() => {
               AudioManager.playClick();
               onClose();
-            }} 
+            }}
             aria-label={t.close}
             onMouseEnter={() => AudioManager.playHover()}
           >
@@ -317,9 +352,25 @@ export function SettingsPanel({ onClose, onSettingsChanged, ...props }: Settings
                       </small>
                     )}
                   </label>
+                  <label>
+                    <span>PostgreSQL</span>
+                    <input
+                      className="input"
+                      type="number"
+                      min={1}
+                      max={65535}
+                      value={settings.postgresql_port}
+                      onChange={(e) => handlePortChange("postgresql_port", e.target.value)}
+                    />
+                    {portCheck && (
+                      <small className={portCheck.postgresql.available ? "ok" : "warn"}>
+                        {portCheck.postgresql.available ? t.portAvailable : t.portInUse}
+                      </small>
+                    )}
+                  </label>
                 </div>
-                <button 
-                  className="btn-secondary compact" 
+                <button
+                  className="btn-secondary compact"
                   onClick={() => {
                     AudioManager.playClick();
                     checkPorts();
@@ -405,7 +456,7 @@ export function SettingsPanel({ onClose, onSettingsChanged, ...props }: Settings
                   <span>{t.webDatabaseManager}</span>
                   <select
                     className="input"
-                    value={settings.package_selection?.phpmyadmin ?? defaultPackageSelection.phpmyadmin}
+                    value={selectedDatabaseToolId}
                     onChange={(event) => updateSelectedDatabaseTool(event.target.value)}
                   >
                     {(packages?.phpmyadmin ?? []).map((pkg) => (
@@ -414,6 +465,7 @@ export function SettingsPanel({ onClose, onSettingsChanged, ...props }: Settings
                       </option>
                     ))}
                   </select>
+                  <small>{activeDatabaseName} will be used when starting the main stack.</small>
                 </label>
               </div>
 
@@ -431,7 +483,14 @@ export function SettingsPanel({ onClose, onSettingsChanged, ...props }: Settings
                   />
                   <span>{t.enableSoundEffects}</span>
                 </label>
-                <p style={{ fontSize: "0.75rem", color: "var(--text-secondary)", marginTop: "4px", marginLeft: "24px" }}>
+                <p
+                  style={{
+                    fontSize: "0.75rem",
+                    color: "var(--text-secondary)",
+                    marginTop: "4px",
+                    marginLeft: "24px",
+                  }}
+                >
                   {t.soundEffectsDescription}
                 </p>
               </div>
@@ -481,7 +540,14 @@ export function SettingsPanel({ onClose, onSettingsChanged, ...props }: Settings
                   />
                   <span>{t.autoStartServices}</span>
                 </label>
-                <p style={{ fontSize: "0.75rem", color: "var(--text-secondary)", marginTop: "4px", marginLeft: "24px" }}>
+                <p
+                  style={{
+                    fontSize: "0.75rem",
+                    color: "var(--text-secondary)",
+                    marginTop: "4px",
+                    marginLeft: "24px",
+                  }}
+                >
                   {t.autoStartDescription}
                 </p>
               </div>
@@ -490,23 +556,23 @@ export function SettingsPanel({ onClose, onSettingsChanged, ...props }: Settings
         </div>
 
         <footer className="settings-footer">
-          <button 
-            className="btn-secondary danger" 
+          <button
+            className="btn-secondary danger"
             onClick={() => {
               AudioManager.playClick();
               onClose();
-            }} 
+            }}
             disabled={saving}
             onMouseEnter={() => AudioManager.playHover()}
           >
             {t.cancel}
           </button>
-          <button 
-            className="btn-primary success" 
+          <button
+            className="btn-primary success"
             onClick={() => {
               AudioManager.playClick();
               handleSave();
-            }} 
+            }}
             disabled={saving || loading}
             onMouseEnter={() => AudioManager.playHover()}
           >

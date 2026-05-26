@@ -1202,6 +1202,7 @@ button:disabled {
 
 .setup-card {
   width: min(760px, 100%);
+  position: relative;
   display: grid;
   grid-template-columns: 240px 1fr;
   background: var(--bg-card);
@@ -1209,6 +1210,13 @@ button:disabled {
   border-radius: 8px;
   box-shadow: var(--shadow-panel);
   overflow: hidden;
+}
+
+.setup-language-switcher {
+  position: absolute;
+  top: 20px;
+  right: 22px;
+  z-index: 2;
 }
 
 .setup-rail {
@@ -1301,7 +1309,7 @@ button:disabled {
 }
 
 .setup-main {
-  padding: 22px;
+  padding: 22px 78px 22px 22px;
 }
 
 .setup-main h2 {
@@ -1445,7 +1453,7 @@ button:disabled {
   }
 
   .setup-rail {
-    padding: 16px;
+    padding: 16px 78px 16px 16px;
   }
 
   .setup-steps {

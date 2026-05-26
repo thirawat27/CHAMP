@@ -34,12 +34,20 @@ describe("Dashboard Component", () => {
       port: 3306,
       error_message: null,
     },
+    [ServiceType.PostgreSQL]: {
+      service_type: ServiceType.PostgreSQL,
+      state: ServiceState.Stopped,
+      port: 5432,
+      error_message: null,
+    },
   };
   const mockAppPaths = {
     base_dir: "C:\\CHAMP",
+    portable: true,
     runtime_dir: "C:\\CHAMP\\runtime",
     config_dir: "C:\\CHAMP\\config",
     mysql_data_dir: "C:\\CHAMP\\mysql\\data",
+    postgresql_data_dir: "C:\\CHAMP\\postgresql\\data",
     logs_dir: "C:\\CHAMP\\logs",
     projects_dir: "C:\\CHAMP\\projects",
   };
@@ -61,7 +69,7 @@ describe("Dashboard Component", () => {
   });
 
   describe("TC-PM-DASH-01: Initial Display", () => {
-    it("should render all three service cards", async () => {
+    it("should render all service cards", async () => {
       vi.mocked(invoke).mockResolvedValue(mockServiceMap);
 
       render(<Dashboard />);
@@ -75,6 +83,7 @@ describe("Dashboard Component", () => {
       expect(screen.getByTestId("service-card-caddy")).toBeInTheDocument();
       expect(screen.getByTestId("service-card-php-fpm")).toBeInTheDocument();
       expect(screen.getByTestId("service-card-mysql")).toBeInTheDocument();
+      expect(screen.getByTestId("service-card-postgresql")).toBeInTheDocument();
     });
 
     it("should fetch service statuses on mount", async () => {
@@ -275,7 +284,7 @@ describe("Dashboard Component", () => {
 
       await waitFor(() => {
         const badge = screen.getByTestId("service-state-php-fpm");
-        expect(badge).toHaveTextContent("error");
+        expect(badge).toHaveTextContent("Error");
       });
     });
   });
@@ -307,6 +316,10 @@ describe("Dashboard Component", () => {
           ...mockServiceMap[ServiceType.MySQL],
           state: ServiceState.Running,
         },
+        [ServiceType.PostgreSQL]: {
+          ...mockServiceMap[ServiceType.PostgreSQL],
+          state: ServiceState.Running,
+        },
       };
 
       vi.mocked(invoke).mockResolvedValue(allRunningMap);
@@ -314,9 +327,10 @@ describe("Dashboard Component", () => {
       render(<Dashboard />);
 
       await waitFor(() => {
-        expect(screen.getByTestId("service-state-caddy")).toHaveTextContent("running");
-        expect(screen.getByTestId("service-state-php-fpm")).toHaveTextContent("running");
-        expect(screen.getByTestId("service-state-mysql")).toHaveTextContent("running");
+        expect(screen.getByTestId("service-state-caddy")).toHaveTextContent("Running");
+        expect(screen.getByTestId("service-state-php-fpm")).toHaveTextContent("Running");
+        expect(screen.getByTestId("service-state-mysql")).toHaveTextContent("Running");
+        expect(screen.getByTestId("service-state-postgresql")).toHaveTextContent("Running");
       });
     });
   });
@@ -334,6 +348,10 @@ describe("Dashboard Component", () => {
         },
         [ServiceType.MySQL]: {
           ...mockServiceMap[ServiceType.MySQL],
+          state: ServiceState.Running,
+        },
+        [ServiceType.PostgreSQL]: {
+          ...mockServiceMap[ServiceType.PostgreSQL],
           state: ServiceState.Running,
         },
       };
@@ -362,7 +380,7 @@ describe("Dashboard Component", () => {
 
       render(<Dashboard />);
 
-      const startButton = await screen.findByRole("button", { name: /start stack/i });
+      const startButton = await screen.findByTitle("Start All Services (Ctrl+S)");
       fireEvent.click(startButton);
 
       expect(await screen.findByText("Starting stack")).toBeInTheDocument();
@@ -387,6 +405,10 @@ describe("Dashboard Component", () => {
         },
         [ServiceType.MySQL]: {
           ...mockServiceMap[ServiceType.MySQL],
+          state: ServiceState.Running,
+        },
+        [ServiceType.PostgreSQL]: {
+          ...mockServiceMap[ServiceType.PostgreSQL],
           state: ServiceState.Running,
         },
       };

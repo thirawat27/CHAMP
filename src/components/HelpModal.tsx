@@ -8,7 +8,7 @@ interface HelpModalProps {
 }
 
 export function HelpModal({ onClose }: HelpModalProps) {
-  const { t } = useTranslation();
+  const { t, language } = useTranslation();
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -98,10 +98,10 @@ export function HelpModal({ onClose }: HelpModalProps) {
 
           <footer className="help-footer">
             <p>
-              <strong>Note:</strong> {t.language === "th" ? "บน macOS ใช้" : "On macOS, use"} <kbd>Cmd</kbd> {t.language === "th" ? "แทน" : "instead of"} <kbd>Ctrl</kbd>
+              <strong>Note:</strong> {language === "th" ? "บน macOS ใช้" : "On macOS, use"} <kbd>Cmd</kbd> {language === "th" ? "แทน" : "instead of"} <kbd>Ctrl</kbd>
             </p>
             <p className="help-hint">
-              {t.language === "th" 
+              {language === "th" 
                 ? "คีย์ลัดทำงานได้ทุกภาษา (ไทย, อังกฤษ, ฯลฯ)" 
                 : "Shortcuts work in any keyboard language (Thai, English, etc.)"}
             </p>

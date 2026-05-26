@@ -1,4 +1,4 @@
-use crate::runtime::packages::PackageSelection;
+use crate::runtime::{locator::get_app_data_paths, packages::PackageSelection};
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::PathBuf;
@@ -9,6 +9,7 @@ pub const DEFAULT_PORTS: Ports = Ports {
     web: 8080,
     php: 9000,
     mysql: 3306,
+    postgresql: 5432,
 };
 
 #[derive(Debug, Clone, Copy)]
@@ -16,6 +17,7 @@ pub struct Ports {
     pub web: u16,
     pub php: u16,
     pub mysql: u16,
+    pub postgresql: u16,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -23,11 +25,17 @@ pub struct AppSettings {
     pub web_port: u16,
     pub php_port: u16,
     pub mysql_port: u16,
+    #[serde(default = "default_postgresql_port")]
+    pub postgresql_port: u16,
     pub project_root: String,
     #[serde(default)]
     pub auto_start_services: bool,
     #[serde(default)]
     pub package_selection: PackageSelection,
+    #[serde(default = "default_language")]
+    pub language: String,
+    #[serde(default = "default_sound_enabled")]
+    pub sound_enabled: bool,
 }
 
 impl Default for AppSettings {
@@ -36,14 +44,12 @@ impl Default for AppSettings {
             web_port: DEFAULT_PORTS.web,
             php_port: DEFAULT_PORTS.php,
             mysql_port: DEFAULT_PORTS.mysql,
-            project_root: dirs::data_local_dir()
-                .unwrap_or_else(|| dirs::home_dir().unwrap_or_default())
-                .join(APP_DIR_NAME)
-                .join("projects")
-                .to_string_lossy()
-                .to_string(),
+            postgresql_port: DEFAULT_PORTS.postgresql,
+            project_root: default_project_root().to_string_lossy().to_string(),
             auto_start_services: false,
             package_selection: PackageSelection::default(),
+            language: default_language(),
+            sound_enabled: default_sound_enabled(),
         }
     }
 }
@@ -51,9 +57,9 @@ impl Default for AppSettings {
 impl AppSettings {
     /// Get the path to the settings file
     fn settings_path() -> Option<PathBuf> {
-        dirs::data_local_dir()
-            .or_else(dirs::home_dir)
-            .map(|p| p.join(APP_DIR_NAME).join("config").join("settings.json"))
+        get_app_data_paths()
+            .map(|paths| paths.config_dir.join("settings.json"))
+            .ok()
     }
 
     /// Load settings from file, or return defaults if file doesn't exist
@@ -134,8 +140,19 @@ impl AppSettings {
             ));
         }
 
+        if let Err(e) = std::net::TcpListener::bind(format!("127.0.0.1:{}", self.postgresql_port)) {
+            warnings.push(format!(
+                "PostgreSQL port {} may be in use: {}",
+                self.postgresql_port, e
+            ));
+        }
+
         // Check for valid port ranges
-        if self.web_port == 0 || self.php_port == 0 || self.mysql_port == 0 {
+        if self.web_port == 0
+            || self.php_port == 0
+            || self.mysql_port == 0
+            || self.postgresql_port == 0
+        {
             errors.push("Port numbers must be greater than 0".to_string());
         }
 
@@ -145,4 +162,27 @@ impl AppSettings {
             Err(errors)
         }
     }
+}
+
+fn default_postgresql_port() -> u16 {
+    DEFAULT_PORTS.postgresql
+}
+
+fn default_language() -> String {
+    "en".to_string()
+}
+
+fn default_sound_enabled() -> bool {
+    true
+}
+
+fn default_project_root() -> PathBuf {
+    get_app_data_paths()
+        .map(|paths| paths.projects_dir)
+        .unwrap_or_else(|_| {
+            dirs::data_local_dir()
+                .unwrap_or_else(|| dirs::home_dir().unwrap_or_default())
+                .join(APP_DIR_NAME)
+                .join("projects")
+        })
 }

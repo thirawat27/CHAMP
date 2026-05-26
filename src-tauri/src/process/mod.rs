@@ -9,6 +9,8 @@ pub enum ServiceType {
     #[serde(rename = "php-fpm")]
     PhpFpm,
     MySQL,
+    #[serde(rename = "postgresql")]
+    PostgreSQL,
 }
 
 impl ServiceType {
@@ -17,6 +19,7 @@ impl ServiceType {
             ServiceType::Caddy => 8080,
             ServiceType::PhpFpm => 9000,
             ServiceType::MySQL => 3306,
+            ServiceType::PostgreSQL => 5432,
         }
     }
 
@@ -25,6 +28,7 @@ impl ServiceType {
             ServiceType::Caddy => "Caddy",
             ServiceType::PhpFpm => "PHP-FPM 8.5",
             ServiceType::MySQL => "MySQL",
+            ServiceType::PostgreSQL => "PostgreSQL",
         }
     }
 
@@ -33,6 +37,7 @@ impl ServiceType {
             ServiceType::Caddy => "Web Server",
             ServiceType::PhpFpm => "PHP Runtime",
             ServiceType::MySQL => "Database Server",
+            ServiceType::PostgreSQL => "PostgreSQL Server",
         }
     }
 
@@ -41,6 +46,7 @@ impl ServiceType {
             ServiceType::Caddy => "caddy",
             ServiceType::PhpFpm => "php-cgi",
             ServiceType::MySQL => "mysqld",
+            ServiceType::PostgreSQL => "postgres",
         }
     }
 }
@@ -96,6 +102,7 @@ mod tests {
         assert_eq!(ServiceType::Caddy.default_port(), 8080);
         assert_eq!(ServiceType::PhpFpm.default_port(), 9000);
         assert_eq!(ServiceType::MySQL.default_port(), 3306);
+        assert_eq!(ServiceType::PostgreSQL.default_port(), 5432);
     }
 
     #[test]
@@ -103,6 +110,7 @@ mod tests {
         assert_eq!(ServiceType::Caddy.display_name(), "Caddy");
         assert_eq!(ServiceType::PhpFpm.display_name(), "PHP-FPM 8.5");
         assert_eq!(ServiceType::MySQL.display_name(), "MySQL");
+        assert_eq!(ServiceType::PostgreSQL.display_name(), "PostgreSQL");
     }
 
     #[test]
@@ -110,6 +118,7 @@ mod tests {
         assert_eq!(ServiceType::Caddy.binary_name(), "caddy");
         assert_eq!(ServiceType::PhpFpm.binary_name(), "php-cgi");
         assert_eq!(ServiceType::MySQL.binary_name(), "mysqld");
+        assert_eq!(ServiceType::PostgreSQL.binary_name(), "postgres");
     }
 
     #[test]
@@ -192,7 +201,8 @@ mod tests {
         set.insert(ServiceType::Caddy);
         set.insert(ServiceType::PhpFpm);
         set.insert(ServiceType::MySQL);
+        set.insert(ServiceType::PostgreSQL);
 
-        assert_eq!(set.len(), 3);
+        assert_eq!(set.len(), 4);
     }
 }

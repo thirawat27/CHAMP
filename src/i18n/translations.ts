@@ -169,6 +169,54 @@ export interface Translations {
   installationComplete: string;
   readyToUse: string;
   startUsingChamp: string;
+  wizardRuntimeOverview: string;
+  wizardPackagesStep: string;
+  wizardChooseVersions: string;
+  wizardChecksStep: string;
+  wizardSystemReadiness: string;
+  wizardReviewStep: string;
+  wizardKeepOrReplace: string;
+  wizardInstallStep: string;
+  wizardDownloadRuntime: string;
+  wizardStackDescription: string;
+  wizardWelcomeBody: string;
+  wizardUserSpaceRuntime: string;
+  wizardUserSpaceRuntimeCopy: string;
+  wizardDevFirstPorts: string;
+  wizardDevFirstPortsCopy: string;
+  wizardDatabaseToolReady: string;
+  wizardDatabaseToolReadyCopy: string;
+  wizardExistingDetected: string;
+  wizardEstimatedDownloadSize: string;
+  wizardVariesByPlatform: string;
+  wizardUseExisting: string;
+  wizardDownloadFresh: string;
+  wizardGetStarted: string;
+  wizardReadUserManual: string;
+  wizardPackageIntro: string;
+  wizardDownloadAndInstall: string;
+  wizardMissingSystemDependencies: string;
+  wizardInstallCommand: string;
+  wizardDependencyRetryCopy: string;
+  wizardRetryCheck: string;
+  wizardInstallationSummary: string;
+  wizardKeepAndInstall: string;
+  wizardInstallAll: string;
+  wizardDownloadVerb: string;
+  wizardExtractVerb: string;
+  wizardInstalling: string;
+  wizardPreparing: string;
+  wizardRuntimeInstalled: string;
+  wizardReadyToStartStack: string;
+  wizardContinueToDashboard: string;
+  wizardNoExistingInstallation: string;
+  wizardPostgreSqlVersion: string;
+  wizardRecommended: string;
+  wizardLoadingPackages: string;
+  wizardFailedToLoadPackages: string;
+  wizardDefault: string;
+  wizardNote: string;
+  wizardEolNote: string;
 
   // Errors
   genericError: string;
@@ -351,6 +399,58 @@ const th: Translations = {
   installationComplete: "การติดตั้งเสร็จสมบูรณ์",
   readyToUse: "CHAMP พร้อมใช้งานแล้ว!",
   startUsingChamp: "เริ่มใช้งาน CHAMP",
+  wizardRuntimeOverview: "ภาพรวมรันไทม์",
+  wizardPackagesStep: "แพ็กเกจ",
+  wizardChooseVersions: "เลือกเวอร์ชัน",
+  wizardChecksStep: "ตรวจสอบ",
+  wizardSystemReadiness: "ความพร้อมของระบบ",
+  wizardReviewStep: "ตรวจทาน",
+  wizardKeepOrReplace: "ใช้ของเดิมหรือแทนที่",
+  wizardInstallStep: "ติดตั้ง",
+  wizardDownloadRuntime: "ดาวน์โหลดรันไทม์",
+  wizardStackDescription: "Caddy + HTTP(S) + phpMyAdmin/Adminer + MySQL/PostgreSQL + PHP",
+  wizardWelcomeBody:
+    "CHAMP จะติดตั้ง Caddy, PHP-FPM, ฐานข้อมูลที่เหมาะกับเครื่องมือที่เลือก และ phpMyAdmin หรือ Adminer ไว้ในโปรไฟล์ผู้ใช้ เพื่อให้สแต็กทำงานได้โดยไม่ต้องเขียนไฟล์ config ลงโฟลเดอร์ระบบที่ถูกป้องกัน",
+  wizardUserSpaceRuntime: "รันไทม์ในพื้นที่ผู้ใช้",
+  wizardUserSpaceRuntimeCopy: "ไม่ต้องใช้สิทธิ์แอดมินเพื่อเขียน config ที่สร้างขึ้น",
+  wizardDevFirstPorts: "พอร์ตสำหรับนักพัฒนา",
+  wizardDevFirstPortsCopy: "HTTP 8080, PHP 9000, MySQL 3306 หรือ PostgreSQL 5432",
+  wizardDatabaseToolReady: "พร้อมใช้ phpMyAdmin",
+  wizardDatabaseToolReadyCopy: "เครื่องมือฐานข้อมูลเปิดที่ /phpmyadmin เป็นค่าเริ่มต้น",
+  wizardExistingDetected: "พบการติดตั้งเดิม",
+  wizardEstimatedDownloadSize: "ขนาดดาวน์โหลดโดยประมาณ:",
+  wizardVariesByPlatform: "ขึ้นอยู่กับแพลตฟอร์ม",
+  wizardUseExisting: "ใช้ของเดิม",
+  wizardDownloadFresh: "ดาวน์โหลดใหม่",
+  wizardGetStarted: "เริ่มต้น",
+  wizardReadUserManual: "อ่านคู่มือผู้ใช้",
+  wizardPackageIntro: "เลือกเวอร์ชันของ PHP, เครื่องมือฐานข้อมูล และฐานข้อมูลหลักของเครื่องมือนั้น",
+  wizardDownloadAndInstall: "ดาวน์โหลดและติดตั้ง",
+  wizardMissingSystemDependencies: "ขาด dependency ของระบบ",
+  wizardInstallCommand: "คำสั่งติดตั้งสำหรับดิสโทรของคุณ:",
+  wizardDependencyRetryCopy:
+    'หลังติดตั้ง dependency แล้ว ให้กด "ตรวจสอบอีกครั้ง" เพื่อดำเนินการต่อ',
+  wizardRetryCheck: "ตรวจสอบอีกครั้ง",
+  wizardInstallationSummary: "สรุปการติดตั้ง:",
+  wizardKeepAndInstall: "เก็บไว้และติดตั้ง",
+  wizardInstallAll: "ติดตั้งทั้งหมด",
+  wizardDownloadVerb: "ดาวน์โหลด",
+  wizardExtractVerb: "แตกไฟล์",
+  wizardInstalling: "กำลังติดตั้ง...",
+  wizardPreparing: "กำลังเตรียม...",
+  wizardRuntimeInstalled: "ติดตั้งรันไทม์แล้ว",
+  wizardReadyToStartStack: "CHAMP พร้อมเริ่มสแต็กเว็บในเครื่องแล้ว",
+  wizardContinueToDashboard: "ไปที่แดชบอร์ด",
+  wizardNoExistingInstallation:
+    "ไม่พบการติดตั้งเดิม โปรดดาวน์โหลดคอมโพเนนต์รันไทม์เพื่อดำเนินการต่อ",
+  wizardPostgreSqlVersion: "เวอร์ชัน PostgreSQL",
+  wizardRecommended: "แนะนำ",
+  wizardLoadingPackages: "กำลังโหลดแพ็กเกจที่มี...",
+  wizardFailedToLoadPackages: "ไม่สามารถโหลดแพ็กเกจที่มีได้",
+  wizardDefault: "ค่าเริ่มต้น",
+  wizardNote: "หมายเหตุ",
+  wizardEolNote:
+    "เวอร์ชัน EOL ไม่ได้รับการซัพพอร์ตและอาจมีช่องโหว่ด้านความปลอดภัย PHP 5.5-7.3 ใช้ได้เฉพาะบน Windows",
 
   // Errors
   genericError: "เกิดข้อผิดพลาด",
@@ -533,6 +633,58 @@ const en: Translations = {
   installationComplete: "Installation complete",
   readyToUse: "CHAMP is ready to use!",
   startUsingChamp: "Start using CHAMP",
+  wizardRuntimeOverview: "Runtime overview",
+  wizardPackagesStep: "Packages",
+  wizardChooseVersions: "Choose versions",
+  wizardChecksStep: "Checks",
+  wizardSystemReadiness: "System readiness",
+  wizardReviewStep: "Review",
+  wizardKeepOrReplace: "Keep or replace",
+  wizardInstallStep: "Install",
+  wizardDownloadRuntime: "Download runtime",
+  wizardStackDescription: "Caddy + HTTP(S) + phpMyAdmin/Adminer + MySQL/PostgreSQL + PHP",
+  wizardWelcomeBody:
+    "CHAMP installs Caddy, PHP-FPM, the database that matches your selected tool, and phpMyAdmin or Adminer into your user profile so the stack can run without writing config files into protected system folders.",
+  wizardUserSpaceRuntime: "User-space runtime",
+  wizardUserSpaceRuntimeCopy: "No admin write access for generated configs.",
+  wizardDevFirstPorts: "Dev-first ports",
+  wizardDevFirstPortsCopy: "HTTP 8080, PHP 9000, MySQL 3306 or PostgreSQL 5432.",
+  wizardDatabaseToolReady: "phpMyAdmin ready",
+  wizardDatabaseToolReadyCopy: "Database tools open at /phpmyadmin by default.",
+  wizardExistingDetected: "Existing installation detected!",
+  wizardEstimatedDownloadSize: "Estimated download size:",
+  wizardVariesByPlatform: "varies by platform",
+  wizardUseExisting: "Use Existing",
+  wizardDownloadFresh: "Download Fresh",
+  wizardGetStarted: "Get Started",
+  wizardReadUserManual: "Read User Manual",
+  wizardPackageIntro:
+    "Select the versions of PHP, the database tool, and the primary database for that tool.",
+  wizardDownloadAndInstall: "Download & Install",
+  wizardMissingSystemDependencies: "Missing System Dependencies",
+  wizardInstallCommand: "Install command for your distribution:",
+  wizardDependencyRetryCopy: 'After installing the dependencies, click "Retry Check" to continue.',
+  wizardRetryCheck: "Retry Check",
+  wizardInstallationSummary: "Installation summary:",
+  wizardKeepAndInstall: "Keep & Install",
+  wizardInstallAll: "Install All",
+  wizardDownloadVerb: "Download",
+  wizardExtractVerb: "Extract",
+  wizardInstalling: "Installing...",
+  wizardPreparing: "Preparing...",
+  wizardRuntimeInstalled: "Runtime installed",
+  wizardReadyToStartStack: "CHAMP is ready to start the local web stack.",
+  wizardContinueToDashboard: "Continue to Dashboard",
+  wizardNoExistingInstallation:
+    "No existing installation found. Please download the runtime components to continue.",
+  wizardPostgreSqlVersion: "PostgreSQL Version",
+  wizardRecommended: "Recommended",
+  wizardLoadingPackages: "Loading available packages...",
+  wizardFailedToLoadPackages: "Failed to load available packages",
+  wizardDefault: "Default",
+  wizardNote: "Note",
+  wizardEolNote:
+    "EOL versions are unsupported and may have security vulnerabilities. PHP 5.5-7.3 are available on Windows only.",
 
   // Errors
   genericError: "An error occurred",

@@ -18,7 +18,7 @@
       "type": "object",
       "description": "Binary package configurations",
       "additionalProperties": false,
-      "required": ["caddy", "php", "mysql", "phpmyadmin"],
+      "required": ["caddy", "php", "mysql", "postgresql", "phpmyadmin"],
       "properties": {
         "caddy": {
           "$ref": "#/definitions/binaryWithUrls"
@@ -27,6 +27,9 @@
           "$ref": "#/definitions/binaryWithUrls"
         },
         "mysql": {
+          "$ref": "#/definitions/binaryWithUrls"
+        },
+        "postgresql": {
           "$ref": "#/definitions/binaryWithUrls"
         },
         "phpmyadmin": {

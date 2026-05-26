@@ -83,7 +83,7 @@ describe('ServiceCard Component', () => {
       );
 
       const badge = screen.getByTestId('service-state-caddy');
-      expect(badge).toHaveTextContent('stopped');
+      expect(badge).toHaveTextContent('Stopped');
       expect(badge).toHaveClass('status-gray');
     });
 
@@ -143,7 +143,7 @@ describe('ServiceCard Component', () => {
       );
 
       const badge = screen.getByTestId('service-state-caddy');
-      expect(badge).toHaveTextContent('running');
+      expect(badge).toHaveTextContent('Running');
       expect(badge).toHaveClass('status-green');
     });
 
@@ -219,7 +219,7 @@ describe('ServiceCard Component', () => {
       );
 
       const badge = screen.getByTestId('service-state-caddy');
-      expect(badge).toHaveTextContent('starting');
+      expect(badge).toHaveTextContent('Starting...');
       expect(badge).toHaveClass('status-blue');
     });
 
@@ -250,7 +250,7 @@ describe('ServiceCard Component', () => {
       );
 
       const badge = screen.getByTestId('service-state-caddy');
-      expect(badge).toHaveTextContent('stopping');
+      expect(badge).toHaveTextContent('Stopping...');
       expect(badge).toHaveClass('status-orange');
     });
 
@@ -283,7 +283,7 @@ describe('ServiceCard Component', () => {
       );
 
       const badge = screen.getByTestId('service-state-caddy');
-      expect(badge).toHaveTextContent('error');
+      expect(badge).toHaveTextContent('Error');
       expect(badge).toHaveClass('status-red');
     });
 
@@ -362,6 +362,21 @@ describe('ServiceCard Component', () => {
       expect(screen.getByText('MySQL')).toBeInTheDocument();
       expect(screen.getByText('Port: 3306')).toBeInTheDocument();
       expect(screen.getByText('Database Server')).toBeInTheDocument();
+    });
+
+    it('should render PostgreSQL service card correctly', () => {
+      render(
+        <ServiceCard
+          serviceType={ServiceType.PostgreSQL}
+          state={ServiceState.Stopped}
+          port={5432}
+          {...mockHandlers}
+        />
+      );
+
+      expect(screen.getByText('PostgreSQL')).toBeInTheDocument();
+      expect(screen.getByText('Port: 5432')).toBeInTheDocument();
+      expect(screen.getByText('PostgreSQL Server')).toBeInTheDocument();
     });
   });
 });

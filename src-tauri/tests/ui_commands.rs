@@ -8,11 +8,12 @@ mod ui_command_tests {
         let manager = ProcessManager::new();
         let statuses = manager.get_all_statuses();
 
-        // Should return all three services
-        assert_eq!(statuses.len(), 3);
+        // Should return all services
+        assert_eq!(statuses.len(), 4);
         assert!(statuses.contains_key(&ServiceType::Caddy));
         assert!(statuses.contains_key(&ServiceType::PhpFpm));
         assert!(statuses.contains_key(&ServiceType::MySQL));
+        assert!(statuses.contains_key(&ServiceType::PostgreSQL));
     }
 
     /// Test that initial service state is Stopped
@@ -37,6 +38,7 @@ mod ui_command_tests {
         assert_eq!(ServiceType::Caddy.display_name(), "Caddy");
         assert_eq!(ServiceType::PhpFpm.display_name(), "PHP-FPM 8.5");
         assert_eq!(ServiceType::MySQL.display_name(), "MySQL");
+        assert_eq!(ServiceType::PostgreSQL.display_name(), "PostgreSQL");
     }
 
     /// Test that service type has correct ports
@@ -45,6 +47,7 @@ mod ui_command_tests {
         assert_eq!(ServiceType::Caddy.default_port(), 8080);
         assert_eq!(ServiceType::PhpFpm.default_port(), 9000);
         assert_eq!(ServiceType::MySQL.default_port(), 3306);
+        assert_eq!(ServiceType::PostgreSQL.default_port(), 5432);
     }
 
     /// Test that service type has correct descriptions
@@ -53,6 +56,7 @@ mod ui_command_tests {
         assert_eq!(ServiceType::Caddy.description(), "Web Server");
         assert_eq!(ServiceType::PhpFpm.description(), "PHP Runtime");
         assert_eq!(ServiceType::MySQL.description(), "Database Server");
+        assert_eq!(ServiceType::PostgreSQL.description(), "PostgreSQL Server");
     }
 
     /// Test service state serialization for frontend
@@ -147,8 +151,9 @@ mod ui_command_tests {
         set.insert(ServiceType::Caddy);
         set.insert(ServiceType::PhpFpm);
         set.insert(ServiceType::MySQL);
+        set.insert(ServiceType::PostgreSQL);
 
-        assert_eq!(set.len(), 3);
+        assert_eq!(set.len(), 4);
     }
 
     /// Test service port assignment
@@ -160,6 +165,7 @@ mod ui_command_tests {
         assert_eq!(statuses[&ServiceType::Caddy].port, 8080);
         assert_eq!(statuses[&ServiceType::PhpFpm].port, 9000);
         assert_eq!(statuses[&ServiceType::MySQL].port, 3306);
+        assert_eq!(statuses[&ServiceType::PostgreSQL].port, 5432);
     }
 
     /// Test ServiceMap operations
@@ -170,11 +176,16 @@ mod ui_command_tests {
         map.insert(ServiceType::Caddy, ServiceInfo::new(ServiceType::Caddy));
         map.insert(ServiceType::PhpFpm, ServiceInfo::new(ServiceType::PhpFpm));
         map.insert(ServiceType::MySQL, ServiceInfo::new(ServiceType::MySQL));
+        map.insert(
+            ServiceType::PostgreSQL,
+            ServiceInfo::new(ServiceType::PostgreSQL),
+        );
 
-        assert_eq!(map.len(), 3);
+        assert_eq!(map.len(), 4);
         assert!(map.contains_key(&ServiceType::Caddy));
         assert!(map.contains_key(&ServiceType::PhpFpm));
         assert!(map.contains_key(&ServiceType::MySQL));
+        assert!(map.contains_key(&ServiceType::PostgreSQL));
     }
 
     /// Test ServiceMap serialization
@@ -184,6 +195,10 @@ mod ui_command_tests {
         map.insert(ServiceType::Caddy, ServiceInfo::new(ServiceType::Caddy));
         map.insert(ServiceType::PhpFpm, ServiceInfo::new(ServiceType::PhpFpm));
         map.insert(ServiceType::MySQL, ServiceInfo::new(ServiceType::MySQL));
+        map.insert(
+            ServiceType::PostgreSQL,
+            ServiceInfo::new(ServiceType::PostgreSQL),
+        );
 
         // Serialize to JSON
         let json = serde_json::to_string(&map).unwrap();
@@ -191,7 +206,7 @@ mod ui_command_tests {
 
         // Deserialize back
         let deserialized: ServiceMap = serde_json::from_str(&json).unwrap();
-        assert_eq!(deserialized.len(), 3);
+        assert_eq!(deserialized.len(), 4);
     }
 
     /// Test service state is_running method

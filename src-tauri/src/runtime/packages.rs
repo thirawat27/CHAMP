@@ -1,12 +1,16 @@
 use serde::{Deserialize, Serialize};
 use std::fs;
+use std::path::{Path, PathBuf};
 use std::sync::OnceLock;
+
+const EMBEDDED_RUNTIME_CONFIG: &str = include_str!("../../runtime-config.json");
 
 /// Available package versions for each component
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PackagesConfig {
     pub php: Vec<PhpPackage>,
     pub mysql: Vec<MySQLPackage>,
+    pub postgresql: Vec<PostgreSQLPackage>,
     pub phpmyadmin: Vec<PhpMyAdminPackage>,
 }
 
@@ -62,6 +66,32 @@ pub struct MySQLPackage {
     pub recommended: bool,
 }
 
+/// PostgreSQL package with version and download URLs
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PostgreSQLPackage {
+    pub id: String,
+    pub version: String,
+    pub display_name: String,
+    #[serde(rename = "windowsX64")]
+    pub windows_x64: String,
+    #[serde(rename = "windowsArm64")]
+    pub windows_arm64: String,
+    #[serde(rename = "linuxX64")]
+    pub linux_x64: String,
+    #[serde(rename = "linuxArm64")]
+    pub linux_arm64: String,
+    #[serde(rename = "macOSX64")]
+    pub macos_x64: String,
+    #[serde(rename = "macOSArm64")]
+    pub macos_arm64: String,
+    #[serde(default)]
+    pub eol: bool,
+    #[serde(default)]
+    pub lts: bool,
+    #[serde(default)]
+    pub recommended: bool,
+}
+
 /// phpMyAdmin package with version and download URL
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PhpMyAdminPackage {
@@ -83,16 +113,18 @@ pub struct PackageSelection {
     pub php: String,
     #[serde(alias = "mariadb")]
     pub mysql: String,
+    #[serde(default = "default_postgresql_selection")]
+    pub postgresql: String,
     pub phpmyadmin: String,
+}
+
+fn default_postgresql_selection() -> String {
+    selected_package_ids_from_config(&embedded_default_runtime_config()).postgresql
 }
 
 impl Default for PackageSelection {
     fn default() -> Self {
-        Self {
-            php: "php-8.5".to_string(),
-            mysql: "mysql-9.7".to_string(),
-            phpmyadmin: "phpmyadmin-5.2".to_string(),
-        }
+        selected_package_ids_from_config(&embedded_default_runtime_config())
     }
 }
 
@@ -111,8 +143,16 @@ pub struct BinariesConfig {
     pub php: BinaryConfig,
     #[serde(rename = "mysql")]
     pub mysql: BinaryConfig,
+    #[serde(rename = "postgresql", default = "default_postgresql_binary_config")]
+    pub postgresql: BinaryConfig,
     #[serde(rename = "phpmyadmin")]
     pub phpmyadmin: PhpMyAdminConfig,
+}
+
+fn default_postgresql_binary_config() -> BinaryConfig {
+    BinaryConfig {
+        versions: vec![default_postgresql_version()],
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -187,44 +227,181 @@ pub struct Urls {
     pub macos_arm64: Option<String>,
 }
 
+fn default_postgresql_version() -> VersionInfo {
+    embedded_default_runtime_config()
+        .binaries
+        .postgresql
+        .versions
+        .into_iter()
+        .next()
+        .expect("embedded runtime-config.json must define a PostgreSQL package")
+}
+
 /// Global runtime config cache
 static RUNTIME_CONFIG: OnceLock<Option<RuntimeConfig>> = OnceLock::new();
+static TAURI_RESOURCE_DIR: OnceLock<PathBuf> = OnceLock::new();
 
-/// Load runtime configuration from file
-pub fn load_runtime_config_from_file() -> Option<RuntimeConfig> {
-    // Try to load from various locations
-    let mut paths_to_try = vec![
-        "runtime-config.json".to_string(),
-        "src-tauri/runtime-config.json".to_string(),
-    ];
+pub fn set_tauri_resource_dir(path: PathBuf) {
+    let _ = TAURI_RESOURCE_DIR.set(path);
+}
 
-    // Also try alongside the executable
-    if let Ok(exe_path) = std::env::current_exe() {
-        if let Some(exe_dir) = exe_path.parent() {
-            paths_to_try.push(
-                exe_dir
-                    .join("runtime-config.json")
-                    .to_string_lossy()
-                    .to_string(),
-            );
+pub fn runtime_config_search_paths() -> Vec<PathBuf> {
+    let mut paths = Vec::new();
+
+    if let Some(resource_dir) = TAURI_RESOURCE_DIR.get() {
+        paths.push(resource_dir.join("runtime-config.json"));
+    }
+
+    paths.push(PathBuf::from("runtime-config.json"));
+    paths.push(PathBuf::from("src-tauri").join("runtime-config.json"));
+
+    if let Ok(app_paths) = crate::runtime::locator::get_app_data_paths() {
+        paths.push(app_paths.base_dir.join("runtime-config.json"));
+        paths.push(app_paths.config_dir.join("runtime-config.json"));
+    }
+
+    for env_name in ["CHAMP_DATA_DIR", "CHAMP_PORTABLE_DIR"] {
+        if let Some(dir) = std::env::var_os(env_name).map(PathBuf::from) {
+            paths.push(dir.join("runtime-config.json"));
+            paths.push(dir.join("config").join("runtime-config.json"));
         }
     }
 
-    for path in paths_to_try {
-        if let Ok(content) = fs::read_to_string(&path) {
-            match serde_json::from_str::<RuntimeConfig>(&content) {
-                Ok(config) => {
-                    eprintln!("Loaded runtime configuration from {}", path);
-                    return Some(config);
-                }
-                Err(e) => {
-                    eprintln!("Failed to parse runtime-config.json from {}: {}", path, e);
+    if let Ok(exe_path) = std::env::current_exe() {
+        if let Some(exe_dir) = exe_path.parent() {
+            add_runtime_config_paths_for_dir(&mut paths, exe_dir);
+            if let Some(parent) = exe_dir.parent() {
+                add_runtime_config_paths_for_dir(&mut paths, parent);
+                if let Some(grandparent) = parent.parent() {
+                    add_runtime_config_paths_for_dir(&mut paths, grandparent);
                 }
             }
         }
     }
 
+    if let Some(data_dir) = dirs::data_local_dir() {
+        paths.push(data_dir.join("CHAMP").join("runtime-config.json"));
+        paths.push(
+            data_dir
+                .join("CHAMP")
+                .join("config")
+                .join("runtime-config.json"),
+        );
+        paths.push(data_dir.join("campp").join("runtime-config.json"));
+    }
+
+    #[cfg(target_os = "linux")]
+    {
+        if let Ok(xdg_data_home) = std::env::var("XDG_DATA_HOME") {
+            paths.push(
+                PathBuf::from(xdg_data_home)
+                    .join("CHAMP")
+                    .join("runtime-config.json"),
+            );
+            paths.push(
+                PathBuf::from(xdg_data_home)
+                    .join("champ")
+                    .join("runtime-config.json"),
+            );
+        }
+
+        if let Ok(xdg_data_dirs) = std::env::var("XDG_DATA_DIRS") {
+            for dir in xdg_data_dirs.split(':').filter(|dir| !dir.is_empty()) {
+                paths.push(PathBuf::from(dir).join("CHAMP").join("runtime-config.json"));
+                paths.push(PathBuf::from(dir).join("champ").join("runtime-config.json"));
+            }
+        } else {
+            paths.push(PathBuf::from("/usr/local/share/CHAMP/runtime-config.json"));
+            paths.push(PathBuf::from("/usr/share/CHAMP/runtime-config.json"));
+            paths.push(PathBuf::from("/usr/local/share/champ/runtime-config.json"));
+            paths.push(PathBuf::from("/usr/share/champ/runtime-config.json"));
+        }
+    }
+
+    dedupe_paths(paths)
+}
+
+fn add_runtime_config_paths_for_dir(paths: &mut Vec<PathBuf>, dir: &Path) {
+    paths.push(dir.join("runtime-config.json"));
+    paths.push(dir.join("resources").join("runtime-config.json"));
+    paths.push(dir.join("share").join("CHAMP").join("runtime-config.json"));
+    paths.push(dir.join("share").join("champ").join("runtime-config.json"));
+    paths.push(dir.join("lib").join("CHAMP").join("runtime-config.json"));
+    paths.push(dir.join("lib").join("champ").join("runtime-config.json"));
+    paths.push(
+        dir.join("lib")
+            .join("share")
+            .join("CHAMP")
+            .join("runtime-config.json"),
+    );
+    paths.push(
+        dir.join("lib")
+            .join("share")
+            .join("champ")
+            .join("runtime-config.json"),
+    );
+}
+
+fn dedupe_paths(paths: Vec<PathBuf>) -> Vec<PathBuf> {
+    let mut seen = std::collections::HashSet::new();
+    let mut unique = Vec::new();
+    for path in paths {
+        let key = path.to_string_lossy().to_string();
+        if seen.insert(key) {
+            unique.push(path);
+        }
+    }
+    unique
+}
+
+pub fn read_runtime_config_content() -> Option<(PathBuf, String)> {
+    let paths_to_try = runtime_config_search_paths();
+    for path in &paths_to_try {
+        match fs::read_to_string(path) {
+            Ok(content) => {
+                eprintln!("Loaded runtime configuration from {}", path.display());
+                return Some((path.clone(), content));
+            }
+            Err(e) if path.exists() => {
+                eprintln!(
+                    "Found runtime-config.json at {} but could not read it: {}",
+                    path.display(),
+                    e
+                );
+            }
+            Err(_) => {}
+        }
+    }
+
+    eprintln!("runtime-config.json not found. Searched these paths:");
+    for path in paths_to_try {
+        eprintln!("  - {}", path.display());
+    }
     None
+}
+
+/// Load runtime configuration from file
+pub fn load_runtime_config_from_file() -> Option<RuntimeConfig> {
+    if let Some((path, content)) = read_runtime_config_content() {
+        return serde_json::from_str::<RuntimeConfig>(&content)
+            .map_err(|e| {
+                eprintln!(
+                    "Failed to parse runtime-config.json from {}: {}",
+                    path.display(),
+                    e
+                );
+                e
+            })
+            .ok();
+    }
+
+    eprintln!("Using embedded runtime-config.json fallback");
+    Some(embedded_default_runtime_config())
+}
+
+pub fn embedded_default_runtime_config() -> RuntimeConfig {
+    serde_json::from_str(EMBEDDED_RUNTIME_CONFIG)
+        .expect("embedded runtime-config.json must be valid")
 }
 
 /// Get the platform-appropriate database display name.
@@ -237,68 +414,90 @@ pub fn get_available_packages() -> PackagesConfig {
     let config = RUNTIME_CONFIG.get_or_init(load_runtime_config_from_file);
 
     if let Some(cfg) = config {
-        // Convert from config format to package format
-        PackagesConfig {
-            php: cfg
-                .binaries
-                .php
-                .versions
-                .iter()
-                .map(|v| PhpPackage {
-                    id: v.id.clone(),
-                    version: v.version.clone(),
-                    display_name: v.display_name.clone(),
-                    windows_x64: v.urls.windows_x64.clone().unwrap_or_default(),
-                    windows_arm64: v.urls.windows_arm64.clone().unwrap_or_default(),
-                    linux_x64: v.urls.linux_x64.clone().unwrap_or_default(),
-                    linux_arm64: v.urls.linux_arm64.clone().unwrap_or_default(),
-                    macos_x64: v.urls.macos_x64.clone().unwrap_or_default(),
-                    macos_arm64: v.urls.macos_arm64.clone().unwrap_or_default(),
-                    eol: v.eol,
-                    lts: v.lts,
-                    recommended: v.selected,
-                })
-                .collect(),
-            mysql: cfg
-                .binaries
-                .mysql
-                .versions
-                .iter()
-                .map(|v| MySQLPackage {
-                    id: v.id.clone(),
-                    version: v.version.clone(),
-                    display_name: get_database_display_name(&v.display_name),
-                    windows_x64: v.urls.windows_x64.clone().unwrap_or_default(),
-                    windows_arm64: v.urls.windows_arm64.clone().unwrap_or_default(),
-                    linux_x64: v.urls.linux_x64.clone().unwrap_or_default(),
-                    linux_arm64: v.urls.linux_arm64.clone().unwrap_or_default(),
-                    macos_x64: v.urls.macos_x64.clone().unwrap_or_default(),
-                    macos_arm64: v.urls.macos_arm64.clone().unwrap_or_default(),
-                    eol: v.eol,
-                    lts: v.lts,
-                    recommended: v.selected,
-                })
-                .collect(),
-            phpmyadmin: cfg
-                .binaries
-                .phpmyadmin
-                .versions
-                .iter()
-                .map(|v| PhpMyAdminPackage {
-                    id: v.id.clone(),
-                    version: v.version.clone(),
-                    display_name: v.display_name.clone(),
-                    url: v.url.clone(),
-                    eol: v.eol,
-                    lts: v.lts,
-                    recommended: v.selected,
-                })
-                .collect(),
-        }
+        runtime_config_to_packages(cfg)
     } else {
-        // Fallback to hardcoded defaults
-        eprintln!("Using default package configuration");
+        eprintln!("Using embedded default package configuration");
         get_default_packages()
+    }
+}
+
+fn runtime_config_to_packages(cfg: &RuntimeConfig) -> PackagesConfig {
+    PackagesConfig {
+        php: cfg
+            .binaries
+            .php
+            .versions
+            .iter()
+            .map(|v| PhpPackage {
+                id: v.id.clone(),
+                version: v.version.clone(),
+                display_name: v.display_name.clone(),
+                windows_x64: v.urls.windows_x64.clone().unwrap_or_default(),
+                windows_arm64: v.urls.windows_arm64.clone().unwrap_or_default(),
+                linux_x64: v.urls.linux_x64.clone().unwrap_or_default(),
+                linux_arm64: v.urls.linux_arm64.clone().unwrap_or_default(),
+                macos_x64: v.urls.macos_x64.clone().unwrap_or_default(),
+                macos_arm64: v.urls.macos_arm64.clone().unwrap_or_default(),
+                eol: v.eol,
+                lts: v.lts,
+                recommended: v.selected,
+            })
+            .collect(),
+        mysql: cfg
+            .binaries
+            .mysql
+            .versions
+            .iter()
+            .map(|v| MySQLPackage {
+                id: v.id.clone(),
+                version: v.version.clone(),
+                display_name: get_database_display_name(&v.display_name),
+                windows_x64: v.urls.windows_x64.clone().unwrap_or_default(),
+                windows_arm64: v.urls.windows_arm64.clone().unwrap_or_default(),
+                linux_x64: v.urls.linux_x64.clone().unwrap_or_default(),
+                linux_arm64: v.urls.linux_arm64.clone().unwrap_or_default(),
+                macos_x64: v.urls.macos_x64.clone().unwrap_or_default(),
+                macos_arm64: v.urls.macos_arm64.clone().unwrap_or_default(),
+                eol: v.eol,
+                lts: v.lts,
+                recommended: v.selected,
+            })
+            .collect(),
+        postgresql: cfg
+            .binaries
+            .postgresql
+            .versions
+            .iter()
+            .map(|v| PostgreSQLPackage {
+                id: v.id.clone(),
+                version: v.version.clone(),
+                display_name: v.display_name.clone(),
+                windows_x64: v.urls.windows_x64.clone().unwrap_or_default(),
+                windows_arm64: v.urls.windows_arm64.clone().unwrap_or_default(),
+                linux_x64: v.urls.linux_x64.clone().unwrap_or_default(),
+                linux_arm64: v.urls.linux_arm64.clone().unwrap_or_default(),
+                macos_x64: v.urls.macos_x64.clone().unwrap_or_default(),
+                macos_arm64: v.urls.macos_arm64.clone().unwrap_or_default(),
+                eol: v.eol,
+                lts: v.lts,
+                recommended: v.selected,
+            })
+            .collect(),
+        phpmyadmin: cfg
+            .binaries
+            .phpmyadmin
+            .versions
+            .iter()
+            .map(|v| PhpMyAdminPackage {
+                id: v.id.clone(),
+                version: v.version.clone(),
+                display_name: v.display_name.clone(),
+                url: v.url.clone(),
+                eol: v.eol,
+                lts: v.lts,
+                recommended: v.selected,
+            })
+            .collect(),
     }
 }
 
@@ -307,35 +506,38 @@ pub fn get_selected_package_ids() -> PackageSelection {
     let config = RUNTIME_CONFIG.get_or_init(load_runtime_config_from_file);
 
     if let Some(cfg) = config {
-        PackageSelection {
-            php: cfg
-                .binaries
-                .php
-                .versions
-                .iter()
-                .find(|v| v.selected)
-                .map(|v| v.id.clone())
-                .unwrap_or_else(|| "php-8.5".to_string()),
-            mysql: cfg
-                .binaries
-                .mysql
-                .versions
-                .iter()
-                .find(|v| v.selected)
-                .map(|v| v.id.clone())
-                .unwrap_or_else(|| "mysql-9.7".to_string()),
-            phpmyadmin: cfg
-                .binaries
-                .phpmyadmin
-                .versions
-                .iter()
-                .find(|v| v.selected)
-                .map(|v| v.id.clone())
-                .unwrap_or_else(|| "phpmyadmin-5.2".to_string()),
-        }
+        selected_package_ids_from_config(cfg)
     } else {
         PackageSelection::default()
     }
+}
+
+fn selected_package_ids_from_config(cfg: &RuntimeConfig) -> PackageSelection {
+    PackageSelection {
+        php: selected_version_id(&cfg.binaries.php.versions)
+            .expect("runtime-config.json must select a PHP package"),
+        mysql: selected_version_id(&cfg.binaries.mysql.versions)
+            .expect("runtime-config.json must select a MySQL package"),
+        postgresql: selected_version_id(&cfg.binaries.postgresql.versions)
+            .expect("runtime-config.json must select a PostgreSQL package"),
+        phpmyadmin: cfg
+            .binaries
+            .phpmyadmin
+            .versions
+            .iter()
+            .find(|v| v.selected)
+            .or_else(|| cfg.binaries.phpmyadmin.versions.first())
+            .map(|v| v.id.clone())
+            .expect("runtime-config.json must define a database tool package"),
+    }
+}
+
+fn selected_version_id(versions: &[VersionInfo]) -> Option<String> {
+    versions
+        .iter()
+        .find(|v| v.selected)
+        .or_else(|| versions.first())
+        .map(|v| v.id.clone())
 }
 
 /// Get PHP package by ID
@@ -350,6 +552,14 @@ pub fn get_php_package(id: &str) -> Option<PhpPackage> {
 pub fn get_mysql_package(id: &str) -> Option<MySQLPackage> {
     get_available_packages()
         .mysql
+        .into_iter()
+        .find(|p| p.id == id)
+}
+
+/// Get PostgreSQL package by ID
+pub fn get_postgresql_package(id: &str) -> Option<PostgreSQLPackage> {
+    get_available_packages()
+        .postgresql
         .into_iter()
         .find(|p| p.id == id)
 }
@@ -374,228 +584,20 @@ pub fn get_config() -> Option<RuntimeConfig> {
         .clone()
 }
 
-/// Get default hardcoded packages (fallback when config file is not available)
+pub fn selected_caddy_version() -> String {
+    let config = get_config().unwrap_or_else(embedded_default_runtime_config);
+    config
+        .binaries
+        .caddy
+        .versions
+        .iter()
+        .find(|version| version.selected)
+        .or_else(|| config.binaries.caddy.versions.first())
+        .map(|version| version.version.clone())
+        .unwrap_or_default()
+}
+
+/// Get default packages from the embedded runtime-config.json fallback.
 fn get_default_packages() -> PackagesConfig {
-    PackagesConfig {
-        php: vec![
-            PhpPackage {
-                id: "php-8.5".to_string(),
-                version: "8.5.6".to_string(),
-                display_name: "PHP 8.5 (Dev)".to_string(),
-                windows_x64: "https://windows.php.net/downloads/releases/php-8.5.6-nts-Win32-vs17-x64.zip".to_string(),
-                windows_arm64: String::new(),
-                linux_x64: "https://dl.static-php.dev/static-php-cli/bulk/php-8.5.3-fpm-linux-x86_64.tar.gz".to_string(),
-                linux_arm64: "https://dl.static-php.dev/static-php-cli/bulk/php-8.5.3-fpm-linux-aarch64.tar.gz".to_string(),
-                macos_x64: "https://dl.static-php.dev/static-php-cli/bulk/php-8.5.3-fpm-macos-x86_64.tar.gz".to_string(),
-                macos_arm64: "https://dl.static-php.dev/static-php-cli/bulk/php-8.5.3-fpm-macos-aarch64.tar.gz".to_string(),
-                eol: false,
-                lts: false,
-                recommended: true,
-            },
-            PhpPackage {
-                id: "php-8.4".to_string(),
-                version: "8.4.21".to_string(),
-                display_name: "PHP 8.4".to_string(),
-                windows_x64: "https://windows.php.net/downloads/releases/php-8.4.21-nts-Win32-vs17-x64.zip".to_string(),
-                windows_arm64: String::new(),
-                linux_x64: "https://dl.static-php.dev/static-php-cli/bulk/php-8.4.20-fpm-linux-x86_64.tar.gz".to_string(),
-                linux_arm64: "https://dl.static-php.dev/static-php-cli/bulk/php-8.4.20-fpm-linux-aarch64.tar.gz".to_string(),
-                macos_x64: "https://dl.static-php.dev/static-php-cli/bulk/php-8.4.20-fpm-macos-x86_64.tar.gz".to_string(),
-                macos_arm64: "https://dl.static-php.dev/static-php-cli/bulk/php-8.4.20-fpm-macos-aarch64.tar.gz".to_string(),
-                eol: false,
-                lts: false,
-                recommended: false,
-            },
-            PhpPackage {
-                id: "php-8.3".to_string(),
-                version: "8.3.31".to_string(),
-                display_name: "PHP 8.3 (LTS)".to_string(),
-                windows_x64: "https://windows.php.net/downloads/releases/php-8.3.31-nts-Win32-vs16-x64.zip".to_string(),
-                windows_arm64: String::new(),
-                linux_x64: "https://dl.static-php.dev/static-php-cli/bulk/php-8.3.30-fpm-linux-x86_64.tar.gz".to_string(),
-                linux_arm64: "https://dl.static-php.dev/static-php-cli/bulk/php-8.3.30-fpm-linux-aarch64.tar.gz".to_string(),
-                macos_x64: "https://dl.static-php.dev/static-php-cli/bulk/php-8.3.30-fpm-macos-x86_64.tar.gz".to_string(),
-                macos_arm64: "https://dl.static-php.dev/static-php-cli/bulk/php-8.3.30-fpm-macos-aarch64.tar.gz".to_string(),
-                eol: false,
-                lts: true,
-                recommended: false,
-            },
-            PhpPackage {
-                id: "php-8.2".to_string(),
-                version: "8.2.31".to_string(),
-                display_name: "PHP 8.2".to_string(),
-                windows_x64: "https://windows.php.net/downloads/releases/php-8.2.31-nts-Win32-vs16-x64.zip".to_string(),
-                windows_arm64: String::new(),
-                linux_x64: "https://dl.static-php.dev/static-php-cli/bulk/php-8.2.30-fpm-linux-x86_64.tar.gz".to_string(),
-                linux_arm64: "https://dl.static-php.dev/static-php-cli/bulk/php-8.2.30-fpm-linux-aarch64.tar.gz".to_string(),
-                macos_x64: "https://dl.static-php.dev/static-php-cli/bulk/php-8.2.30-fpm-macos-x86_64.tar.gz".to_string(),
-                macos_arm64: "https://dl.static-php.dev/static-php-cli/bulk/php-8.2.30-fpm-macos-aarch64.tar.gz".to_string(),
-                eol: false,
-                lts: false,
-                recommended: false,
-            },
-            PhpPackage {
-                id: "php-8.1".to_string(),
-                version: "8.1.34".to_string(),
-                display_name: "PHP 8.1 (EOL)".to_string(),
-                windows_x64: "https://windows.php.net/downloads/releases/php-8.1.34-nts-Win32-vs16-x64.zip".to_string(),
-                windows_arm64: String::new(),
-                linux_x64: "https://dl.static-php.dev/static-php-cli/bulk/php-8.1.34-fpm-linux-x86_64.tar.gz".to_string(),
-                linux_arm64: "https://dl.static-php.dev/static-php-cli/bulk/php-8.1.34-fpm-linux-aarch64.tar.gz".to_string(),
-                macos_x64: "https://dl.static-php.dev/static-php-cli/bulk/php-8.1.34-fpm-macos-x86_64.tar.gz".to_string(),
-                macos_arm64: "https://dl.static-php.dev/static-php-cli/bulk/php-8.1.34-fpm-macos-aarch64.tar.gz".to_string(),
-                eol: true,
-                lts: false,
-                recommended: false,
-            },
-            PhpPackage {
-                id: "php-8.0".to_string(),
-                version: "8.0.30".to_string(),
-                display_name: "PHP 8.0 (EOL)".to_string(),
-                windows_x64: "https://windows.php.net/downloads/releases/php-8.0.30-nts-Win32-vs16-x64.zip".to_string(),
-                windows_arm64: String::new(),
-                linux_x64: "https://dl.static-php.dev/static-php-cli/bulk/php-8.0.30-fpm-linux-x86_64.tar.gz".to_string(),
-                linux_arm64: "https://dl.static-php.dev/static-php-cli/bulk/php-8.0.30-fpm-linux-aarch64.tar.gz".to_string(),
-                macos_x64: "https://dl.static-php.dev/static-php-cli/bulk/php-8.0.30-fpm-macos-x86_64.tar.gz".to_string(),
-                macos_arm64: "https://dl.static-php.dev/static-php-cli/bulk/php-8.0.30-fpm-macos-aarch64.tar.gz".to_string(),
-                eol: true,
-                lts: false,
-                recommended: false,
-            },
-            PhpPackage {
-                id: "php-7.4".to_string(),
-                version: "7.4.33".to_string(),
-                display_name: "PHP 7.4 (EOL)".to_string(),
-                windows_x64: "https://windows.php.net/downloads/releases/php-7.4.33-nts-Win32-vc15-x64.zip".to_string(),
-                windows_arm64: String::new(),
-                linux_x64: String::new(),
-                linux_arm64: String::new(),
-                macos_x64: String::new(),
-                macos_arm64: String::new(),
-                eol: true,
-                lts: false,
-                recommended: false,
-            },
-            PhpPackage {
-                id: "php-7.3".to_string(),
-                version: "7.3.33".to_string(),
-                display_name: "PHP 7.3 (EOL)".to_string(),
-                windows_x64: "https://windows.php.net/downloads/releases/archives/php-7.3.33-nts-Win32-VC15-x64.zip".to_string(),
-                windows_arm64: String::new(),
-                linux_x64: String::new(),
-                linux_arm64: String::new(),
-                macos_x64: String::new(),
-                macos_arm64: String::new(),
-                eol: true,
-                lts: false,
-                recommended: false,
-            },
-            PhpPackage {
-                id: "php-7.2".to_string(),
-                version: "7.2.34".to_string(),
-                display_name: "PHP 7.2 (EOL)".to_string(),
-                windows_x64: "https://windows.php.net/downloads/releases/archives/php-7.2.34-nts-Win32-VC15-x64.zip".to_string(),
-                windows_arm64: String::new(),
-                linux_x64: String::new(),
-                linux_arm64: String::new(),
-                macos_x64: String::new(),
-                macos_arm64: String::new(),
-                eol: true,
-                lts: false,
-                recommended: false,
-            },
-            PhpPackage {
-                id: "php-7.1".to_string(),
-                version: "7.1.33".to_string(),
-                display_name: "PHP 7.1 (EOL)".to_string(),
-                windows_x64: "https://windows.php.net/downloads/releases/archives/php-7.1.33-nts-Win32-VC14-x64.zip".to_string(),
-                windows_arm64: String::new(),
-                linux_x64: String::new(),
-                linux_arm64: String::new(),
-                macos_x64: String::new(),
-                macos_arm64: String::new(),
-                eol: true,
-                lts: false,
-                recommended: false,
-            },
-            PhpPackage {
-                id: "php-7.0".to_string(),
-                version: "7.0.33".to_string(),
-                display_name: "PHP 7.0 (EOL)".to_string(),
-                windows_x64: "https://windows.php.net/downloads/releases/archives/php-7.0.33-nts-Win32-VC14-x64.zip".to_string(),
-                windows_arm64: String::new(),
-                linux_x64: String::new(),
-                linux_arm64: String::new(),
-                macos_x64: String::new(),
-                macos_arm64: String::new(),
-                eol: true,
-                lts: false,
-                recommended: false,
-            },
-            PhpPackage {
-                id: "php-5.6".to_string(),
-                version: "5.6.40".to_string(),
-                display_name: "PHP 5.6 (EOL)".to_string(),
-                windows_x64: "https://windows.php.net/downloads/releases/archives/php-5.6.40-nts-Win32-VC11-x64.zip".to_string(),
-                windows_arm64: String::new(),
-                linux_x64: String::new(),
-                linux_arm64: String::new(),
-                macos_x64: String::new(),
-                macos_arm64: String::new(),
-                eol: true,
-                lts: false,
-                recommended: false,
-            },
-            PhpPackage {
-                id: "php-5.5".to_string(),
-                version: "5.5.38".to_string(),
-                display_name: "PHP 5.5 (EOL)".to_string(),
-                windows_x64: "https://windows.php.net/downloads/releases/archives/php-5.5.38-nts-Win32-VC11-x64.zip".to_string(),
-                windows_arm64: String::new(),
-                linux_x64: String::new(),
-                linux_arm64: String::new(),
-                macos_x64: String::new(),
-                macos_arm64: String::new(),
-                eol: true,
-                lts: false,
-                recommended: false,
-            },
-        ],
-        mysql: vec![
-            MySQLPackage {
-                id: "mysql-9.7".to_string(),
-                version: "9.7.0".to_string(),
-                display_name: "MySQL 9.7.0".to_string(),
-                windows_x64: "https://cdn.mysql.com/Downloads/MySQL-9.7/mysql-9.7.0-winx64.zip".to_string(),
-                windows_arm64: String::new(),
-                linux_x64: "https://cdn.mysql.com/Downloads/MySQL-9.7/mysql-9.7.0-linux-glibc2.28-x86_64.tar.xz".to_string(),
-                linux_arm64: "https://cdn.mysql.com/Downloads/MySQL-9.7/mysql-9.7.0-linux-glibc2.28-aarch64.tar.xz".to_string(),
-                macos_x64: "https://cdn.mysql.com/Downloads/MySQL-9.7/mysql-9.7.0-macos15-x86_64.tar.gz".to_string(),
-                macos_arm64: "https://cdn.mysql.com/Downloads/MySQL-9.7/mysql-9.7.0-macos15-arm64.tar.gz".to_string(),
-                eol: false,
-                lts: true,
-                recommended: true,
-            },
-        ],
-        phpmyadmin: vec![
-            PhpMyAdminPackage {
-                id: "phpmyadmin-5.2".to_string(),
-                version: "5.2.3".to_string(),
-                display_name: "phpMyAdmin 5.2.3".to_string(),
-                url: "https://files.phpmyadmin.net/phpMyAdmin/5.2.3/phpMyAdmin-5.2.3-all-languages.zip".to_string(),
-                eol: false,
-                lts: false,
-                recommended: true,
-            },
-            PhpMyAdminPackage {
-                id: "adminer-5.4".to_string(),
-                version: "5.4.2".to_string(),
-                display_name: "Adminer 5.4.2".to_string(),
-                url: "https://www.adminer.org/latest-mysql.php".to_string(),
-                eol: false,
-                lts: false,
-                recommended: false,
-            },
-        ],
-    }
+    runtime_config_to_packages(&embedded_default_runtime_config())
 }

@@ -46,15 +46,7 @@ pub const MYSQL_INIT_CHECK_DELAY_MS: u64 = 500;
 
 /// Minimum interval between system metrics samples (milliseconds)
 /// This constant is used in commands.rs for system metrics monitoring
-#[allow(dead_code)]
 pub const SYSTEM_METRICS_MIN_SAMPLE_INTERVAL_MS: u64 = 1500;
-
-// ============================================================================
-// Versions
-// ============================================================================
-
-/// Default Caddy version (fallback if not in runtime-config.json)
-pub const DEFAULT_CADDY_VERSION: &str = "2.11.2";
 
 // ============================================================================
 // Helper Functions
@@ -94,19 +86,27 @@ pub const fn log_file_retry_delay() -> Duration {
 mod tests {
     use super::*;
 
-    #[test]
-    fn test_constants_are_reasonable() {
+    const _: () = {
         assert!(MAX_LOG_FILE_RETRY > 0);
         assert!(LOG_FILE_RETRY_DELAY_MS > 0);
         assert!(MAX_LOG_TAIL_LINES > 0);
         assert!(MYSQL_PORT_RELEASE_TIMEOUT_SECS > DEFAULT_PORT_RELEASE_TIMEOUT_SECS);
         assert!(PORT_CHECK_TIMEOUT_MS < 1000);
-    }
+    };
 
     #[test]
     fn test_duration_helpers() {
-        assert_eq!(mysql_port_release_timeout().as_secs(), MYSQL_PORT_RELEASE_TIMEOUT_SECS);
-        assert_eq!(default_port_release_timeout().as_secs(), DEFAULT_PORT_RELEASE_TIMEOUT_SECS);
-        assert_eq!(port_check_timeout().as_millis(), PORT_CHECK_TIMEOUT_MS as u128);
+        assert_eq!(
+            mysql_port_release_timeout().as_secs(),
+            MYSQL_PORT_RELEASE_TIMEOUT_SECS
+        );
+        assert_eq!(
+            default_port_release_timeout().as_secs(),
+            DEFAULT_PORT_RELEASE_TIMEOUT_SECS
+        );
+        assert_eq!(
+            port_check_timeout().as_millis(),
+            PORT_CHECK_TIMEOUT_MS as u128
+        );
     }
 }

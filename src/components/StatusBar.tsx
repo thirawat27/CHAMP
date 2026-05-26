@@ -2,11 +2,12 @@ import { invoke } from "@tauri-apps/api/core";
 import { Activity, HardDrive } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useTranslation } from "../stores/languageStore";
-import { ServiceMap } from "../types/services";
+import { PackageSelection, ServiceMap, getStackServiceTypes } from "../types/services";
 
 interface StatusBarProps {
   services: Partial<ServiceMap>;
-  appPaths?: { base_dir: string };
+  appPaths?: { base_dir: string; portable?: boolean };
+  packageSelection?: Pick<PackageSelection, "phpmyadmin"> | null;
   [key: string]: unknown;
 }
 
@@ -44,12 +45,13 @@ function formatBytes(bytes: number): string {
   return `${value.toFixed(precision)} ${units[exponent]}`;
 }
 
-export function StatusBar({ services, appPaths, ...props }: StatusBarProps) {
+export function StatusBar({ services, appPaths, packageSelection, ...props }: StatusBarProps) {
   const { t } = useTranslation();
-  const runningCount = Object.values(services).filter(
-    (service) => service?.state === "running"
+  const stackServiceTypes = getStackServiceTypes(packageSelection);
+  const runningCount = stackServiceTypes.filter(
+    (serviceType) => services[serviceType]?.state === "running"
   ).length;
-  const totalCount = Object.keys(services).length || 3;
+  const totalCount = stackServiceTypes.length;
   const [metrics, setMetrics] = useState<SystemMetrics | null>(null);
 
   useEffect(() => {
@@ -90,7 +92,7 @@ export function StatusBar({ services, appPaths, ...props }: StatusBarProps) {
       </span>
       {appPaths?.base_dir && (
         <span className="status-path">
-          <HardDrive size={14} /> {appPaths.base_dir}
+          <HardDrive size={14} /> {appPaths.portable ? "Portable" : "Local"}: {appPaths.base_dir}
         </span>
       )}
       <span className="status-metrics">

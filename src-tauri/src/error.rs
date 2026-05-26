@@ -10,35 +10,35 @@ use std::fmt;
 pub enum ChampError {
     /// Service not found in the process manager
     ServiceNotFound(String),
-    
+
     /// Port is already in use by another process
     PortInUse(u16),
-    
+
     /// Process failed to start or crashed
     ProcessFailed {
         service: String,
         reason: String,
         log_path: Option<String>,
     },
-    
+
     /// Configuration error (invalid settings, missing files, etc.)
     ConfigError(String),
-    
+
     /// IO error (file operations, network, etc.)
     IoError(std::io::Error),
-    
+
     /// Runtime binary not found or invalid
     RuntimeError(String),
-    
+
     /// Database initialization or operation failed
     DatabaseError(String),
-    
+
     /// Download or extraction failed
     DownloadError(String),
-    
+
     /// Invalid port number
     InvalidPort(u16),
-    
+
     /// Service is in wrong state for the requested operation
     InvalidState {
         service: String,
@@ -60,7 +60,11 @@ impl fmt::Display for ChampError {
                     port
                 )
             }
-            ChampError::ProcessFailed { service, reason, log_path } => {
+            ChampError::ProcessFailed {
+                service,
+                reason,
+                log_path,
+            } => {
                 write!(f, "{} process failed: {}", service, reason)?;
                 if let Some(path) = log_path {
                     write!(f, "\nLog file: {}", path)?;
@@ -83,9 +87,17 @@ impl fmt::Display for ChampError {
                 write!(f, "Download error: {}", msg)
             }
             ChampError::InvalidPort(port) => {
-                write!(f, "Invalid port number: {}. Port must be between 1 and 65535.", port)
+                write!(
+                    f,
+                    "Invalid port number: {}. Port must be between 1 and 65535.",
+                    port
+                )
             }
-            ChampError::InvalidState { service, current_state, expected_state } => {
+            ChampError::InvalidState {
+                service,
+                current_state,
+                expected_state,
+            } => {
                 write!(
                     f,
                     "Service {} is in state '{}' but expected '{}' for this operation",
