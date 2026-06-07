@@ -363,6 +363,7 @@ struct DownloadMetadata {
 }
 
 /// Runtime binary downloader
+#[derive(Clone)]
 pub struct RuntimeDownloader {
     platform: Platform,
     client: Client,
@@ -1563,66 +1564,8 @@ impl RuntimeDownloader {
         &self,
         progress_cb: ProgressCallback,
     ) -> Result<Vec<PathBuf>, String> {
-        let components = self.selected_stack_components();
-        let total = components.len() as u8;
-
-        // Create temp directory for downloads
-        let temp_dir = std::env::temp_dir().join("campp-download");
-        fs::create_dir_all(&temp_dir)
-            .map_err(|e| format!("Failed to create temp directory: {}", e))?;
-
-        let mut downloaded_files = Vec::new();
-
-        for (i, component) in components.iter().enumerate() {
-            let current = (i + 1) as u8;
-
-            // Download
-            let downloaded_path = self
-                .download_component(*component, &temp_dir, &progress_cb, current, total)
-                .await?;
-
-            progress_cb(DownloadProgress {
-                step: DownloadStep::Extracting,
-                percent: 0,
-                current_component: self.component_name(*component),
-                component_display: self.component_display_name(*component),
-                version: self.get_component_version(component),
-                total_components: total,
-                downloaded_bytes: 0,
-                total_bytes: 0,
-            });
-
-            let runtime_dir = self.get_runtime_dir()?;
-            fs::create_dir_all(&runtime_dir)
-                .map_err(|e| format!("Failed to create runtime directory: {}", e))?;
-
-            self.install_downloaded_component(*component, &downloaded_path, &runtime_dir)?;
-
-            downloaded_files.push(downloaded_path);
-        }
-
-        // Create all application directories (config, logs, database data, projects)
-        if let Ok(app_paths) = get_app_data_paths() {
-            if let Err(e) = app_paths.ensure_directories() {
-                eprintln!("Warning: Failed to create app directories: {}", e);
-            }
-        }
-
-        progress_cb(DownloadProgress {
-            step: DownloadStep::Complete,
-            percent: 100,
-            current_component: "All".to_string(),
-            component_display: "All Components".to_string(),
-            version: String::new(),
-            total_components: total,
-            downloaded_bytes: 0,
-            total_bytes: 0,
-        });
-
-        // Keep temp files for user to access if needed
-        // Uncomment to cleanup: let _ = fs::remove_dir_all(temp_dir);
-
-        Ok(downloaded_files)
+        self.download_and_install_components(self.selected_stack_components().to_vec(), progress_cb)
+            .await
     }
 
     /// Download and install runtime binaries with option to skip existing components
@@ -1631,61 +1574,120 @@ impl RuntimeDownloader {
         progress_cb: ProgressCallback,
         skip_list: &[&str], // Component names to skip (e.g., ["php", "mysql"])
     ) -> Result<Vec<PathBuf>, String> {
-        let components = self.selected_stack_components();
+        let components = self
+            .selected_stack_components()
+            .into_iter()
+            .filter(|component| {
+                let component_name = component.binary_name();
+                let selected_database_tool_id = self.selected_database_tool_id();
+                let should_skip_database_tool = *component == BinaryComponent::PhpMyAdmin
+                    && ((selected_database_tool_id.starts_with("adminer")
+                        && skip_list.contains(&"adminer"))
+                        || (selected_database_tool_id.starts_with("phpmyadmin")
+                            && skip_list.contains(&"phpmyadmin")));
+
+                if (skip_list.contains(&component_name) || should_skip_database_tool)
+                    && (*component != BinaryComponent::Php
+                        || self
+                            .get_runtime_dir()
+                            .map(|runtime_dir| self.is_selected_php_installed(&runtime_dir))
+                            .unwrap_or(false))
+                {
+                    eprintln!("Skipping {} (already installed)", component.name());
+                    false
+                } else {
+                    true
+                }
+            })
+            .collect();
+
+        self.download_and_install_components(components, progress_cb)
+            .await
+    }
+
+    async fn download_and_install_components(
+        &self,
+        components: Vec<BinaryComponent>,
+        progress_cb: ProgressCallback,
+    ) -> Result<Vec<PathBuf>, String> {
         let total = components.len() as u8;
 
         // Create temp directory for downloads
         let temp_dir = std::env::temp_dir().join("campp-download");
         fs::create_dir_all(&temp_dir)
             .map_err(|e| format!("Failed to create temp directory: {}", e))?;
+        let runtime_dir = self.get_runtime_dir()?;
+        fs::create_dir_all(&runtime_dir)
+            .map_err(|e| format!("Failed to create runtime directory: {}", e))?;
 
         let mut downloaded_files = Vec::new();
+        let Some(first_component) = components.first().copied() else {
+            self.finish_download_batch(&progress_cb, total);
+            return Ok(downloaded_files);
+        };
 
-        for (i, component) in components.iter().enumerate() {
-            let component_name = component.binary_name();
+        let mut current_component = first_component;
+        let mut current_path = self
+            .download_component(current_component, &temp_dir, &progress_cb, 1, total)
+            .await?;
 
-            // Skip if component is in skip list. PHP is version-aware: only skip it
-            // when the requested active PHP version is already present.
-            let selected_database_tool_id = self.selected_database_tool_id();
-            let should_skip_database_tool = *component == BinaryComponent::PhpMyAdmin
-                && ((selected_database_tool_id.starts_with("adminer")
-                    && skip_list.contains(&"adminer"))
-                    || (selected_database_tool_id.starts_with("phpmyadmin")
-                        && skip_list.contains(&"phpmyadmin")));
-
-            if (skip_list.contains(&component_name) || should_skip_database_tool)
-                && (*component != BinaryComponent::Php
-                    || self.is_selected_php_installed(&self.get_runtime_dir()?))
-            {
-                eprintln!("Skipping {} (already installed)", component.name());
-                continue;
-            }
-
-            let current = (i + 1) as u8;
-
-            // Download
-            let downloaded_path = self
-                .download_component(*component, &temp_dir, &progress_cb, current, total)
-                .await?;
+        for index in 0..components.len() {
+            let next_component = components.get(index + 1).copied();
+            let next_download = async {
+                if let Some(component) = next_component {
+                    Some(
+                        self.download_component(
+                            component,
+                            &temp_dir,
+                            &progress_cb,
+                            (index + 2) as u8,
+                            total,
+                        )
+                        .await,
+                    )
+                } else {
+                    None
+                }
+            };
 
             progress_cb(DownloadProgress {
                 step: DownloadStep::Extracting,
                 percent: 0,
-                current_component: self.component_name(*component),
-                component_display: self.component_display_name(*component),
-                version: self.get_component_version(component),
+                current_component: self.component_name(current_component),
+                component_display: self.component_display_name(current_component),
+                version: self.get_component_version(&current_component),
                 total_components: total,
                 downloaded_bytes: 0,
                 total_bytes: 0,
             });
 
-            let runtime_dir = self.get_runtime_dir()?;
-            fs::create_dir_all(&runtime_dir)
-                .map_err(|e| format!("Failed to create runtime directory: {}", e))?;
+            let installer = self.clone();
+            let install_component = current_component;
+            let install_path = current_path.clone();
+            let install_runtime_dir = runtime_dir.clone();
+            let install_task = tokio::task::spawn_blocking(move || {
+                installer.install_downloaded_component(
+                    install_component,
+                    &install_path,
+                    &install_runtime_dir,
+                )
+            });
 
-            self.install_downloaded_component(*component, &downloaded_path, &runtime_dir)?;
+            let (next_result, install_result) = tokio::join!(next_download, install_task);
+            install_result.map_err(|e| {
+                format!(
+                    "Install task failed for {}: {}",
+                    current_component.name(),
+                    e
+                )
+            })??;
+            downloaded_files.push(current_path.clone());
 
-            downloaded_files.push(downloaded_path);
+            if let Some(result) = next_result {
+                current_component =
+                    next_component.ok_or_else(|| "Missing prefetched component".to_string())?;
+                current_path = result?;
+            }
         }
 
         // Create all application directories (config, logs, database data, projects)
@@ -1695,6 +1697,15 @@ impl RuntimeDownloader {
             }
         }
 
+        self.finish_download_batch(&progress_cb, total);
+
+        // Keep temp files for user to access if needed
+        // Uncomment to cleanup: let _ = fs::remove_dir_all(temp_dir);
+
+        Ok(downloaded_files)
+    }
+
+    fn finish_download_batch(&self, progress_cb: &ProgressCallback, total: u8) {
         progress_cb(DownloadProgress {
             step: DownloadStep::Complete,
             percent: 100,
@@ -1705,11 +1716,6 @@ impl RuntimeDownloader {
             downloaded_bytes: 0,
             total_bytes: 0,
         });
-
-        // Keep temp files for user to access if needed
-        // Uncomment to cleanup: let _ = fs::remove_dir_all(temp_dir);
-
-        Ok(downloaded_files)
     }
 
     /// Get the runtime directory
