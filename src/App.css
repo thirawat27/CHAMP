@@ -511,51 +511,121 @@ button {
 }
 
 .btn-quick-action.accent {
-  background: linear-gradient(135deg, #1f5f5e, #2f7f7d);
-  border-color: #63b8b3;
-  color: #e4fffd;
+  background: linear-gradient(135deg, #0d9488, #14b8a6);
+  border-color: #5eead4;
+  color: #f0fdfa;
 }
 
 .btn-quick-action.action-site {
-  background: linear-gradient(135deg, #1d4ed8, #3b82f6);
+  background: linear-gradient(135deg, #2563eb, #3b82f6);
   border-color: #93c5fd;
   color: #eff6ff;
 }
 
 .btn-quick-action.action-database {
-  background: linear-gradient(135deg, #6d28d9, #8b5cf6);
-  border-color: #c4b5fd;
+  background: linear-gradient(135deg, #7c3aed, #a855f7);
+  border-color: #e9d5ff;
   color: #faf5ff;
 }
 
 .btn-quick-action.action-projects {
-  background: linear-gradient(135deg, #b45309, #f59e0b);
-  border-color: #fcd34d;
-  color: #fff7ed;
+  background: linear-gradient(135deg, #d97706, #fbbf24);
+  border-color: #fde047;
+  color: #fffdf6;
+}
+
+.btn-quick-action.action-terminal {
+  background: linear-gradient(135deg, #111827, #1f2937);
+  border-color: #10b981;
+  color: #ecfdf5;
 }
 
 .btn-quick-action.action-create-project {
-  background: linear-gradient(135deg, #9a3412, #ea580c);
-  border-color: #fdba74;
-  color: #fff7ed;
+  background: linear-gradient(135deg, #ea580c, #ff7e33);
+  border-color: #fed7aa;
+  color: #fffdf9;
 }
 
 .btn-quick-action.action-logs {
-  background: linear-gradient(135deg, #0f766e, #14b8a6);
-  border-color: #5eead4;
+  background: linear-gradient(135deg, #0d9488, #06b6d4);
+  border-color: #a5f3fc;
   color: #f0fdfa;
 }
 
 .btn-quick-action.action-config {
-  background: linear-gradient(135deg, #475569, #64748b);
-  border-color: #cbd5e1;
+  background: linear-gradient(135deg, #475569, #94a3b8);
+  border-color: #e2e8f0;
   color: #f8fafc;
 }
 
 .btn-quick-action.github {
-  background: linear-gradient(135deg, #3f3f46, #71717a);
-  border-color: #a1a1aa;
+  background: linear-gradient(135deg, #27272a, #52525b);
+  border-color: #d4d4d8;
   color: #f4f4f5;
+}
+
+/* Glowing hover effects for quick action buttons */
+.btn-quick-action.accent:hover:not(:disabled) {
+  box-shadow: 
+    0 8px 18px color-mix(in srgb, #000 28%, transparent),
+    0 0 15px rgba(20, 184, 166, 0.5),
+    0 0 0 1px rgba(255, 255, 255, 0.25);
+}
+
+.btn-quick-action.action-site:hover:not(:disabled) {
+  box-shadow: 
+    0 8px 18px color-mix(in srgb, #000 28%, transparent),
+    0 0 15px rgba(59, 130, 246, 0.5),
+    0 0 0 1px rgba(255, 255, 255, 0.25);
+}
+
+.btn-quick-action.action-database:hover:not(:disabled) {
+  box-shadow: 
+    0 8px 18px color-mix(in srgb, #000 28%, transparent),
+    0 0 15px rgba(168, 85, 247, 0.5),
+    0 0 0 1px rgba(255, 255, 255, 0.25);
+}
+
+.btn-quick-action.action-projects:hover:not(:disabled) {
+  box-shadow: 
+    0 8px 18px color-mix(in srgb, #000 28%, transparent),
+    0 0 15px rgba(245, 158, 11, 0.5),
+    0 0 0 1px rgba(255, 255, 255, 0.25);
+}
+
+.btn-quick-action.action-terminal:hover:not(:disabled) {
+  box-shadow: 
+    0 8px 18px color-mix(in srgb, #000 28%, transparent),
+    0 0 15px rgba(16, 185, 129, 0.6),
+    0 0 0 1px rgba(255, 255, 255, 0.25);
+}
+
+.btn-quick-action.action-create-project:hover:not(:disabled) {
+  box-shadow: 
+    0 8px 18px color-mix(in srgb, #000 28%, transparent),
+    0 0 15px rgba(234, 88, 12, 0.5),
+    0 0 0 1px rgba(255, 255, 255, 0.25);
+}
+
+.btn-quick-action.action-logs:hover:not(:disabled) {
+  box-shadow: 
+    0 8px 18px color-mix(in srgb, #000 28%, transparent),
+    0 0 15px rgba(6, 182, 212, 0.5),
+    0 0 0 1px rgba(255, 255, 255, 0.25);
+}
+
+.btn-quick-action.action-config:hover:not(:disabled) {
+  box-shadow: 
+    0 8px 18px color-mix(in srgb, #000 28%, transparent),
+    0 0 15px rgba(100, 116, 139, 0.5),
+    0 0 0 1px rgba(255, 255, 255, 0.25);
+}
+
+.btn-quick-action.github:hover:not(:disabled) {
+  box-shadow: 
+    0 8px 18px color-mix(in srgb, #000 28%, transparent),
+    0 0 15px rgba(113, 113, 122, 0.5),
+    0 0 0 1px rgba(255, 255, 255, 0.25);
 }
 
 .icon-button.github {

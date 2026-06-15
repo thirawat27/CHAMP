@@ -79,6 +79,10 @@ pub enum BinaryComponent {
     MySQL,
     PostgreSQL,
     PhpMyAdmin,
+    Node,
+    Python,
+    Go,
+    Ruby,
 }
 
 impl BinaryComponent {
@@ -89,6 +93,10 @@ impl BinaryComponent {
             BinaryComponent::MySQL => "MySQL",
             BinaryComponent::PostgreSQL => "PostgreSQL",
             BinaryComponent::PhpMyAdmin => "phpMyAdmin",
+            BinaryComponent::Node => "Node.js",
+            BinaryComponent::Python => "Python",
+            BinaryComponent::Go => "Go",
+            BinaryComponent::Ruby => "Ruby",
         }
     }
 
@@ -175,6 +183,34 @@ impl BinaryComponent {
                         .map(|v| v.version.clone())
                         .unwrap_or_default()
                 }),
+            BinaryComponent::Node => config
+                .binaries
+                .node
+                .as_ref()
+                .and_then(|b| b.versions.iter().find(|v| v.selected).or_else(|| b.versions.first()))
+                .map(|v| v.version.clone())
+                .unwrap_or_default(),
+            BinaryComponent::Python => config
+                .binaries
+                .python
+                .as_ref()
+                .and_then(|b| b.versions.iter().find(|v| v.selected).or_else(|| b.versions.first()))
+                .map(|v| v.version.clone())
+                .unwrap_or_default(),
+            BinaryComponent::Go => config
+                .binaries
+                .go
+                .as_ref()
+                .and_then(|b| b.versions.iter().find(|v| v.selected).or_else(|| b.versions.first()))
+                .map(|v| v.version.clone())
+                .unwrap_or_default(),
+            BinaryComponent::Ruby => config
+                .binaries
+                .ruby
+                .as_ref()
+                .and_then(|b| b.versions.iter().find(|v| v.selected).or_else(|| b.versions.first()))
+                .map(|v| v.version.clone())
+                .unwrap_or_default(),
         }
     }
 
@@ -189,6 +225,10 @@ impl BinaryComponent {
             BinaryComponent::MySQL => "mysql",
             BinaryComponent::PostgreSQL => "postgresql",
             BinaryComponent::PhpMyAdmin => "adminer",
+            BinaryComponent::Node => "node",
+            BinaryComponent::Python => "python",
+            BinaryComponent::Go => "go",
+            BinaryComponent::Ruby => "ruby",
         }
     }
 }
@@ -216,6 +256,34 @@ impl RuntimeDownloader {
                 BinaryComponent::PhpMyAdmin => {
                     if let Some(pkg) = get_phpmyadmin_package(&selection.phpmyadmin) {
                         return pkg.version;
+                    }
+                }
+                BinaryComponent::Node => {
+                    if let Some(id) = &selection.node {
+                        if let Some(pkg) = crate::runtime::packages::get_node_package(id) {
+                            return pkg.version;
+                        }
+                    }
+                }
+                BinaryComponent::Python => {
+                    if let Some(id) = &selection.python {
+                        if let Some(pkg) = crate::runtime::packages::get_python_package(id) {
+                            return pkg.version;
+                        }
+                    }
+                }
+                BinaryComponent::Go => {
+                    if let Some(id) = &selection.go {
+                        if let Some(pkg) = crate::runtime::packages::get_go_package(id) {
+                            return pkg.version;
+                        }
+                    }
+                }
+                BinaryComponent::Ruby => {
+                    if let Some(id) = &selection.ruby {
+                        if let Some(pkg) = crate::runtime::packages::get_ruby_package(id) {
+                            return pkg.version;
+                        }
                     }
                 }
                 BinaryComponent::Caddy => {
@@ -520,6 +588,62 @@ impl RuntimeDownloader {
                         return pkg.url;
                     }
                 }
+                BinaryComponent::Node => {
+                    if let Some(id) = &selection.node {
+                        if let Some(pkg) = crate::runtime::packages::get_node_package(id) {
+                            return match self.platform {
+                                Platform::WindowsX64 => pkg.windows_x64,
+                                Platform::WindowsArm64 => pkg.windows_arm64,
+                                Platform::MacOSX64 => pkg.macos_x64,
+                                Platform::MacOSArm64 => pkg.macos_arm64,
+                                Platform::LinuxX64 => pkg.linux_x64,
+                                Platform::LinuxArm64 => pkg.linux_arm64,
+                            };
+                        }
+                    }
+                }
+                BinaryComponent::Python => {
+                    if let Some(id) = &selection.python {
+                        if let Some(pkg) = crate::runtime::packages::get_python_package(id) {
+                            return match self.platform {
+                                Platform::WindowsX64 => pkg.windows_x64,
+                                Platform::WindowsArm64 => pkg.windows_arm64,
+                                Platform::MacOSX64 => pkg.macos_x64,
+                                Platform::MacOSArm64 => pkg.macos_arm64,
+                                Platform::LinuxX64 => pkg.linux_x64,
+                                Platform::LinuxArm64 => pkg.linux_arm64,
+                            };
+                        }
+                    }
+                }
+                BinaryComponent::Go => {
+                    if let Some(id) = &selection.go {
+                        if let Some(pkg) = crate::runtime::packages::get_go_package(id) {
+                            return match self.platform {
+                                Platform::WindowsX64 => pkg.windows_x64,
+                                Platform::WindowsArm64 => pkg.windows_arm64,
+                                Platform::MacOSX64 => pkg.macos_x64,
+                                Platform::MacOSArm64 => pkg.macos_arm64,
+                                Platform::LinuxX64 => pkg.linux_x64,
+                                Platform::LinuxArm64 => pkg.linux_arm64,
+                            };
+                        }
+                    }
+                }
+                BinaryComponent::Ruby => {
+                    if let Some(id) = &selection.ruby {
+                        if let Some(pkg) = crate::runtime::packages::get_ruby_package(id) {
+                            return match self.platform {
+                                Platform::WindowsX64 => pkg.windows_x64,
+                                Platform::WindowsArm64 => pkg.windows_arm64,
+                                Platform::MacOSX64 => pkg.macos_x64,
+                                Platform::MacOSArm64 => pkg.macos_arm64,
+                                Platform::LinuxX64 => pkg.linux_x64,
+                                Platform::LinuxArm64 => pkg.linux_arm64,
+                            };
+                        }
+                    }
+                }
                 BinaryComponent::Caddy => {
                     // Caddy doesn't have package selection, use default
                 }
@@ -644,6 +768,70 @@ impl RuntimeDownloader {
                     .or_else(|| config.binaries.phpmyadmin.versions.first())
                     .unwrap();
                 version_info.url.clone()
+            }
+            BinaryComponent::Node => {
+                let version_info = config
+                    .binaries
+                    .node
+                    .as_ref()
+                    .and_then(|b| b.versions.iter().find(|v| v.selected).or_else(|| b.versions.first()))
+                    .expect("Node is not configured");
+                match self.platform {
+                    Platform::WindowsX64 => version_info.urls.windows_x64.clone().unwrap_or_default(),
+                    Platform::WindowsArm64 => version_info.urls.windows_arm64.clone().unwrap_or_default(),
+                    Platform::MacOSX64 => version_info.urls.macos_x64.clone().unwrap_or_default(),
+                    Platform::MacOSArm64 => version_info.urls.macos_arm64.clone().unwrap_or_default(),
+                    Platform::LinuxX64 => version_info.urls.linux_x64.clone().unwrap_or_default(),
+                    Platform::LinuxArm64 => version_info.urls.linux_arm64.clone().unwrap_or_default(),
+                }
+            }
+            BinaryComponent::Python => {
+                let version_info = config
+                    .binaries
+                    .python
+                    .as_ref()
+                    .and_then(|b| b.versions.iter().find(|v| v.selected).or_else(|| b.versions.first()))
+                    .expect("Python is not configured");
+                match self.platform {
+                    Platform::WindowsX64 => version_info.urls.windows_x64.clone().unwrap_or_default(),
+                    Platform::WindowsArm64 => version_info.urls.windows_arm64.clone().unwrap_or_default(),
+                    Platform::MacOSX64 => version_info.urls.macos_x64.clone().unwrap_or_default(),
+                    Platform::MacOSArm64 => version_info.urls.macos_arm64.clone().unwrap_or_default(),
+                    Platform::LinuxX64 => version_info.urls.linux_x64.clone().unwrap_or_default(),
+                    Platform::LinuxArm64 => version_info.urls.linux_arm64.clone().unwrap_or_default(),
+                }
+            }
+            BinaryComponent::Go => {
+                let version_info = config
+                    .binaries
+                    .go
+                    .as_ref()
+                    .and_then(|b| b.versions.iter().find(|v| v.selected).or_else(|| b.versions.first()))
+                    .expect("Go is not configured");
+                match self.platform {
+                    Platform::WindowsX64 => version_info.urls.windows_x64.clone().unwrap_or_default(),
+                    Platform::WindowsArm64 => version_info.urls.windows_arm64.clone().unwrap_or_default(),
+                    Platform::MacOSX64 => version_info.urls.macos_x64.clone().unwrap_or_default(),
+                    Platform::MacOSArm64 => version_info.urls.macos_arm64.clone().unwrap_or_default(),
+                    Platform::LinuxX64 => version_info.urls.linux_x64.clone().unwrap_or_default(),
+                    Platform::LinuxArm64 => version_info.urls.linux_arm64.clone().unwrap_or_default(),
+                }
+            }
+            BinaryComponent::Ruby => {
+                let version_info = config
+                    .binaries
+                    .ruby
+                    .as_ref()
+                    .and_then(|b| b.versions.iter().find(|v| v.selected).or_else(|| b.versions.first()))
+                    .expect("Ruby is not configured");
+                match self.platform {
+                    Platform::WindowsX64 => version_info.urls.windows_x64.clone().unwrap_or_default(),
+                    Platform::WindowsArm64 => version_info.urls.windows_arm64.clone().unwrap_or_default(),
+                    Platform::MacOSX64 => version_info.urls.macos_x64.clone().unwrap_or_default(),
+                    Platform::MacOSArm64 => version_info.urls.macos_arm64.clone().unwrap_or_default(),
+                    Platform::LinuxX64 => version_info.urls.linux_x64.clone().unwrap_or_default(),
+                    Platform::LinuxArm64 => version_info.urls.linux_arm64.clone().unwrap_or_default(),
+                }
             }
         }
     }
@@ -1374,6 +1562,46 @@ impl RuntimeDownloader {
                     .find(|v| selected_id.map(|id| v.id == id).unwrap_or(v.selected))?;
                 version.checksum.clone()
             }
+            BinaryComponent::Node
+            | BinaryComponent::Python
+            | BinaryComponent::Go
+            | BinaryComponent::Ruby => {
+                // Determine which version ID to look for based on package selection
+                let target_id = if let Some(ref selection) = self.package_selection {
+                    match component {
+                        BinaryComponent::Node => selection.node.as_deref(),
+                        BinaryComponent::Python => selection.python.as_deref(),
+                        BinaryComponent::Go => selection.go.as_deref(),
+                        BinaryComponent::Ruby => selection.ruby.as_deref(),
+                        _ => None,
+                    }
+                } else {
+                    None
+                };
+
+                let version_info = match component {
+                    BinaryComponent::Node => config.binaries.node.as_ref()?,
+                    BinaryComponent::Python => config.binaries.python.as_ref()?,
+                    BinaryComponent::Go => config.binaries.go.as_ref()?,
+                    BinaryComponent::Ruby => config.binaries.ruby.as_ref()?,
+                    _ => return None,
+                };
+
+                for version in &version_info.versions {
+                    if target_id == Some(version.id.as_str()) || (target_id.is_none() && version.selected) {
+                        return match platform_key.as_str() {
+                            "windowsX64" => version.checksums.windows_x64.clone(),
+                            "windowsArm64" => version.checksums.windows_arm64.clone(),
+                            "linuxX64" => version.checksums.linux_x64.clone(),
+                            "linuxArm64" => version.checksums.linux_arm64.clone(),
+                            "macOSX64" => version.checksums.macos_x64.clone(),
+                            "macOSArm64" => version.checksums.macos_arm64.clone(),
+                            _ => None,
+                        };
+                    }
+                }
+                None
+            }
         }
     }
 
@@ -1568,7 +1796,6 @@ impl RuntimeDownloader {
             .await
     }
 
-    /// Download and install runtime binaries with option to skip existing components
     pub async fn download_all_with_skip(
         &self,
         progress_cb: ProgressCallback,
@@ -1849,13 +2076,38 @@ impl RuntimeDownloader {
         }
     }
 
-    fn selected_stack_components(&self) -> [BinaryComponent; 4] {
-        [
+    fn selected_stack_components(&self) -> Vec<BinaryComponent> {
+        let mut components = vec![
             BinaryComponent::Caddy,
             BinaryComponent::Php,
             self.selected_database_component(),
             BinaryComponent::PhpMyAdmin,
-        ]
+        ];
+
+        let selection = self.package_selection.clone().unwrap_or_else(|| crate::config::AppSettings::load().package_selection);
+        
+        if let Some(node) = &selection.node {
+            if !node.is_empty() {
+                components.push(BinaryComponent::Node);
+            }
+        }
+        if let Some(python) = &selection.python {
+            if !python.is_empty() {
+                components.push(BinaryComponent::Python);
+            }
+        }
+        if let Some(go) = &selection.go {
+            if !go.is_empty() {
+                components.push(BinaryComponent::Go);
+            }
+        }
+        if let Some(ruby) = &selection.ruby {
+            if !ruby.is_empty() {
+                components.push(BinaryComponent::Ruby);
+            }
+        }
+
+        components
     }
 
     fn normalize_phpmyadmin_install(&self, runtime_dir: &Path) -> Result<(), String> {
@@ -1979,6 +2231,10 @@ impl RuntimeDownloader {
             "postgresql",
             "adminer",
             "phpmyadmin",
+            "node",
+            "python",
+            "go",
+            "ruby",
         ] {
             let marker_file = runtime_dir.join(format!("{}_installed.txt", component));
             if let Ok(content) = fs::read_to_string(&marker_file) {

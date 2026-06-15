@@ -47,6 +47,22 @@ export interface DownloadProgress {
   totalBytes: number;
 }
 
+// Generic Package (Node, Python, Go, Ruby)
+export interface GenericPackage {
+  id: string;
+  version: string;
+  display_name: string;
+  windowsX64: string;
+  windowsArm64: string;
+  linuxX64: string;
+  linuxArm64: string;
+  macOSX64: string;
+  macOSArm64: string;
+  eol: boolean;
+  lts: boolean;
+  recommended: boolean;
+}
+
 // Package selection types
 export interface PhpPackage {
   id: string;
@@ -93,6 +109,10 @@ export interface PackagesConfig {
   mysql: MySQLPackage[];
   postgresql: MySQLPackage[];
   phpmyadmin: PhpMyAdminPackage[];
+  node?: GenericPackage[];
+  python?: GenericPackage[];
+  go?: GenericPackage[];
+  ruby?: GenericPackage[];
 }
 
 export interface PackageSelection {
@@ -100,6 +120,10 @@ export interface PackageSelection {
   mysql: string;
   postgresql: string;
   phpmyadmin: string;
+  node?: string;
+  python?: string;
+  go?: string;
+  ruby?: string;
 }
 
 export const EMPTY_PACKAGE_SELECTION: PackageSelection = {
@@ -107,6 +131,10 @@ export const EMPTY_PACKAGE_SELECTION: PackageSelection = {
   mysql: "",
   postgresql: "",
   phpmyadmin: "",
+  node: "",
+  python: "",
+  go: "",
+  ruby: "",
 };
 
 export const isAdminerSelected = (
@@ -171,7 +199,18 @@ export interface InstalledPhpVersion {
   eol: boolean;
   lts: boolean;
   recommended: boolean;
-  path?: string;
+  path: string | null;
+}
+
+export interface AppPaths {
+  base_dir: string;
+  portable: boolean;
+  runtime_dir: string;
+  config_dir: string;
+  mysql_data_dir: string;
+  postgresql_data_dir: string;
+  logs_dir: string;
+  projects_dir: string;
 }
 
 export const DEFAULT_PORTS = {

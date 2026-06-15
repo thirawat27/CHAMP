@@ -31,7 +31,7 @@ interface PortCheck {
 const defaultPackageSelection: PackageSelection = EMPTY_PACKAGE_SELECTION;
 
 export function SettingsPanel({ onClose, onSettingsChanged, ...props }: SettingsPanelProps) {
-  const { t } = useTranslation();
+  const { t, language } = useTranslation();
   const { soundEnabled, toggleSound } = useLanguageStore();
 
   // ESC to close
@@ -66,14 +66,22 @@ export function SettingsPanel({ onClose, onSettingsChanged, ...props }: Settings
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [installedRuntimes, setInstalledRuntimes] = useState<Record<string, string>>({});
+  const [runtimeBusy, setRuntimeBusy] = useState<Record<string, boolean>>({
+    node: false,
+    python: false,
+    go: false,
+    ruby: false,
+  });
 
   const loadSettings = useCallback(async () => {
     try {
-      const [loaded, availablePackages, installedPhp, platformKey] = await Promise.all([
+      const [loaded, availablePackages, installedPhp, platformKey, installedRuntimesData] = await Promise.all([
         invoke<AppSettings>("get_settings"),
         invoke<PackagesConfig>("get_available_packages_cmd"),
         invoke<InstalledPhpVersion[]>("get_installed_php_versions"),
         invoke<string>("get_runtime_platform"),
+        invoke<Record<string, string>>("get_installed_versions"),
       ]);
       const packageSelection = loaded.package_selection ?? defaultPackageSelection;
       const availablePhpPackages = availablePackages.php.filter((pkg) =>
@@ -85,7 +93,10 @@ export function SettingsPanel({ onClose, onSettingsChanged, ...props }: Settings
       const availablePostgreSQLPackages = availablePackages.postgresql.filter((pkg) =>
         hasPackageUrlForPlatform(pkg, platformKey)
       );
-      const normalizedPackageSelection = { ...packageSelection };
+      const normalizedPackageSelection = {
+        ...defaultPackageSelection,
+        ...packageSelection,
+      };
       if (
         !availablePhpPackages.some((pkg) => pkg.id === normalizedPackageSelection.php) &&
         availablePhpPackages[0]
@@ -123,6 +134,7 @@ export function SettingsPanel({ onClose, onSettingsChanged, ...props }: Settings
       setRuntimePlatformKey(platformKey);
       setPhpVersions(installedPhp);
       setSelectedPhpId(normalizedPackageSelection.php);
+      setInstalledRuntimes(installedRuntimesData || {});
     } catch (e) {
       setError(`Failed to load settings: ${e}`);
     } finally {
@@ -240,6 +252,61 @@ export function SettingsPanel({ onClose, onSettingsChanged, ...props }: Settings
       setError(`Failed to switch PHP version: ${e}`);
     } finally {
       setPhpBusy(false);
+    }
+  };
+
+  const updateSelectedOptionalRuntime = (
+    runtimeKey: "node" | "python" | "go" | "ruby",
+    packageId: string
+  ) => {
+    setSettings((current) => ({
+      ...current,
+      package_selection: {
+        ...(current.package_selection ?? defaultPackageSelection),
+        [runtimeKey]: packageId,
+      },
+    }));
+  };
+
+  const installOptionalRuntime = async (runtimeKey: "node" | "python" | "go" | "ruby") => {
+    const packageId = settings.package_selection?.[runtimeKey];
+    if (!packageId) return;
+
+    setRuntimeBusy((prev) => ({ ...prev, [runtimeKey]: true }));
+    setError(null);
+    setMessage(null);
+
+    try {
+      // Build selection where only this runtime is chosen to download
+      const selection: PackageSelection = {
+        ...EMPTY_PACKAGE_SELECTION,
+        [runtimeKey]: packageId,
+      };
+
+      // Build skip list of all other components
+      const allComponents = ["caddy", "php", "mysql", "postgresql", "adminer", "phpmyadmin", "node", "python", "go", "ruby"];
+      const skipList = allComponents.filter((item) => item !== runtimeKey);
+
+      // Trigger download via tauri command
+      await invoke("download_runtime_with_skip", {
+        packageSelection: selection,
+        skipList,
+      });
+
+      // Save settings to persist the choice
+      await invoke("save_settings", { settings });
+
+      // Reload installed versions
+      const installedRuntimesData = await invoke<Record<string, string>>("get_installed_versions");
+      setInstalledRuntimes(installedRuntimesData || {});
+
+      setMessage(`${runtimeKey.toUpperCase()} installed successfully!`);
+      onSettingsChanged?.();
+    } catch (e) {
+      setError(`Failed to install ${runtimeKey}: ${e}`);
+    } finally {
+      setRuntimeBusy((prev) => ({ ...prev, [runtimeKey]: false }));
+      setSaveProgress(null);
     }
   };
 
@@ -467,6 +534,260 @@ export function SettingsPanel({ onClose, onSettingsChanged, ...props }: Settings
                   </select>
                   <small>{activeDatabaseName} will be used when starting the main stack.</small>
                 </label>
+              </div>
+
+              <div className="settings-section">
+                <h3>{language === "th" ? "รันไทม์เพิ่มเติม (Optional)" : "Additional Runtimes (Optional)"}</h3>
+                <p style={{ fontSize: "0.8rem", color: "var(--text-secondary)", marginBottom: "12px" }}>
+                  {language === "th" 
+                    ? "เลือกและดาวน์โหลดรันไทม์ภาษาอื่นๆ สำหรับเครื่องมือในโครงการของคุณ" 
+                    : "Select and download additional language runtimes for your projects."}
+                </p>
+                <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+                  {/* Node.js */}
+                  {packages?.node && packages.node.length > 0 && (
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "12px", background: "var(--bg-card-secondary)", padding: "10px 14px", borderRadius: "8px", border: "1px solid var(--border-color)" }}>
+                      <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
+                        <span style={{ fontWeight: 600, fontSize: "0.9rem" }}>Node.js</span>
+                        {installedRuntimes?.node ? (
+                          <span style={{ fontSize: "0.75rem", color: "#16a34a", display: "flex", alignItems: "center", gap: "4px", fontWeight: "bold" }}>
+                            <CheckCircle2 size={12} /> {t.installed} ({installedRuntimes.node})
+                          </span>
+                        ) : (
+                          <span style={{ fontSize: "0.75rem", color: "var(--text-secondary)" }}>
+                            {language === "th" ? "ยังไม่ได้ติดตั้ง" : "Not installed"}
+                          </span>
+                        )}
+                      </div>
+                      
+                      <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                        <select
+                          className="input"
+                          style={{ minWidth: "130px", padding: "4px 8px", fontSize: "0.85rem", cursor: "pointer" }}
+                          value={settings.package_selection?.node || ""}
+                          onChange={(e) => updateSelectedOptionalRuntime("node", e.target.value)}
+                        >
+                          <option value="">{t.wizardNotSelected || "Do not install"}</option>
+                          {packages.node.map((pkg) => (
+                            <option key={pkg.id} value={pkg.id}>
+                              {pkg.display_name}
+                            </option>
+                          ))}
+                        </select>
+                        
+                        {settings.package_selection?.node && (
+                          <button
+                            className="btn-primary"
+                            style={{ padding: "0 10px", fontSize: "0.8rem", minHeight: "28px" }}
+                            onClick={() => {
+                              AudioManager.playClick();
+                              installOptionalRuntime("node");
+                            }}
+                            disabled={
+                              runtimeBusy.node || 
+                              installedRuntimes?.node === packages.node.find(p => p.id === settings.package_selection?.node)?.version
+                            }
+                          >
+                            {runtimeBusy.node ? (
+                              saveProgress && saveProgress.currentComponent === "node" ? (
+                                `${t.downloading} ${saveProgress.percent}%`
+                              ) : (
+                                t.working
+                              )
+                            ) : installedRuntimes?.node === packages.node.find(p => p.id === settings.package_selection?.node)?.version ? (
+                              t.installed
+                            ) : (
+                              t.install
+                            )}
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Python */}
+                  {packages?.python && packages.python.length > 0 && (
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "12px", background: "var(--bg-card-secondary)", padding: "10px 14px", borderRadius: "8px", border: "1px solid var(--border-color)" }}>
+                      <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
+                        <span style={{ fontWeight: 600, fontSize: "0.9rem" }}>Python</span>
+                        {installedRuntimes?.python ? (
+                          <span style={{ fontSize: "0.75rem", color: "#16a34a", display: "flex", alignItems: "center", gap: "4px", fontWeight: "bold" }}>
+                            <CheckCircle2 size={12} /> {t.installed} ({installedRuntimes.python})
+                          </span>
+                        ) : (
+                          <span style={{ fontSize: "0.75rem", color: "var(--text-secondary)" }}>
+                            {language === "th" ? "ยังไม่ได้ติดตั้ง" : "Not installed"}
+                          </span>
+                        )}
+                      </div>
+                      
+                      <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                        <select
+                          className="input"
+                          style={{ minWidth: "130px", padding: "4px 8px", fontSize: "0.85rem", cursor: "pointer" }}
+                          value={settings.package_selection?.python || ""}
+                          onChange={(e) => updateSelectedOptionalRuntime("python", e.target.value)}
+                        >
+                          <option value="">{t.wizardNotSelected || "Do not install"}</option>
+                          {packages.python.map((pkg) => (
+                            <option key={pkg.id} value={pkg.id}>
+                              {pkg.display_name}
+                            </option>
+                          ))}
+                        </select>
+                        
+                        {settings.package_selection?.python && (
+                          <button
+                            className="btn-primary"
+                            style={{ padding: "0 10px", fontSize: "0.8rem", minHeight: "28px" }}
+                            onClick={() => {
+                              AudioManager.playClick();
+                              installOptionalRuntime("python");
+                            }}
+                            disabled={
+                              runtimeBusy.python || 
+                              installedRuntimes?.python === packages.python.find(p => p.id === settings.package_selection?.python)?.version
+                            }
+                          >
+                            {runtimeBusy.python ? (
+                              saveProgress && saveProgress.currentComponent === "python" ? (
+                                `${t.downloading} ${saveProgress.percent}%`
+                              ) : (
+                                t.working
+                              )
+                            ) : installedRuntimes?.python === packages.python.find(p => p.id === settings.package_selection?.python)?.version ? (
+                              t.installed
+                            ) : (
+                              t.install
+                            )}
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Go */}
+                  {packages?.go && packages.go.length > 0 && (
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "12px", background: "var(--bg-card-secondary)", padding: "10px 14px", borderRadius: "8px", border: "1px solid var(--border-color)" }}>
+                      <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
+                        <span style={{ fontWeight: 600, fontSize: "0.9rem" }}>Go</span>
+                        {installedRuntimes?.go ? (
+                          <span style={{ fontSize: "0.75rem", color: "#16a34a", display: "flex", alignItems: "center", gap: "4px", fontWeight: "bold" }}>
+                            <CheckCircle2 size={12} /> {t.installed} ({installedRuntimes.go})
+                          </span>
+                        ) : (
+                          <span style={{ fontSize: "0.75rem", color: "var(--text-secondary)" }}>
+                            {language === "th" ? "ยังไม่ได้ติดตั้ง" : "Not installed"}
+                          </span>
+                        )}
+                      </div>
+                      
+                      <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                        <select
+                          className="input"
+                          style={{ minWidth: "130px", padding: "4px 8px", fontSize: "0.85rem", cursor: "pointer" }}
+                          value={settings.package_selection?.go || ""}
+                          onChange={(e) => updateSelectedOptionalRuntime("go", e.target.value)}
+                        >
+                          <option value="">{t.wizardNotSelected || "Do not install"}</option>
+                          {packages.go.map((pkg) => (
+                            <option key={pkg.id} value={pkg.id}>
+                              {pkg.display_name}
+                            </option>
+                          ))}
+                        </select>
+                        
+                        {settings.package_selection?.go && (
+                          <button
+                            className="btn-primary"
+                            style={{ padding: "0 10px", fontSize: "0.8rem", minHeight: "28px" }}
+                            onClick={() => {
+                              AudioManager.playClick();
+                              installOptionalRuntime("go");
+                            }}
+                            disabled={
+                              runtimeBusy.go || 
+                              installedRuntimes?.go === packages.go.find(p => p.id === settings.package_selection?.go)?.version
+                            }
+                          >
+                            {runtimeBusy.go ? (
+                              saveProgress && saveProgress.currentComponent === "go" ? (
+                                `${t.downloading} ${saveProgress.percent}%`
+                              ) : (
+                                t.working
+                              )
+                            ) : installedRuntimes?.go === packages.go.find(p => p.id === settings.package_selection?.go)?.version ? (
+                              t.installed
+                            ) : (
+                              t.install
+                            )}
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Ruby */}
+                  {packages?.ruby && packages.ruby.length > 0 && (
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "12px", background: "var(--bg-card-secondary)", padding: "10px 14px", borderRadius: "8px", border: "1px solid var(--border-color)" }}>
+                      <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
+                        <span style={{ fontWeight: 600, fontSize: "0.9rem" }}>Ruby</span>
+                        {installedRuntimes?.ruby ? (
+                          <span style={{ fontSize: "0.75rem", color: "#16a34a", display: "flex", alignItems: "center", gap: "4px", fontWeight: "bold" }}>
+                            <CheckCircle2 size={12} /> {t.installed} ({installedRuntimes.ruby})
+                          </span>
+                        ) : (
+                          <span style={{ fontSize: "0.75rem", color: "var(--text-secondary)" }}>
+                            {language === "th" ? "ยังไม่ได้ติดตั้ง" : "Not installed"}
+                          </span>
+                        )}
+                      </div>
+                      
+                      <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                        <select
+                          className="input"
+                          style={{ minWidth: "130px", padding: "4px 8px", fontSize: "0.85rem", cursor: "pointer" }}
+                          value={settings.package_selection?.ruby || ""}
+                          onChange={(e) => updateSelectedOptionalRuntime("ruby", e.target.value)}
+                        >
+                          <option value="">{t.wizardNotSelected || "Do not install"}</option>
+                          {packages.ruby.map((pkg) => (
+                            <option key={pkg.id} value={pkg.id}>
+                              {pkg.display_name}
+                            </option>
+                          ))}
+                        </select>
+                        
+                        {settings.package_selection?.ruby && (
+                          <button
+                            className="btn-primary"
+                            style={{ padding: "0 10px", fontSize: "0.8rem", minHeight: "28px" }}
+                            onClick={() => {
+                              AudioManager.playClick();
+                              installOptionalRuntime("ruby");
+                            }}
+                            disabled={
+                              runtimeBusy.ruby || 
+                              installedRuntimes?.ruby === packages.ruby.find(p => p.id === settings.package_selection?.ruby)?.version
+                            }
+                          >
+                            {runtimeBusy.ruby ? (
+                              saveProgress && saveProgress.currentComponent === "ruby" ? (
+                                `${t.downloading} ${saveProgress.percent}%`
+                              ) : (
+                                t.working
+                              )
+                            ) : installedRuntimes?.ruby === packages.ruby.find(p => p.id === settings.package_selection?.ruby)?.version ? (
+                              t.installed
+                            ) : (
+                              t.install
+                            )}
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
               </div>
 
               {/* Sound Effects Section */}

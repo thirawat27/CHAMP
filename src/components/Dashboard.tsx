@@ -16,7 +16,7 @@ import {
   Square,
   TerminalSquare,
 } from "lucide-react";
-import { type FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import packageInfo from "../../package.json";
 import champLogo from "../assets/CHAMP.png";
 import { useTranslation } from "../stores/languageStore";
@@ -35,6 +35,7 @@ import { LanguageSelector } from "./LanguageSelector";
 import { ServiceCard } from "./ServiceCard";
 import { SettingsPanel } from "./SettingsPanel";
 import { StatusBar } from "./StatusBar";
+import { TemplateSelector, ProjectScaffoldResult } from "./TemplateSelector";
 
 interface AppPaths {
   base_dir: string;
@@ -64,51 +65,6 @@ interface DashboardNotice {
   title: string;
   message: string;
 }
-
-type ProjectTemplateId = "static" | "php" | "node" | "python";
-
-interface ProjectScaffoldResult {
-  name: string;
-  template: ProjectTemplateId;
-  path: string;
-  entry_file: string;
-}
-
-const PROJECT_TEMPLATES: Array<{
-  id: ProjectTemplateId;
-  icon: typeof Globe;
-  labelKey: "staticTemplate" | "phpTemplate" | "nodeTemplate" | "pythonTemplate";
-  descriptionKey:
-    | "staticTemplateDescription"
-    | "phpTemplateDescription"
-    | "nodeTemplateDescription"
-    | "pythonTemplateDescription";
-}> = [
-  {
-    id: "static",
-    icon: Globe,
-    labelKey: "staticTemplate",
-    descriptionKey: "staticTemplateDescription",
-  },
-  {
-    id: "php",
-    icon: TerminalSquare,
-    labelKey: "phpTemplate",
-    descriptionKey: "phpTemplateDescription",
-  },
-  {
-    id: "node",
-    icon: HardDrive,
-    labelKey: "nodeTemplate",
-    descriptionKey: "nodeTemplateDescription",
-  },
-  {
-    id: "python",
-    icon: FilePlus2,
-    labelKey: "pythonTemplate",
-    descriptionKey: "pythonTemplateDescription",
-  },
-];
 
 const STACK_COMMAND_COPY = {
   start_all_services: {
@@ -187,9 +143,6 @@ export function Dashboard() {
   const [installedVersions, setInstalledVersions] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState<string | null>(null);
   const [notice, setNotice] = useState<DashboardNotice | null>(null);
-  const [projectTemplate, setProjectTemplate] = useState<ProjectTemplateId>("static");
-  const [projectName, setProjectName] = useState("");
-  const [isCreatingProject, setIsCreatingProject] = useState(false);
   const [showProjectCreator, setShowProjectCreator] = useState(false);
 
   // Initialize audio context on first user interaction
@@ -402,6 +355,11 @@ export function Dashboard() {
         e.preventDefault();
         openFolder(appPaths?.projects_dir);
       }
+      // Ctrl/Cmd + T to open terminal
+      if ((e.ctrlKey || e.metaKey) && e.code === "KeyT") {
+        e.preventDefault();
+        openTerminal(appPaths?.projects_dir);
+      }
       // Ctrl/Cmd + L to open logs folder
       if ((e.ctrlKey || e.metaKey) && e.code === "KeyL") {
         e.preventDefault();
@@ -449,14 +407,14 @@ export function Dashboard() {
     if (!showProjectCreator) return undefined;
 
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.code === "Escape" && !isCreatingProject) {
+      if (event.code === "Escape") {
         setShowProjectCreator(false);
       }
     };
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [isCreatingProject, showProjectCreator]);
+  }, [showProjectCreator]);
 
   const runServiceCommand = async (
     command: "start_service" | "stop_service" | "restart_service",
@@ -508,41 +466,34 @@ export function Dashboard() {
     }
   };
 
-  const createProject = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    const trimmedName = projectName.trim();
-    if (!trimmedName) {
-      setNotice({
-        tone: "error",
-        title: t.projectCreateFailed,
-        message: t.projectNameRequired,
-      });
-      return;
-    }
-
-    setIsCreatingProject(true);
+  const openTerminal = async (path?: string) => {
     try {
-      const result = await invoke<ProjectScaffoldResult>("create_project_template", {
-        projectName: trimmedName,
-        template: projectTemplate,
-      });
-      setProjectName("");
-      setNotice({
-        tone: "success",
-        title: t.projectCreated,
-        message: `${result.name} -> ${result.path}`,
-      });
-      setShowProjectCreator(false);
-      await refreshMetadata();
+      await invoke("open_project_terminal", { path: path || null });
     } catch (error) {
       setNotice({
         tone: "error",
-        title: t.projectCreateFailed,
+        title: "Failed to open terminal",
         message: String(error),
       });
-    } finally {
-      setIsCreatingProject(false);
     }
+  };
+
+  const handleProjectCreated = async (result: ProjectScaffoldResult) => {
+    setNotice({
+      tone: "success",
+      title: t.projectCreated,
+      message: `${result.name} -> ${result.path}`,
+    });
+    setShowProjectCreator(false);
+    await refreshMetadata();
+  };
+
+  const handleProjectError = (error: string) => {
+    setNotice({
+      tone: "error",
+      title: t.projectCreateFailed,
+      message: error,
+    });
   };
 
   const versionBadges = useMemo(() => {
@@ -735,6 +686,17 @@ export function Dashboard() {
               <Folder size={16} /> {t.projects}
             </button>
             <button
+              className="btn-quick-action action-terminal"
+              onClick={() => {
+                AudioManager.playClick();
+                openTerminal(appPaths?.projects_dir);
+              }}
+              title={`${t.openTerminal} (Ctrl+T)`}
+              onMouseEnter={() => AudioManager.playHover()}
+            >
+              <TerminalSquare size={16} /> {t.terminal}
+            </button>
+            <button
               className="btn-quick-action action-create-project"
               onClick={() => {
                 AudioManager.playClick();
@@ -837,102 +799,13 @@ export function Dashboard() {
       {showHelp && <HelpModal onClose={() => setShowHelp(false)} />}
 
       {showProjectCreator && (
-        <div
-          className="modal-overlay project-modal"
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="project-modal-title"
-        >
-          <div className="modal-content project-modal-content">
-            <div className="modal-header">
-              <div>
-                <span className="project-modal-eyebrow">{t.projectTemplates}</span>
-                <h2 id="project-modal-title">{t.createProject}</h2>
-              </div>
-              <button
-                className="icon-button"
-                type="button"
-                onClick={() => {
-                  AudioManager.playClick();
-                  setShowProjectCreator(false);
-                }}
-                disabled={isCreatingProject}
-                aria-label={t.close}
-                onMouseEnter={() => AudioManager.playHover()}
-              >
-                ×
-              </button>
-            </div>
-
-            <div className="modal-body project-modal-body">
-              <div className="project-template-grid">
-                {PROJECT_TEMPLATES.map((template) => {
-                  const TemplateIcon = template.icon;
-                  const selected = projectTemplate === template.id;
-                  return (
-                    <button
-                      key={template.id}
-                      type="button"
-                      className={`project-template-option ${selected ? "selected" : ""}`}
-                      onClick={() => {
-                        AudioManager.playClick();
-                        setProjectTemplate(template.id);
-                      }}
-                      onMouseEnter={() => AudioManager.playHover()}
-                      aria-pressed={selected}
-                    >
-                      <TemplateIcon size={17} />
-                      <span>
-                        <strong>{t[template.labelKey]}</strong>
-                        <small>{t[template.descriptionKey]}</small>
-                      </span>
-                    </button>
-                  );
-                })}
-              </div>
-
-              <form className="project-create-form" onSubmit={createProject}>
-                <label className="sr-only" htmlFor="project-name">
-                  {t.projectName}
-                </label>
-                <input
-                  id="project-name"
-                  value={projectName}
-                  onChange={(event) => setProjectName(event.target.value)}
-                  placeholder={t.projectName}
-                  disabled={isCreatingProject}
-                  autoFocus
-                />
-                <button
-                  className="btn-primary"
-                  type="submit"
-                  disabled={isCreatingProject || projectName.trim().length === 0}
-                >
-                  {isCreatingProject ? (
-                    <LoaderCircle size={15} className="spin-icon" />
-                  ) : (
-                    <FilePlus2 size={15} />
-                  )}
-                  {isCreatingProject ? t.working : t.createProject}
-                </button>
-              </form>
-
-              <div className="project-modal-footer">
-                <button
-                  className="btn-secondary"
-                  type="button"
-                  onClick={() => {
-                    AudioManager.playClick();
-                    openFolder(appPaths?.projects_dir);
-                  }}
-                  onMouseEnter={() => AudioManager.playHover()}
-                >
-                  <Folder size={16} /> {t.projects}
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
+        <TemplateSelector
+          appPaths={appPaths}
+          installedVersions={installedVersions}
+          onClose={() => setShowProjectCreator(false)}
+          onProjectCreated={handleProjectCreated}
+          onError={handleProjectError}
+        />
       )}
     </div>
   );

@@ -72,6 +72,101 @@ pub async fn open_folder(path: String) -> Result<(), String> {
     Ok(())
 }
 
+/// Open a terminal in a specific directory with the PATH injected to include installed runtimes
+#[tauri::command]
+pub async fn open_project_terminal(path: Option<String>) -> Result<(), String> {
+    use std::process::Command;
+
+    let target_dir = match path {
+        Some(p) => std::path::PathBuf::from(p),
+        None => crate::runtime::locator::get_app_data_paths()
+            .map_err(|e| format!("Failed to get app paths: {}", e))?
+            .projects_dir,
+    };
+
+    if !target_dir.exists() {
+        fs::create_dir_all(&target_dir)
+            .map_err(|e| format!("Failed to create terminal directory: {}", e))?;
+    }
+
+    // Attempt to locate installed runtimes and collect their bin directories
+    let mut runtime_paths = Vec::new();
+    if let Ok(runtimes) = crate::runtime::locator::locate_runtime_binaries() {
+        if let Some(parent) = runtimes.php_cgi.parent() {
+            runtime_paths.push(parent.to_path_buf());
+        }
+        if let Some(parent) = runtimes.mysql.parent() {
+            runtime_paths.push(parent.to_path_buf());
+        }
+        if let Some(node) = runtimes.node {
+            if let Some(parent) = node.parent() {
+                runtime_paths.push(parent.to_path_buf());
+            }
+        }
+        if let Some(python) = runtimes.python {
+            if let Some(parent) = python.parent() {
+                runtime_paths.push(parent.to_path_buf());
+                // Python usually needs its Scripts dir too
+                runtime_paths.push(parent.join("Scripts"));
+            }
+        }
+        if let Some(go) = runtimes.go {
+            if let Some(parent) = go.parent() {
+                runtime_paths.push(parent.to_path_buf());
+            }
+        }
+        if let Some(ruby) = runtimes.ruby {
+            if let Some(parent) = ruby.parent() {
+                runtime_paths.push(parent.to_path_buf());
+            }
+        }
+    }
+
+    // Build the new PATH environment variable
+    let current_path = std::env::var_os("PATH").unwrap_or_default();
+    let mut paths = std::env::split_paths(&current_path).collect::<Vec<_>>();
+    // Prepend new paths to override system defaults if there's a conflict
+    paths.splice(0..0, runtime_paths);
+    let new_path = std::env::join_paths(paths).unwrap_or(current_path);
+
+    #[cfg(target_os = "windows")]
+    {
+        Command::new("cmd.exe")
+            .arg("/c")
+            .arg("start")
+            .arg("cmd.exe")
+            .env("PATH", new_path)
+            .current_dir(target_dir)
+            .spawn()
+            .map_err(|e| format!("Failed to open terminal: {}", e))?;
+    }
+
+    #[cfg(target_os = "macos")]
+    {
+        // On macOS, open Terminal.app but PATH injection might be tricky depending on how "open" works.
+        // A better robust way is launching osascript to open terminal.
+        // For now, try launching bash inside Terminal.app using open.
+        Command::new("open")
+            .arg("-a")
+            .arg("Terminal")
+            .arg(&target_dir)
+            .spawn()
+            .map_err(|e| format!("Failed to open terminal: {}", e))?;
+    }
+
+    #[cfg(target_os = "linux")]
+    {
+        Command::new("x-terminal-emulator")
+            .arg("--working-directory")
+            .arg(&target_dir)
+            .env("PATH", new_path)
+            .spawn()
+            .map_err(|e| format!("Failed to open terminal: {}", e))?;
+    }
+
+    Ok(())
+}
+
 /// Open the user manual in the system's default application using tauri-plugin-opener
 ///
 /// This command locates the MANUAL.html resource file and reveals it in the
@@ -165,6 +260,8 @@ pub enum ProjectTemplate {
     Php,
     Node,
     Python,
+    Go,
+    Ruby,
 }
 
 /// Data transfer object returned after creating a starter project.
@@ -794,6 +891,8 @@ fn project_template_id(template: ProjectTemplate) -> &'static str {
         ProjectTemplate::Php => "php",
         ProjectTemplate::Node => "node",
         ProjectTemplate::Python => "python",
+        ProjectTemplate::Go => "go",
+        ProjectTemplate::Ruby => "ruby",
     }
 }
 
@@ -803,6 +902,8 @@ fn project_entry_file(template: ProjectTemplate) -> &'static str {
         ProjectTemplate::Php => "index.php",
         ProjectTemplate::Node => "README.md",
         ProjectTemplate::Python => "README.md",
+        ProjectTemplate::Go => "README.md",
+        ProjectTemplate::Ruby => "README.md",
     }
 }
 
@@ -894,6 +995,30 @@ $projectName = "{name}";
             (
                 "README.md",
                 "# Python starter\n\nRun `python app.py` from this folder. CHAMP keeps the project with the rest of your local web workspace.\n".to_string(),
+            ),
+        ],
+        ProjectTemplate::Go => vec![
+            (
+                "main.go",
+                "package main\n\nimport (\n\t\"fmt\"\n\t\"net/http\"\n)\n\nfunc main() {\n\thttp.HandleFunc(\"/\", func(w http.ResponseWriter, r *http.Request) {\n\t\tfmt.Fprintf(w, \"Go project ready from CHAMP workspace\\n\")\n\t})\n\n\tport := \":8080\"\n\tfmt.Printf(\"Go server listening on %s\\n\", port)\n\thttp.ListenAndServe(port, nil)\n}\n".to_string(),
+            ),
+            (
+                "go.mod",
+                format!("module {}\n\ngo 1.21\n", package_name_slug(name)),
+            ),
+            (
+                "README.md",
+                "# Go starter\n\nRun `go run main.go` from this folder. CHAMP keeps the project with the rest of your local web workspace.\n".to_string(),
+            ),
+        ],
+        ProjectTemplate::Ruby => vec![
+            (
+                "app.rb",
+                "require 'webrick'\n\nserver = WEBrick::HTTPServer.new(Port: 4567)\n\nserver.mount_proc '/' do |req, res|\n  res.body = \"Ruby project ready from CHAMP workspace\\n\"\nend\n\nputs \"Ruby server running at http://localhost:4567\"\nserver.start\n".to_string(),
+            ),
+            (
+                "README.md",
+                "# Ruby starter\n\nRun `ruby app.rb` from this folder. CHAMP keeps the project with the rest of your local web workspace.\n".to_string(),
             ),
         ],
     }
@@ -1189,6 +1314,10 @@ pub async fn get_installed_versions() -> Result<std::collections::HashMap<String
         "postgresql",
         "adminer",
         "phpmyadmin",
+        "node",
+        "python",
+        "go",
+        "ruby",
     ] {
         let marker_file = runtime_dir.join(format!("{}_installed.txt", component));
         if let Ok(content) = fs::read_to_string(&marker_file) {

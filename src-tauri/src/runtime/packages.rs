@@ -12,6 +12,40 @@ pub struct PackagesConfig {
     pub mysql: Vec<MySQLPackage>,
     pub postgresql: Vec<PostgreSQLPackage>,
     pub phpmyadmin: Vec<PhpMyAdminPackage>,
+    #[serde(default)]
+    pub node: Vec<GenericPackage>,
+    #[serde(default)]
+    pub python: Vec<GenericPackage>,
+    #[serde(default)]
+    pub go: Vec<GenericPackage>,
+    #[serde(default)]
+    pub ruby: Vec<GenericPackage>,
+}
+
+/// Generic package with version and download URLs
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GenericPackage {
+    pub id: String,
+    pub version: String,
+    pub display_name: String,
+    #[serde(rename = "windowsX64")]
+    pub windows_x64: String,
+    #[serde(rename = "windowsArm64")]
+    pub windows_arm64: String,
+    #[serde(rename = "linuxX64")]
+    pub linux_x64: String,
+    #[serde(rename = "linuxArm64")]
+    pub linux_arm64: String,
+    #[serde(rename = "macOSX64")]
+    pub macos_x64: String,
+    #[serde(rename = "macOSArm64")]
+    pub macos_arm64: String,
+    #[serde(default)]
+    pub eol: bool,
+    #[serde(default)]
+    pub lts: bool,
+    #[serde(default)]
+    pub recommended: bool,
 }
 
 /// PHP package with version and download URLs
@@ -116,6 +150,14 @@ pub struct PackageSelection {
     #[serde(default = "default_postgresql_selection")]
     pub postgresql: String,
     pub phpmyadmin: String,
+    #[serde(default)]
+    pub node: Option<String>,
+    #[serde(default)]
+    pub python: Option<String>,
+    #[serde(default)]
+    pub go: Option<String>,
+    #[serde(default)]
+    pub ruby: Option<String>,
 }
 
 fn default_postgresql_selection() -> String {
@@ -147,6 +189,14 @@ pub struct BinariesConfig {
     pub postgresql: BinaryConfig,
     #[serde(rename = "phpmyadmin")]
     pub phpmyadmin: PhpMyAdminConfig,
+    #[serde(rename = "node", default)]
+    pub node: Option<BinaryConfig>,
+    #[serde(rename = "python", default)]
+    pub python: Option<BinaryConfig>,
+    #[serde(rename = "go", default)]
+    pub go: Option<BinaryConfig>,
+    #[serde(rename = "ruby", default)]
+    pub ruby: Option<BinaryConfig>,
 }
 
 fn default_postgresql_binary_config() -> BinaryConfig {
@@ -491,6 +541,47 @@ fn runtime_config_to_packages(cfg: &RuntimeConfig) -> PackagesConfig {
                 recommended: v.selected,
             })
             .collect(),
+        node: cfg
+            .binaries
+            .node
+            .as_ref()
+            .map(|b| b.versions.iter().map(version_info_to_generic).collect())
+            .unwrap_or_default(),
+        python: cfg
+            .binaries
+            .python
+            .as_ref()
+            .map(|b| b.versions.iter().map(version_info_to_generic).collect())
+            .unwrap_or_default(),
+        go: cfg
+            .binaries
+            .go
+            .as_ref()
+            .map(|b| b.versions.iter().map(version_info_to_generic).collect())
+            .unwrap_or_default(),
+        ruby: cfg
+            .binaries
+            .ruby
+            .as_ref()
+            .map(|b| b.versions.iter().map(version_info_to_generic).collect())
+            .unwrap_or_default(),
+    }
+}
+
+fn version_info_to_generic(v: &VersionInfo) -> GenericPackage {
+    GenericPackage {
+        id: v.id.clone(),
+        version: v.version.clone(),
+        display_name: v.display_name.clone(),
+        windows_x64: v.urls.windows_x64.clone().unwrap_or_default(),
+        windows_arm64: v.urls.windows_arm64.clone().unwrap_or_default(),
+        linux_x64: v.urls.linux_x64.clone().unwrap_or_default(),
+        linux_arm64: v.urls.linux_arm64.clone().unwrap_or_default(),
+        macos_x64: v.urls.macos_x64.clone().unwrap_or_default(),
+        macos_arm64: v.urls.macos_arm64.clone().unwrap_or_default(),
+        eol: v.eol,
+        lts: v.lts,
+        recommended: v.selected,
     }
 }
 
@@ -522,6 +613,10 @@ fn selected_package_ids_from_config(cfg: &RuntimeConfig) -> PackageSelection {
             .or_else(|| cfg.binaries.phpmyadmin.versions.first())
             .map(|v| v.id.clone())
             .expect("runtime-config.json must define a database tool package"),
+        node: cfg.binaries.node.as_ref().and_then(|b| selected_version_id(&b.versions)),
+        python: cfg.binaries.python.as_ref().and_then(|b| selected_version_id(&b.versions)),
+        go: cfg.binaries.go.as_ref().and_then(|b| selected_version_id(&b.versions)),
+        ruby: cfg.binaries.ruby.as_ref().and_then(|b| selected_version_id(&b.versions)),
     }
 }
 
@@ -561,6 +656,38 @@ pub fn get_postgresql_package(id: &str) -> Option<PostgreSQLPackage> {
 pub fn get_phpmyadmin_package(id: &str) -> Option<PhpMyAdminPackage> {
     get_available_packages()
         .phpmyadmin
+        .into_iter()
+        .find(|p| p.id == id)
+}
+
+/// Get Node.js package by ID
+pub fn get_node_package(id: &str) -> Option<GenericPackage> {
+    get_available_packages()
+        .node
+        .into_iter()
+        .find(|p| p.id == id)
+}
+
+/// Get Python package by ID
+pub fn get_python_package(id: &str) -> Option<GenericPackage> {
+    get_available_packages()
+        .python
+        .into_iter()
+        .find(|p| p.id == id)
+}
+
+/// Get Go package by ID
+pub fn get_go_package(id: &str) -> Option<GenericPackage> {
+    get_available_packages()
+        .go
+        .into_iter()
+        .find(|p| p.id == id)
+}
+
+/// Get Ruby package by ID
+pub fn get_ruby_package(id: &str) -> Option<GenericPackage> {
+    get_available_packages()
+        .ruby
         .into_iter()
         .find(|p| p.id == id)
 }

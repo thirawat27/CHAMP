@@ -281,6 +281,86 @@
           "url": "https://www.adminer.org/latest.php"
         }
       ]
+    },
+    "node": {
+      "versions": [
+        {
+          "id": "node-20",
+          "version": "20.11.1",
+          "selected": true,
+          "display_name": "Node.js 20.11.1 (LTS)",
+          "eol": false,
+          "lts": true,
+          "checksums": {},
+          "urls": {
+            "windowsX64": "https://nodejs.org/dist/v20.11.1/node-v20.11.1-win-x64.zip",
+            "linuxX64": "https://nodejs.org/dist/v20.11.1/node-v20.11.1-linux-x64.tar.xz",
+            "linuxArm64": "https://nodejs.org/dist/v20.11.1/node-v20.11.1-linux-arm64.tar.xz",
+            "macOSX64": "https://nodejs.org/dist/v20.11.1/node-v20.11.1-darwin-x64.tar.gz",
+            "macOSArm64": "https://nodejs.org/dist/v20.11.1/node-v20.11.1-darwin-arm64.tar.gz"
+          }
+        }
+      ]
+    },
+    "python": {
+      "versions": [
+        {
+          "id": "python-3.12",
+          "version": "3.12.2",
+          "selected": true,
+          "display_name": "Python 3.12.2",
+          "eol": false,
+          "lts": false,
+          "checksums": {},
+          "urls": {
+            "windowsX64": "https://www.python.org/ftp/python/3.12.2/python-3.12.2-embed-amd64.zip",
+            "linuxX64": "https://github.com/indygreg/python-build-standalone/releases/download/20240224/cpython-3.12.2+20240224-x86_64-unknown-linux-gnu-install_only.tar.gz",
+            "linuxArm64": "https://github.com/indygreg/python-build-standalone/releases/download/20240224/cpython-3.12.2+20240224-aarch64-unknown-linux-gnu-install_only.tar.gz",
+            "macOSX64": "https://github.com/indygreg/python-build-standalone/releases/download/20240224/cpython-3.12.2+20240224-x86_64-apple-darwin-install_only.tar.gz",
+            "macOSArm64": "https://github.com/indygreg/python-build-standalone/releases/download/20240224/cpython-3.12.2+20240224-aarch64-apple-darwin-install_only.tar.gz"
+          }
+        }
+      ]
+    },
+    "go": {
+      "versions": [
+        {
+          "id": "go-1.22",
+          "version": "1.22.1",
+          "selected": true,
+          "display_name": "Go 1.22.1",
+          "eol": false,
+          "lts": false,
+          "checksums": {},
+          "urls": {
+            "windowsX64": "https://go.dev/dl/go1.22.1.windows-amd64.zip",
+            "linuxX64": "https://go.dev/dl/go1.22.1.linux-amd64.tar.gz",
+            "linuxArm64": "https://go.dev/dl/go1.22.1.linux-arm64.tar.gz",
+            "macOSX64": "https://go.dev/dl/go1.22.1.darwin-amd64.tar.gz",
+            "macOSArm64": "https://go.dev/dl/go1.22.1.darwin-arm64.tar.gz"
+          }
+        }
+      ]
+    },
+    "ruby": {
+      "versions": [
+        {
+          "id": "ruby-3.3",
+          "version": "3.3.0",
+          "selected": true,
+          "display_name": "Ruby 3.3.0",
+          "eol": false,
+          "lts": false,
+          "checksums": {},
+          "urls": {
+            "windowsX64": "https://github.com/oneclick/rubyinstaller2/releases/download/RubyInstaller-3.3.0-1/rubyinstaller-3.3.0-1-x64.7z",
+            "linuxX64": "https://cache.ruby-lang.org/pub/ruby/3.3/ruby-3.3.0.tar.gz",
+            "linuxArm64": "https://cache.ruby-lang.org/pub/ruby/3.3/ruby-3.3.0.tar.gz",
+            "macOSX64": "https://cache.ruby-lang.org/pub/ruby/3.3/ruby-3.3.0.tar.gz",
+            "macOSArm64": "https://cache.ruby-lang.org/pub/ruby/3.3/ruby-3.3.0.tar.gz"
+          }
+        }
+      ]
     }
   }
 }

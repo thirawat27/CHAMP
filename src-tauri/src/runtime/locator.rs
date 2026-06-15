@@ -16,6 +16,14 @@ pub struct RuntimePaths {
     pub mysql: PathBuf,
     pub postgresql: PathBuf,
     pub adminer: PathBuf,
+    #[allow(dead_code)]
+    pub node: Option<PathBuf>,
+    #[allow(dead_code)]
+    pub python: Option<PathBuf>,
+    #[allow(dead_code)]
+    pub go: Option<PathBuf>,
+    #[allow(dead_code)]
+    pub ruby: Option<PathBuf>,
     /// Data directory for MySQL
     pub mysql_data_dir: PathBuf,
     /// Data directory for PostgreSQL
@@ -213,6 +221,10 @@ pub fn locate_runtime_binaries() -> Result<RuntimePaths, String> {
         mysql: detect_mysql_binary(&runtime_dir)?,
         postgresql: detect_postgresql_binary(&runtime_dir)?,
         adminer: adminer_path,
+        node: detect_node_binary(&runtime_dir).ok(),
+        python: detect_python_binary(&runtime_dir).ok(),
+        go: detect_go_binary(&runtime_dir).ok(),
+        ruby: detect_ruby_binary(&runtime_dir).ok(),
         mysql_data_dir: app_paths.mysql_data_dir.clone(),
         postgresql_data_dir: app_paths.postgresql_data_dir.clone(),
         logs_dir: app_paths.logs_dir.clone(),
@@ -645,6 +657,137 @@ fn detect_postgresql_binary(runtime_dir: &Path) -> Result<PathBuf, String> {
         "PostgreSQL binary not found in {}. Please ensure runtime binaries are downloaded.",
         runtime_dir.display()
     ))
+}
+
+fn detect_node_binary(runtime_dir: &Path) -> Result<PathBuf, String> {
+    let executable = if cfg!(target_os = "windows") {
+        "node.exe"
+    } else {
+        "node"
+    };
+    
+    // Check root and common extracted folders
+    let paths = vec![
+        runtime_dir.join(executable),
+        runtime_dir.join("bin").join(executable),
+        runtime_dir.join("node").join(executable),
+        runtime_dir.join("node").join("bin").join(executable),
+    ];
+    
+    // Also try to find any directory starting with node
+    if let Ok(entries) = fs::read_dir(runtime_dir) {
+        for entry in entries.flatten() {
+            if let Ok(name) = entry.file_name().into_string() {
+                if name.starts_with("node-") && entry.path().is_dir() {
+                    let path1 = entry.path().join(executable);
+                    if path1.exists() { return Ok(path1); }
+                    let path2 = entry.path().join("bin").join(executable);
+                    if path2.exists() { return Ok(path2); }
+                }
+            }
+        }
+    }
+
+    for path in paths {
+        if path.exists() {
+            return Ok(path);
+        }
+    }
+    Err("Node.js binary not found".to_string())
+}
+
+fn detect_python_binary(runtime_dir: &Path) -> Result<PathBuf, String> {
+    let executable = if cfg!(target_os = "windows") {
+        "python.exe"
+    } else {
+        "python3"
+    };
+    
+    let paths = vec![
+        runtime_dir.join(executable),
+        runtime_dir.join("bin").join(executable),
+        runtime_dir.join("python").join(executable),
+        runtime_dir.join("python").join("bin").join(executable),
+    ];
+    
+    if let Ok(entries) = fs::read_dir(runtime_dir) {
+        for entry in entries.flatten() {
+            if let Ok(name) = entry.file_name().into_string() {
+                if name.starts_with("python-") && entry.path().is_dir() {
+                    let path1 = entry.path().join(executable);
+                    if path1.exists() { return Ok(path1); }
+                    let path2 = entry.path().join("bin").join(executable);
+                    if path2.exists() { return Ok(path2); }
+                }
+            }
+        }
+    }
+
+    for path in paths {
+        if path.exists() {
+            return Ok(path);
+        }
+    }
+    // Try plain 'python' on Unix if 'python3' wasn't found
+    #[cfg(not(target_os = "windows"))]
+    {
+        let fallback = runtime_dir.join("bin").join("python");
+        if fallback.exists() { return Ok(fallback); }
+    }
+    Err("Python binary not found".to_string())
+}
+
+fn detect_go_binary(runtime_dir: &Path) -> Result<PathBuf, String> {
+    let executable = if cfg!(target_os = "windows") {
+        "go.exe"
+    } else {
+        "go"
+    };
+    
+    let paths = vec![
+        runtime_dir.join(executable),
+        runtime_dir.join("bin").join(executable),
+        runtime_dir.join("go").join("bin").join(executable),
+    ];
+    
+    for path in paths {
+        if path.exists() {
+            return Ok(path);
+        }
+    }
+    Err("Go binary not found".to_string())
+}
+
+fn detect_ruby_binary(runtime_dir: &Path) -> Result<PathBuf, String> {
+    let executable = if cfg!(target_os = "windows") {
+        "ruby.exe"
+    } else {
+        "ruby"
+    };
+    
+    let paths = vec![
+        runtime_dir.join(executable),
+        runtime_dir.join("bin").join(executable),
+        runtime_dir.join("ruby").join("bin").join(executable),
+    ];
+    
+    if let Ok(entries) = fs::read_dir(runtime_dir) {
+        for entry in entries.flatten() {
+            if let Ok(name) = entry.file_name().into_string() {
+                if name.starts_with("ruby-") && entry.path().is_dir() {
+                    let path1 = entry.path().join("bin").join(executable);
+                    if path1.exists() { return Ok(path1); }
+                }
+            }
+        }
+    }
+
+    for path in paths {
+        if path.exists() {
+            return Ok(path);
+        }
+    }
+    Err("Ruby binary not found".to_string())
 }
 
 pub fn postgresql_initdb_binary(postgres_binary: &Path) -> PathBuf {

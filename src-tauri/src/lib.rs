@@ -166,6 +166,7 @@ pub fn run() {
             commands::get_download_dir,
             commands::get_install_dir,
             commands::open_folder,
+            commands::open_project_terminal,
             commands::open_manual,
             commands::reset_installation,
             commands::cleanup_all_services,

@@ -87,6 +87,8 @@ export interface Translations {
   openDatabaseTool: string;
   openProjectsFolder: string;
   openLogsFolder: string;
+  terminal: string;
+  openTerminal: string;
   projectTemplates: string;
   createProject: string;
   projectName: string;
@@ -101,6 +103,10 @@ export interface Translations {
   nodeTemplateDescription: string;
   pythonTemplate: string;
   pythonTemplateDescription: string;
+  goTemplate: string;
+  goTemplateDescription: string;
+  rubyTemplate: string;
+  rubyTemplateDescription: string;
   startAllServices: string;
   stopAllServices: string;
   restartAllServices: string;
@@ -231,6 +237,7 @@ export interface Translations {
   wizardDefault: string;
   wizardNote: string;
   wizardEolNote: string;
+  wizardNotSelected: string;
 
   // Errors
   genericError: string;
@@ -330,7 +337,9 @@ const th: Translations = {
   openWebsite: "เปิดเว็บไซต์",
   openDatabaseTool: "เปิดเครื่องมือฐานข้อมูล",
   openProjectsFolder: "เปิดโฟลเดอร์โปรเจกต์",
-  openLogsFolder: "เปิดโฟลเดอร์บันทึก",
+  openLogsFolder: "เปิดโฟลเดอร์ Log",
+  terminal: "เทอร์มินัล",
+  openTerminal: "เปิดเทอร์มินัลในโฟลเดอร์โปรเจกต์",
   projectTemplates: "เทมเพลตโปรเจกต์",
   createProject: "สร้างโปรเจกต์",
   projectName: "ชื่อโปรเจกต์",
@@ -345,6 +354,10 @@ const th: Translations = {
   nodeTemplateDescription: "Node workspace",
   pythonTemplate: "Python",
   pythonTemplateDescription: "Python workspace",
+  goTemplate: "Go",
+  goTemplateDescription: "Go workspace",
+  rubyTemplate: "Ruby",
+  rubyTemplateDescription: "Ruby workspace",
   startAllServices: "เริ่มบริการทั้งหมด",
   stopAllServices: "หยุดบริการทั้งหมด",
   restartAllServices: "รีสตาร์ทบริการทั้งหมด",
@@ -479,6 +492,7 @@ const th: Translations = {
   wizardNote: "หมายเหตุ",
   wizardEolNote:
     "เวอร์ชัน EOL ไม่ได้รับการซัพพอร์ตและอาจมีช่องโหว่ด้านความปลอดภัย PHP 5.5-7.3 ใช้ได้เฉพาะบน Windows",
+  wizardNotSelected: "ไม่ติดตั้ง",
 
   // Errors
   genericError: "เกิดข้อผิดพลาด",
@@ -579,6 +593,8 @@ const en: Translations = {
   openDatabaseTool: "Open Database Tool",
   openProjectsFolder: "Open Projects Folder",
   openLogsFolder: "Open Logs Folder",
+  terminal: "Terminal",
+  openTerminal: "Open Terminal in Projects",
   projectTemplates: "Project Templates",
   createProject: "Create Project",
   projectName: "Project name",
@@ -593,6 +609,10 @@ const en: Translations = {
   nodeTemplateDescription: "Node workspace",
   pythonTemplate: "Python",
   pythonTemplateDescription: "Python workspace",
+  goTemplate: "Go",
+  goTemplateDescription: "Go workspace",
+  rubyTemplate: "Ruby",
+  rubyTemplateDescription: "Ruby workspace",
   startAllServices: "Start All Services",
   stopAllServices: "Stop All Services",
   restartAllServices: "Restart All Services",
@@ -727,6 +747,7 @@ const en: Translations = {
   wizardNote: "Note",
   wizardEolNote:
     "EOL versions are unsupported and may have security vulnerabilities. PHP 5.5-7.3 are available on Windows only.",
+  wizardNotSelected: "Do not install",
 
   // Errors
   genericError: "An error occurred",

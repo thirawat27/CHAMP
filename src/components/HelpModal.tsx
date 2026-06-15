@@ -75,6 +75,10 @@ export function HelpModal({ onClose }: HelpModalProps) {
                 <kbd>Ctrl</kbd> + <kbd>L</kbd>
                 <span>{t.shortcutLogs}</span>
               </div>
+              <div className="shortcut-item">
+                <kbd>Ctrl</kbd> + <kbd>T</kbd>
+                <span>{t.terminal}</span>
+              </div>
             </div>
           </section>
 

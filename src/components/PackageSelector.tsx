@@ -10,6 +10,7 @@ import {
   getDatabaseDisplayName,
   hasPackageUrlForPlatform,
   isAdminerSelected,
+  GenericPackage,
 } from "../types/services";
 import { useTranslation } from "../stores/languageStore";
 
@@ -106,7 +107,11 @@ export function PackageSelector({ onSelectionChange, initialSelection }: Package
       nextSelection.php !== selection.php ||
       nextSelection.mysql !== selection.mysql ||
       nextSelection.postgresql !== selection.postgresql ||
-      nextSelection.phpmyadmin !== selection.phpmyadmin
+      nextSelection.phpmyadmin !== selection.phpmyadmin ||
+      nextSelection.node !== selection.node ||
+      nextSelection.python !== selection.python ||
+      nextSelection.go !== selection.go ||
+      nextSelection.ruby !== selection.ruby
     ) {
       setSelection(nextSelection);
       return;
@@ -129,6 +134,10 @@ export function PackageSelector({ onSelectionChange, initialSelection }: Package
 
   const handleDatabaseToolChange = (value: string) => {
     setSelection({ ...selection, phpmyadmin: value });
+  };
+
+  const handleOptionalRuntimeChange = (runtime: "node" | "python" | "go" | "ruby", value: string) => {
+    setSelection({ ...selection, [runtime]: value });
   };
 
   if (loading) {
@@ -246,6 +255,8 @@ export function PackageSelector({ onSelectionChange, initialSelection }: Package
           ))}
         </select>
       </div>
+
+
 
       {/* Package Info Box */}
       <div className="info-box" style={{ padding: "0.5rem", fontSize: "0.875rem" }}>
