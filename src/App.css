@@ -158,6 +158,7 @@ button {
 .titlebar h1,
 .titlebar p,
 .overview-band h2,
+.project-modal h2,
 .service-card h3,
 .service-card p,
 .settings-header h2,
@@ -380,7 +381,7 @@ button {
 
 .overview-band:hover {
   transform: translateY(-2px);
-  box-shadow: 
+  box-shadow:
     0 16px 32px rgba(119, 72, 45, 0.12),
     0 0 0 1px color-mix(in srgb, var(--color-primary) 15%, transparent);
 }
@@ -533,6 +534,12 @@ button {
   color: #fff7ed;
 }
 
+.btn-quick-action.action-create-project {
+  background: linear-gradient(135deg, #9a3412, #ea580c);
+  border-color: #fdba74;
+  color: #fff7ed;
+}
+
 .btn-quick-action.action-logs {
   background: linear-gradient(135deg, #0f766e, #14b8a6);
   border-color: #5eead4;
@@ -607,6 +614,113 @@ button:disabled {
   border-color: color-mix(in srgb, var(--color-accent) 18%, var(--border-color));
 }
 
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.project-modal-content {
+  width: min(720px, 100%);
+}
+
+.project-modal-eyebrow {
+  display: inline-flex;
+  align-items: center;
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.project-modal-body {
+  display: grid;
+  gap: 16px;
+}
+
+.project-template-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.project-template-option {
+  min-height: 70px;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+  padding: 11px;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  background: var(--bg-card-secondary);
+  color: var(--text-primary);
+  text-align: left;
+}
+
+.project-template-option svg {
+  color: var(--color-primary);
+}
+
+.project-template-option span {
+  min-width: 0;
+}
+
+.project-template-option strong,
+.project-template-option small {
+  display: block;
+  overflow-wrap: anywhere;
+}
+
+.project-template-option strong {
+  font-size: 13px;
+}
+
+.project-template-option small {
+  margin-top: 3px;
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.25;
+}
+
+.project-template-option.selected {
+  border-color: color-mix(in srgb, var(--color-primary) 60%, var(--border-color));
+  background: color-mix(in srgb, var(--color-primary) 12%, var(--bg-card));
+}
+
+.project-create-form {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+}
+
+.project-create-form input {
+  width: 100%;
+  min-height: 38px;
+  padding: 0 12px;
+  border: 1px solid var(--border-color);
+  border-radius: 7px;
+  background: var(--bg-card-secondary);
+  color: var(--text-primary);
+  font: inherit;
+}
+
+.project-create-form input:focus {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+}
+
+.project-modal-footer {
+  display: flex;
+  justify-content: flex-end;
+}
+
 .service-grid-responsive {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -628,7 +742,7 @@ button:disabled {
 
 .service-card:hover {
   transform: translateY(-4px);
-  box-shadow: 
+  box-shadow:
     0 24px 48px rgba(119, 72, 45, 0.16),
     0 0 0 1px color-mix(in srgb, var(--color-primary) 30%, transparent);
 }
@@ -639,9 +753,16 @@ button:disabled {
 }
 
 @keyframes shake {
-  0%, 100% { transform: translateX(0); }
-  25% { transform: translateX(-4px); }
-  75% { transform: translateX(4px); }
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+  25% {
+    transform: translateX(-4px);
+  }
+  75% {
+    transform: translateX(4px);
+  }
 }
 
 .service-card-header,
@@ -670,7 +791,11 @@ button:disabled {
   place-items: center;
   flex: 0 0 auto;
   border-radius: 8px;
-  background: linear-gradient(135deg, color-mix(in srgb, var(--color-primary) 12%, var(--bg-card)), color-mix(in srgb, var(--color-primary) 24%, var(--bg-card)));
+  background: linear-gradient(
+    135deg,
+    color-mix(in srgb, var(--color-primary) 12%, var(--bg-card)),
+    color-mix(in srgb, var(--color-primary) 24%, var(--bg-card))
+  );
   color: var(--color-primary);
   box-shadow: 0 4px 12px color-mix(in srgb, var(--color-primary) 16%, transparent);
   transition: transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
@@ -719,8 +844,13 @@ button:disabled {
 }
 
 @keyframes pulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.7; }
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.7;
+  }
 }
 
 .skeleton {
@@ -736,8 +866,12 @@ button:disabled {
 }
 
 @keyframes skeleton-loading {
-  0% { background-position: 200% 0; }
-  100% { background-position: -200% 0; }
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
+  }
 }
 
 .skeleton-text {
@@ -1439,6 +1573,10 @@ button:disabled {
     grid-template-columns: 1fr;
   }
 
+  .project-template-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
   .settings-grid {
     grid-template-columns: 1fr;
   }
@@ -1541,6 +1679,22 @@ button:disabled {
     width: 100%;
   }
 
+  .project-create-form {
+    grid-template-columns: 1fr;
+  }
+
+  .project-template-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .project-modal-footer {
+    justify-content: stretch;
+  }
+
+  .project-modal-footer .btn-secondary {
+    width: 100%;
+  }
+
   .status-path {
     display: none !important;
   }
@@ -1576,7 +1730,7 @@ button:disabled {
   background: var(--bg-card);
   border: 1px solid var(--border-color);
   border-radius: 10px;
-  box-shadow: 
+  box-shadow:
     0 24px 64px rgba(0, 0, 0, 0.4),
     0 0 0 1px color-mix(in srgb, white 8%, transparent);
   overflow: hidden;
@@ -1664,7 +1818,7 @@ button:disabled {
   border-radius: 5px;
   background: linear-gradient(135deg, #f8f9fa, #e9ecef);
   border: 1px solid #ced4da;
-  box-shadow: 
+  box-shadow:
     0 2px 0 #adb5bd,
     inset 0 1px 0 rgba(255, 255, 255, 0.8);
   color: #495057;
@@ -1678,7 +1832,7 @@ button:disabled {
   .shortcut-item kbd {
     background: linear-gradient(135deg, #3a3f47, #2d3139);
     border-color: #1a1d23;
-    box-shadow: 
+    box-shadow:
       0 2px 0 #0d0f12,
       inset 0 1px 0 rgba(255, 255, 255, 0.1);
     color: #e9ecef;

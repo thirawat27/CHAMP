@@ -27,8 +27,9 @@ use crate::runtime::downloader::{DownloadProgress, RuntimeDownloader};
 use crate::runtime::locator::get_app_data_paths;
 use crate::runtime::packages::{PackageSelection, PackagesConfig};
 use crate::AppState;
-use serde::Serialize;
-use std::fs;
+use serde::{Deserialize, Serialize};
+use std::fs::{self, OpenOptions};
+use std::io::Write;
 use std::path::Path;
 use std::sync::{Mutex, OnceLock};
 use std::time::Instant;
@@ -154,6 +155,25 @@ pub struct SystemMetricsDto {
 pub struct LanguageSettingsDto {
     pub language: String,
     pub sound_enabled: bool,
+}
+
+/// Supported project starter templates.
+#[derive(Clone, Copy, Debug, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum ProjectTemplate {
+    Static,
+    Php,
+    Node,
+    Python,
+}
+
+/// Data transfer object returned after creating a starter project.
+#[derive(Debug, Serialize)]
+pub struct ProjectScaffoldResult {
+    pub name: String,
+    pub template: String,
+    pub path: String,
+    pub entry_file: String,
 }
 
 /// Minimum interval between system metrics samples to avoid excessive CPU usage
@@ -683,6 +703,226 @@ pub async fn get_app_paths() -> Result<AppPathsDto, String> {
 }
 
 #[tauri::command]
+pub async fn create_project_template(
+    project_name: String,
+    template: ProjectTemplate,
+) -> Result<ProjectScaffoldResult, String> {
+    let paths = get_app_data_paths()?;
+    fs::create_dir_all(&paths.projects_dir)
+        .map_err(|e| format!("Failed to create projects directory: {}", e))?;
+
+    create_project_template_in_dir(&paths.projects_dir, &project_name, template)
+}
+
+fn create_project_template_in_dir(
+    projects_dir: &Path,
+    project_name: &str,
+    template: ProjectTemplate,
+) -> Result<ProjectScaffoldResult, String> {
+    let name = validate_project_name(project_name)?;
+    let projects_root = projects_dir
+        .canonicalize()
+        .map_err(|e| format!("Failed to resolve projects directory: {}", e))?;
+    let project_dir = projects_root.join(&name);
+
+    if !project_dir.starts_with(&projects_root) {
+        return Err("Project path must stay inside the projects directory".to_string());
+    }
+
+    if project_dir.exists() {
+        let mut entries = fs::read_dir(&project_dir)
+            .map_err(|e| format!("Failed to inspect existing project directory: {}", e))?;
+        if entries.next().is_some() {
+            return Err(format!(
+                "Project '{}' already exists and is not empty",
+                name
+            ));
+        }
+    } else {
+        fs::create_dir(&project_dir)
+            .map_err(|e| format!("Failed to create project directory: {}", e))?;
+    }
+
+    let files = project_template_files(template, &name);
+    for (relative_path, content) in files {
+        let file_path = project_dir.join(relative_path);
+        if let Some(parent) = file_path.parent() {
+            fs::create_dir_all(parent)
+                .map_err(|e| format!("Failed to create project subdirectory: {}", e))?;
+        }
+        OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&file_path)
+            .and_then(|mut file| file.write_all(content.as_bytes()))
+            .map_err(|e| format!("Failed to write {}: {}", file_path.display(), e))?;
+    }
+
+    let entry_file = project_entry_file(template);
+    Ok(ProjectScaffoldResult {
+        name,
+        template: project_template_id(template).to_string(),
+        path: project_dir.to_string_lossy().to_string(),
+        entry_file: project_dir.join(entry_file).to_string_lossy().to_string(),
+    })
+}
+
+fn validate_project_name(project_name: &str) -> Result<String, String> {
+    let name = project_name.trim();
+    if name.is_empty() {
+        return Err("Project name is required".to_string());
+    }
+
+    if name == "." || name == ".." {
+        return Err("Project name cannot be '.' or '..'".to_string());
+    }
+
+    if name.chars().any(|ch| {
+        ch.is_control() || matches!(ch, '<' | '>' | ':' | '"' | '/' | '\\' | '|' | '?' | '*')
+    }) {
+        return Err(
+            "Project name contains characters that are not valid in a folder name".to_string(),
+        );
+    }
+
+    Ok(name.to_string())
+}
+
+fn project_template_id(template: ProjectTemplate) -> &'static str {
+    match template {
+        ProjectTemplate::Static => "static",
+        ProjectTemplate::Php => "php",
+        ProjectTemplate::Node => "node",
+        ProjectTemplate::Python => "python",
+    }
+}
+
+fn project_entry_file(template: ProjectTemplate) -> &'static str {
+    match template {
+        ProjectTemplate::Static => "index.html",
+        ProjectTemplate::Php => "index.php",
+        ProjectTemplate::Node => "README.md",
+        ProjectTemplate::Python => "README.md",
+    }
+}
+
+fn project_template_files(template: ProjectTemplate, name: &str) -> Vec<(&'static str, String)> {
+    match template {
+        ProjectTemplate::Static => vec![
+            (
+                "index.html",
+                format!(
+                    r#"<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{name}</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <main>
+      <h1>{name}</h1>
+      <p>Static project served from the CHAMP projects folder.</p>
+    </main>
+    <script src="./script.js"></script>
+  </body>
+</html>
+"#
+                ),
+            ),
+            (
+                "styles.css",
+                "body { margin: 0; min-height: 100vh; display: grid; place-items: center; font-family: system-ui, sans-serif; background: #f8fafc; color: #111827; }\nmain { width: min(720px, calc(100vw - 32px)); }\n".to_string(),
+            ),
+            (
+                "script.js",
+                "console.log('CHAMP static project ready');\n".to_string(),
+            ),
+        ],
+        ProjectTemplate::Php => vec![(
+            "index.php",
+            format!(
+                r#"<?php
+$projectName = "{name}";
+?>
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title><?= htmlspecialchars($projectName) ?></title>
+  </head>
+  <body>
+    <h1><?= htmlspecialchars($projectName) ?></h1>
+    <p>PHP <?= phpversion() ?> is running through CHAMP.</p>
+  </body>
+</html>
+"#
+            ),
+        )],
+        ProjectTemplate::Node => vec![
+            (
+                "package.json",
+                format!(
+                    r#"{{
+  "name": "{}",
+  "private": true,
+  "type": "module",
+  "scripts": {{
+    "dev": "node src/server.js"
+  }}
+}}
+"#,
+                    package_name_slug(name)
+                ),
+            ),
+            (
+                "src/server.js",
+                "import { createServer } from 'node:http';\n\nconst port = Number(process.env.PORT || 3000);\n\ncreateServer((_req, res) => {\n  res.writeHead(200, { 'content-type': 'text/plain; charset=utf-8' });\n  res.end('Node project ready from CHAMP workspace\\n');\n}).listen(port, () => {\n  console.log(`Node app running at http://localhost:${port}`);\n});\n".to_string(),
+            ),
+            (
+                "README.md",
+                "# Node starter\n\nRun `npm run dev` from this folder. CHAMP keeps the project with the rest of your local web workspace.\n".to_string(),
+            ),
+        ],
+        ProjectTemplate::Python => vec![
+            (
+                "app.py",
+                "from http.server import ThreadingHTTPServer, SimpleHTTPRequestHandler\n\nPORT = 5000\n\nif __name__ == \"__main__\":\n    server = ThreadingHTTPServer((\"127.0.0.1\", PORT), SimpleHTTPRequestHandler)\n    print(f\"Python app running at http://127.0.0.1:{PORT}\")\n    server.serve_forever()\n".to_string(),
+            ),
+            (
+                "README.md",
+                "# Python starter\n\nRun `python app.py` from this folder. CHAMP keeps the project with the rest of your local web workspace.\n".to_string(),
+            ),
+        ],
+    }
+}
+
+fn package_name_slug(name: &str) -> String {
+    let slug = name
+        .chars()
+        .map(|ch| {
+            if ch.is_ascii_alphanumeric() {
+                ch.to_ascii_lowercase()
+            } else {
+                '-'
+            }
+        })
+        .collect::<String>()
+        .split('-')
+        .filter(|part| !part.is_empty())
+        .collect::<Vec<_>>()
+        .join("-");
+
+    if slug.is_empty() {
+        "champ-node-project".to_string()
+    } else {
+        slug
+    }
+}
+
+#[tauri::command]
 pub async fn get_system_metrics() -> Result<SystemMetricsDto, String> {
     let monitor = SYSTEM_METRICS_MONITOR.get_or_init(|| Mutex::new(SystemMetricsMonitor::new()));
     let mut monitor = monitor
@@ -1016,4 +1256,51 @@ pub async fn download_runtime_with_skip(
 #[tauri::command]
 pub async fn check_system_dependencies() -> DependencyCheckResult {
     crate::runtime::deps::check_system_dependencies()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn validate_project_name_rejects_path_traversal() {
+        assert!(validate_project_name("..").is_err());
+        assert!(validate_project_name("../outside").is_err());
+        assert!(validate_project_name("nested\\outside").is_err());
+    }
+
+    #[test]
+    fn package_name_slug_keeps_npm_safe_ascii() {
+        assert_eq!(package_name_slug("My Node App"), "my-node-app");
+        assert_eq!(package_name_slug("โปรเจกต์"), "champ-node-project");
+    }
+
+    #[test]
+    fn create_static_project_writes_expected_files() {
+        let temp = tempfile::tempdir().expect("failed to create temp dir");
+
+        let result = create_project_template_in_dir(temp.path(), "demo", ProjectTemplate::Static)
+            .expect("failed to create project");
+
+        assert_eq!(result.name, "demo");
+        assert!(temp.path().join("demo").join("index.html").exists());
+        assert!(temp.path().join("demo").join("styles.css").exists());
+        assert!(temp.path().join("demo").join("script.js").exists());
+    }
+
+    #[test]
+    fn create_project_does_not_overwrite_non_empty_directory() {
+        let temp = tempfile::tempdir().expect("failed to create temp dir");
+        let project = temp.path().join("demo");
+        std::fs::create_dir(&project).expect("failed to create project dir");
+        std::fs::write(project.join("keep.txt"), "keep").expect("failed to write sentinel");
+
+        let result = create_project_template_in_dir(temp.path(), "demo", ProjectTemplate::Php);
+
+        assert!(result.is_err());
+        assert_eq!(
+            std::fs::read_to_string(project.join("keep.txt")).expect("failed to read sentinel"),
+            "keep"
+        );
+    }
 }

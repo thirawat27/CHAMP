@@ -301,6 +301,51 @@ describe("Dashboard Component", () => {
     });
   });
 
+  describe("Project templates", () => {
+    it("should create a selected project template", async () => {
+      vi.mocked(invoke).mockImplementation(async (cmd: string) => {
+        switch (cmd) {
+          case "get_all_statuses":
+            return mockServiceMap;
+          case "get_app_paths":
+            return mockAppPaths;
+          case "get_installed_versions":
+            return {};
+          case "get_settings":
+            return {};
+          case "get_system_metrics":
+            return mockSystemMetrics;
+          case "create_project_template":
+            return {
+              name: "demo-node",
+              template: "node",
+              path: "C:\\CHAMP\\projects\\demo-node",
+              entry_file: "C:\\CHAMP\\projects\\demo-node\\README.md",
+            };
+          default:
+            return {};
+        }
+      });
+
+      render(<Dashboard />);
+
+      fireEvent.click(await screen.findByRole("button", { name: /^create project$/i }));
+      fireEvent.click(await screen.findByRole("button", { name: /node/i }));
+      fireEvent.change(screen.getByPlaceholderText("Project name"), {
+        target: { value: "demo-node" },
+      });
+      const createButtons = screen.getAllByRole("button", { name: /^create project$/i });
+      fireEvent.click(createButtons[createButtons.length - 1]);
+
+      await waitFor(() => {
+        expect(invoke).toHaveBeenCalledWith("create_project_template", {
+          projectName: "demo-node",
+          template: "node",
+        });
+      });
+    });
+  });
+
   describe("TC-PM-DASH-08: All Services Running", () => {
     it("should show all services as running when all started", async () => {
       const allRunningMap = {

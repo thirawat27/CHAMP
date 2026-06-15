@@ -161,6 +161,7 @@ pub fn run() {
             commands::check_existing_components,
             commands::get_runtime_dir,
             commands::get_app_paths,
+            commands::create_project_template,
             commands::get_system_metrics,
             commands::get_download_dir,
             commands::get_install_dir,

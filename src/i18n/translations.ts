@@ -87,6 +87,20 @@ export interface Translations {
   openDatabaseTool: string;
   openProjectsFolder: string;
   openLogsFolder: string;
+  projectTemplates: string;
+  createProject: string;
+  projectName: string;
+  projectNameRequired: string;
+  projectCreated: string;
+  projectCreateFailed: string;
+  staticTemplate: string;
+  staticTemplateDescription: string;
+  phpTemplate: string;
+  phpTemplateDescription: string;
+  nodeTemplate: string;
+  nodeTemplateDescription: string;
+  pythonTemplate: string;
+  pythonTemplateDescription: string;
   startAllServices: string;
   stopAllServices: string;
   restartAllServices: string;
@@ -317,6 +331,20 @@ const th: Translations = {
   openDatabaseTool: "เปิดเครื่องมือฐานข้อมูล",
   openProjectsFolder: "เปิดโฟลเดอร์โปรเจกต์",
   openLogsFolder: "เปิดโฟลเดอร์บันทึก",
+  projectTemplates: "เทมเพลตโปรเจกต์",
+  createProject: "สร้างโปรเจกต์",
+  projectName: "ชื่อโปรเจกต์",
+  projectNameRequired: "กรุณาใส่ชื่อโปรเจกต์",
+  projectCreated: "สร้างโปรเจกต์แล้ว",
+  projectCreateFailed: "สร้างโปรเจกต์ไม่สำเร็จ",
+  staticTemplate: "Static",
+  staticTemplateDescription: "HTML, CSS, JS",
+  phpTemplate: "PHP",
+  phpTemplateDescription: "PHP entry file",
+  nodeTemplate: "Node",
+  nodeTemplateDescription: "Node workspace",
+  pythonTemplate: "Python",
+  pythonTemplateDescription: "Python workspace",
   startAllServices: "เริ่มบริการทั้งหมด",
   stopAllServices: "หยุดบริการทั้งหมด",
   restartAllServices: "รีสตาร์ทบริการทั้งหมด",
@@ -551,6 +579,20 @@ const en: Translations = {
   openDatabaseTool: "Open Database Tool",
   openProjectsFolder: "Open Projects Folder",
   openLogsFolder: "Open Logs Folder",
+  projectTemplates: "Project Templates",
+  createProject: "Create Project",
+  projectName: "Project name",
+  projectNameRequired: "Enter a project name",
+  projectCreated: "Project created",
+  projectCreateFailed: "Project creation failed",
+  staticTemplate: "Static",
+  staticTemplateDescription: "HTML, CSS, JS",
+  phpTemplate: "PHP",
+  phpTemplateDescription: "PHP entry file",
+  nodeTemplate: "Node",
+  nodeTemplateDescription: "Node workspace",
+  pythonTemplate: "Python",
+  pythonTemplateDescription: "Python workspace",
   startAllServices: "Start All Services",
   stopAllServices: "Stop All Services",
   restartAllServices: "Restart All Services",

@@ -5,6 +5,7 @@ import {
   CheckCircle2,
   CircleHelp,
   Database,
+  FilePlus2,
   Folder,
   Globe,
   HardDrive,
@@ -15,7 +16,7 @@ import {
   Square,
   TerminalSquare,
 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { type FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import packageInfo from "../../package.json";
 import champLogo from "../assets/CHAMP.png";
 import { useTranslation } from "../stores/languageStore";
@@ -63,6 +64,51 @@ interface DashboardNotice {
   title: string;
   message: string;
 }
+
+type ProjectTemplateId = "static" | "php" | "node" | "python";
+
+interface ProjectScaffoldResult {
+  name: string;
+  template: ProjectTemplateId;
+  path: string;
+  entry_file: string;
+}
+
+const PROJECT_TEMPLATES: Array<{
+  id: ProjectTemplateId;
+  icon: typeof Globe;
+  labelKey: "staticTemplate" | "phpTemplate" | "nodeTemplate" | "pythonTemplate";
+  descriptionKey:
+    | "staticTemplateDescription"
+    | "phpTemplateDescription"
+    | "nodeTemplateDescription"
+    | "pythonTemplateDescription";
+}> = [
+  {
+    id: "static",
+    icon: Globe,
+    labelKey: "staticTemplate",
+    descriptionKey: "staticTemplateDescription",
+  },
+  {
+    id: "php",
+    icon: TerminalSquare,
+    labelKey: "phpTemplate",
+    descriptionKey: "phpTemplateDescription",
+  },
+  {
+    id: "node",
+    icon: HardDrive,
+    labelKey: "nodeTemplate",
+    descriptionKey: "nodeTemplateDescription",
+  },
+  {
+    id: "python",
+    icon: FilePlus2,
+    labelKey: "pythonTemplate",
+    descriptionKey: "pythonTemplateDescription",
+  },
+];
 
 const STACK_COMMAND_COPY = {
   start_all_services: {
@@ -141,6 +187,10 @@ export function Dashboard() {
   const [installedVersions, setInstalledVersions] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState<string | null>(null);
   const [notice, setNotice] = useState<DashboardNotice | null>(null);
+  const [projectTemplate, setProjectTemplate] = useState<ProjectTemplateId>("static");
+  const [projectName, setProjectName] = useState("");
+  const [isCreatingProject, setIsCreatingProject] = useState(false);
+  const [showProjectCreator, setShowProjectCreator] = useState(false);
 
   // Initialize audio context on first user interaction
   useEffect(() => {
@@ -395,6 +445,19 @@ export function Dashboard() {
     return () => window.clearTimeout(timeout);
   }, [notice]);
 
+  useEffect(() => {
+    if (!showProjectCreator) return undefined;
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.code === "Escape" && !isCreatingProject) {
+        setShowProjectCreator(false);
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [isCreatingProject, showProjectCreator]);
+
   const runServiceCommand = async (
     command: "start_service" | "stop_service" | "restart_service",
     service: ServiceType
@@ -442,6 +505,43 @@ export function Dashboard() {
         title: "Failed to open folder",
         message: String(error),
       });
+    }
+  };
+
+  const createProject = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const trimmedName = projectName.trim();
+    if (!trimmedName) {
+      setNotice({
+        tone: "error",
+        title: t.projectCreateFailed,
+        message: t.projectNameRequired,
+      });
+      return;
+    }
+
+    setIsCreatingProject(true);
+    try {
+      const result = await invoke<ProjectScaffoldResult>("create_project_template", {
+        projectName: trimmedName,
+        template: projectTemplate,
+      });
+      setProjectName("");
+      setNotice({
+        tone: "success",
+        title: t.projectCreated,
+        message: `${result.name} -> ${result.path}`,
+      });
+      setShowProjectCreator(false);
+      await refreshMetadata();
+    } catch (error) {
+      setNotice({
+        tone: "error",
+        title: t.projectCreateFailed,
+        message: String(error),
+      });
+    } finally {
+      setIsCreatingProject(false);
     }
   };
 
@@ -635,6 +735,17 @@ export function Dashboard() {
               <Folder size={16} /> {t.projects}
             </button>
             <button
+              className="btn-quick-action action-create-project"
+              onClick={() => {
+                AudioManager.playClick();
+                setShowProjectCreator(true);
+              }}
+              title={t.createProject}
+              onMouseEnter={() => AudioManager.playHover()}
+            >
+              <FilePlus2 size={16} /> {t.createProject}
+            </button>
+            <button
               className="btn-quick-action action-logs"
               onClick={() => {
                 AudioManager.playClick();
@@ -724,6 +835,105 @@ export function Dashboard() {
       )}
 
       {showHelp && <HelpModal onClose={() => setShowHelp(false)} />}
+
+      {showProjectCreator && (
+        <div
+          className="modal-overlay project-modal"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="project-modal-title"
+        >
+          <div className="modal-content project-modal-content">
+            <div className="modal-header">
+              <div>
+                <span className="project-modal-eyebrow">{t.projectTemplates}</span>
+                <h2 id="project-modal-title">{t.createProject}</h2>
+              </div>
+              <button
+                className="icon-button"
+                type="button"
+                onClick={() => {
+                  AudioManager.playClick();
+                  setShowProjectCreator(false);
+                }}
+                disabled={isCreatingProject}
+                aria-label={t.close}
+                onMouseEnter={() => AudioManager.playHover()}
+              >
+                ×
+              </button>
+            </div>
+
+            <div className="modal-body project-modal-body">
+              <div className="project-template-grid">
+                {PROJECT_TEMPLATES.map((template) => {
+                  const TemplateIcon = template.icon;
+                  const selected = projectTemplate === template.id;
+                  return (
+                    <button
+                      key={template.id}
+                      type="button"
+                      className={`project-template-option ${selected ? "selected" : ""}`}
+                      onClick={() => {
+                        AudioManager.playClick();
+                        setProjectTemplate(template.id);
+                      }}
+                      onMouseEnter={() => AudioManager.playHover()}
+                      aria-pressed={selected}
+                    >
+                      <TemplateIcon size={17} />
+                      <span>
+                        <strong>{t[template.labelKey]}</strong>
+                        <small>{t[template.descriptionKey]}</small>
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+
+              <form className="project-create-form" onSubmit={createProject}>
+                <label className="sr-only" htmlFor="project-name">
+                  {t.projectName}
+                </label>
+                <input
+                  id="project-name"
+                  value={projectName}
+                  onChange={(event) => setProjectName(event.target.value)}
+                  placeholder={t.projectName}
+                  disabled={isCreatingProject}
+                  autoFocus
+                />
+                <button
+                  className="btn-primary"
+                  type="submit"
+                  disabled={isCreatingProject || projectName.trim().length === 0}
+                >
+                  {isCreatingProject ? (
+                    <LoaderCircle size={15} className="spin-icon" />
+                  ) : (
+                    <FilePlus2 size={15} />
+                  )}
+                  {isCreatingProject ? t.working : t.createProject}
+                </button>
+              </form>
+
+              <div className="project-modal-footer">
+                <button
+                  className="btn-secondary"
+                  type="button"
+                  onClick={() => {
+                    AudioManager.playClick();
+                    openFolder(appPaths?.projects_dir);
+                  }}
+                  onMouseEnter={() => AudioManager.playHover()}
+                >
+                  <Folder size={16} /> {t.projects}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
