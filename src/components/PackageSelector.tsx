@@ -10,7 +10,6 @@ import {
   getDatabaseDisplayName,
   hasPackageUrlForPlatform,
   isAdminerSelected,
-  GenericPackage,
 } from "../types/services";
 import { useTranslation } from "../stores/languageStore";
 
@@ -136,10 +135,6 @@ export function PackageSelector({ onSelectionChange, initialSelection }: Package
     setSelection({ ...selection, phpmyadmin: value });
   };
 
-  const handleOptionalRuntimeChange = (runtime: "node" | "python" | "go" | "ruby", value: string) => {
-    setSelection({ ...selection, [runtime]: value });
-  };
-
   if (loading) {
     return (
       <div
@@ -255,8 +250,6 @@ export function PackageSelector({ onSelectionChange, initialSelection }: Package
           ))}
         </select>
       </div>
-
-
 
       {/* Package Info Box */}
       <div className="info-box" style={{ padding: "0.5rem", fontSize: "0.875rem" }}>

@@ -310,7 +310,7 @@ describe("Dashboard Component", () => {
           case "get_app_paths":
             return mockAppPaths;
           case "get_installed_versions":
-            return {};
+            return { node: "v22.0.0" };
           case "get_settings":
             return {};
           case "get_system_metrics":
