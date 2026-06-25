@@ -493,6 +493,7 @@ dependencies = [
  "tauri-plugin-opener",
  "tempfile",
  "tokio",
+ "tokio-util",
  "xz2",
  "zip",
 ]

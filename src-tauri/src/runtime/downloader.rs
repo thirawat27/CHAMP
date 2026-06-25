@@ -1839,6 +1839,11 @@ impl RuntimeDownloader {
     ) -> Result<Vec<PathBuf>, String> {
         let total = components.len() as u8;
 
+        if components.is_empty() {
+            self.finish_download_batch(&progress_cb, total);
+            return Ok(Vec::new());
+        }
+
         // Create temp directory for downloads
         let temp_dir = std::env::temp_dir().join("campp-download");
         fs::create_dir_all(&temp_dir)
@@ -1847,74 +1852,153 @@ impl RuntimeDownloader {
         fs::create_dir_all(&runtime_dir)
             .map_err(|e| format!("Failed to create runtime directory: {}", e))?;
 
-        let mut downloaded_files = Vec::new();
-        let Some(first_component) = components.first().copied() else {
-            self.finish_download_batch(&progress_cb, total);
-            return Ok(downloaded_files);
-        };
+        // --- Phase 1: Download ALL components in parallel ---
+        let progress_cb = Arc::new(progress_cb);
 
-        let mut current_component = first_component;
-        let mut current_path = self
-            .download_component(current_component, &temp_dir, &progress_cb, 1, total)
-            .await?;
+        // Per-component atomic progress trackers: (downloaded_bytes, total_bytes)
+        let per_component_downloaded: Vec<Arc<AtomicU64>> = (0..components.len())
+            .map(|_| Arc::new(AtomicU64::new(0)))
+            .collect();
+        let per_component_total: Vec<Arc<AtomicU64>> = (0..components.len())
+            .map(|_| Arc::new(AtomicU64::new(0)))
+            .collect();
 
-        for index in 0..components.len() {
-            let next_component = components.get(index + 1).copied();
-            let next_download = async {
-                if let Some(component) = next_component {
-                    Some(
-                        self.download_component(
-                            component,
-                            &temp_dir,
-                            &progress_cb,
-                            (index + 2) as u8,
-                            total,
-                        )
-                        .await,
-                    )
-                } else {
-                    None
+        // Spawn a progress aggregator task that polls all atomics and emits combined progress
+        let agg_progress_cb = Arc::clone(&progress_cb);
+        let agg_downloaded = per_component_downloaded.clone();
+        let agg_totals = per_component_total.clone();
+        let agg_total_components = total;
+        let agg_cancel = tokio_util::sync::CancellationToken::new();
+        let agg_cancel_clone = agg_cancel.clone();
+
+        let aggregator_handle = tokio::spawn(async move {
+            let mut last_percent = u8::MAX;
+            loop {
+                tokio::select! {
+                    _ = agg_cancel_clone.cancelled() => break,
+                    _ = tokio::time::sleep(PROGRESS_EMIT_INTERVAL) => {}
                 }
-            };
+
+                let sum_downloaded: u64 = agg_downloaded.iter().map(|a| a.load(Ordering::Relaxed)).sum();
+                let sum_total: u64 = agg_totals.iter().map(|a| a.load(Ordering::Relaxed)).sum();
+                let percent = if sum_total > 0 {
+                    ((sum_downloaded as f64 / sum_total as f64) * 100.0).round().clamp(0.0, 100.0) as u8
+                } else {
+                    0
+                };
+
+                if percent != last_percent {
+                    last_percent = percent;
+                    agg_progress_cb(DownloadProgress {
+                        step: DownloadStep::Downloading,
+                        percent,
+                        current_component: format!("All {}", agg_total_components),
+                        component_display: "All Components".to_string(),
+                        version: String::new(),
+                        total_components: agg_total_components,
+                        downloaded_bytes: sum_downloaded,
+                        total_bytes: sum_total,
+                    });
+                }
+            }
+        });
+
+        // Spawn parallel download tasks
+        let mut join_set = JoinSet::new();
+
+        for (index, &component) in components.iter().enumerate() {
+            let downloader = self.clone();
+            let dest_dir = temp_dir.clone();
+            let downloaded_atomic = Arc::clone(&per_component_downloaded[index]);
+            let total_atomic = Arc::clone(&per_component_total[index]);
+            let task_total = total;
+
+            join_set.spawn(async move {
+                // Per-component callback only updates atomics — aggregator handles UI
+                let component_cb: ProgressCallback = Box::new(move |progress| {
+                    downloaded_atomic.store(progress.downloaded_bytes, Ordering::Relaxed);
+                    total_atomic.store(progress.total_bytes, Ordering::Relaxed);
+                });
+
+                let path = downloader
+                    .download_component(
+                        component,
+                        &dest_dir,
+                        &component_cb,
+                        (index + 1) as u8,
+                        task_total,
+                    )
+                    .await?;
+
+                Ok::<(BinaryComponent, PathBuf), String>((component, path))
+            });
+        }
+
+        // Collect all download results
+        let mut download_results: Vec<Option<(BinaryComponent, PathBuf)>> =
+            (0..components.len()).map(|_| None).collect();
+        let mut completed = 0_usize;
+
+        while let Some(result) = join_set.join_next().await {
+            let (component, path) = result
+                .map_err(|e| format!("Download task panicked: {}", e))??;
+
+            // Find the index for this component
+            let index = components
+                .iter()
+                .position(|&c| c == component)
+                .ok_or_else(|| format!("Unknown component in download result: {}", component.name()))?;
+            download_results[index] = Some((component, path));
+            completed += 1;
+
+            eprintln!(
+                "[PARALLEL] Downloaded {}/{}: {}",
+                completed,
+                components.len(),
+                component.name()
+            );
+        }
+
+        // Stop the aggregator
+        agg_cancel.cancel();
+        let _ = aggregator_handle.await;
+
+        // --- Phase 2: Install components sequentially ---
+        let mut downloaded_files = Vec::new();
+
+        for (index, result) in download_results.into_iter().enumerate() {
+            let (component, path) = result.ok_or_else(|| {
+                format!(
+                    "Missing download result for component at index {}",
+                    index
+                )
+            })?;
 
             progress_cb(DownloadProgress {
                 step: DownloadStep::Extracting,
                 percent: 0,
-                current_component: self.component_name(current_component),
-                component_display: self.component_display_name(current_component),
-                version: self.get_component_version(&current_component),
+                current_component: self.component_name(component),
+                component_display: self.component_display_name(component),
+                version: self.get_component_version(&component),
                 total_components: total,
                 downloaded_bytes: 0,
                 total_bytes: 0,
             });
 
             let installer = self.clone();
-            let install_component = current_component;
-            let install_path = current_path.clone();
+            let install_path = path.clone();
             let install_runtime_dir = runtime_dir.clone();
-            let install_task = tokio::task::spawn_blocking(move || {
+            tokio::task::spawn_blocking(move || {
                 installer.install_downloaded_component(
-                    install_component,
+                    component,
                     &install_path,
                     &install_runtime_dir,
                 )
-            });
+            })
+            .await
+            .map_err(|e| format!("Install task failed for {}: {}", component.name(), e))??;
 
-            let (next_result, install_result) = tokio::join!(next_download, install_task);
-            install_result.map_err(|e| {
-                format!(
-                    "Install task failed for {}: {}",
-                    current_component.name(),
-                    e
-                )
-            })??;
-            downloaded_files.push(current_path.clone());
-
-            if let Some(result) = next_result {
-                current_component =
-                    next_component.ok_or_else(|| "Missing prefetched component".to_string())?;
-                current_path = result?;
-            }
+            downloaded_files.push(path);
         }
 
         // Create all application directories (config, logs, database data, projects)
@@ -1925,9 +2009,6 @@ impl RuntimeDownloader {
         }
 
         self.finish_download_batch(&progress_cb, total);
-
-        // Keep temp files for user to access if needed
-        // Uncomment to cleanup: let _ = fs::remove_dir_all(temp_dir);
 
         Ok(downloaded_files)
     }
