@@ -1,243 +1,381 @@
-# CHAMP By Thirawat27
+<div align="center">
 
-CHAMP is a cross-platform desktop app for local web development. It provides a self-contained stack with Caddy, PHP-FPM, MySQL or PostgreSQL, phpMyAdmin or Adminer, optional language runtimes, and a public HTTPS preview tunnel for temporary testing.
+<img src="src/assets/CHAMP.png" alt="CHAMP Logo" width="250"/>
 
-CHAMP is designed to run without administrator privileges. Runtime binaries, databases, logs, generated configs, and projects live in the user's writable CHAMP data directory.
+## **CHAMP By Thirawat27**
 
-## Features
+*A modern, cross-platform local web development stack*
 
-- One-click stack control for Caddy, PHP-FPM, and the selected database service.
-- Database tool selection: phpMyAdmin for MySQL or Adminer for PostgreSQL.
-- PHP version management with install and switch support.
-- Optional runtimes for Node.js, Python, Go, and Ruby.
-- Runtime catalog refresh from upstream release metadata.
-- Project templates for Static, PHP, Node, Python, Go, and Ruby projects.
-- HTTPS Preview using Cloudflare Quick Tunnel with a free temporary `trycloudflare.com` URL.
-- Keyboard-first workflow, tray support, toast feedback, and bilingual Thai/English UI.
-- System metrics and runtime/service status monitoring.
+**C**addy + **H**TTP(S) + **A**dminer / phpmy**A**dmin + **M**ySQL + **P**HP
 
-## Current Runtime Catalog
+[Features](#-features) • [Installation](#-installation) • [Usage](#-usage) • [Keyboard Shortcuts](KEYBOARD_SHORTCUTS.md) • [Developer Experience](DX_FEATURES.md) • [Development](#-development) • [Configuration](#-configuration)
 
-The selected defaults are defined in [src-tauri/runtime-config.json](src-tauri/runtime-config.json).
+</div>
 
-| Component   | Default          | Alternatives                                   |
-| ----------- | ---------------- | ---------------------------------------------- |
-| Caddy       | 2.11.4           | Catalog refresh can replace with latest stable |
-| PHP         | 8.5.7            | 8.4, 8.3 LTS, 8.2, and legacy EOL versions     |
-| MySQL       | 9.7.1            | MySQL 8.4 LTS                                  |
-| PostgreSQL  | 18.4             | 17.10, 16.14                                   |
-| Database UI | phpMyAdmin 5.2.3 | Adminer 5.4.2                                  |
-| Node.js     | 24.18.0 LTS      | 26 stable, 22 LTS, 20 LTS                      |
-| Python      | 3.14.6           | 3.13.14                                        |
-| Go          | 1.26.4           | 1.25.11                                        |
-| Ruby        | 4.0.5            | 3.4.9, 3.3.7                                   |
+---
 
-## Default URLs
+## 📖 Overview
 
-| Service    | URL                                |
-| ---------- | ---------------------------------- |
-| Website    | `http://localhost:8080`            |
-| phpMyAdmin | `http://localhost:8080/phpmyadmin` |
-| Adminer    | `http://localhost:8080/adminer`    |
-| MySQL      | `mysql://127.0.0.1:3306`           |
-| PostgreSQL | `postgresql://127.0.0.1:5432`      |
-| PHP-FPM    | `tcp://127.0.0.1:9000`             |
+CHAMP is a self-contained desktop application that provides a complete local web development environment. Unlike traditional solutions like XAMPP, CHAMP is designed to run **without administrator privileges** by keeping all runtime binaries, configurations, logs, and data in the user's writable app data folder.
 
-If a configured port is busy, CHAMP selects an available fallback port and shows it in the UI.
+> **Note:** This project is a fork of [CAMPP](https://github.com/KarnYong/campp) by KarnYong, with enhancements and modifications by Thirawat27.
 
-## HTTPS Preview
+**Key Highlights:**
+- 🚀 **No Admin Required** - Runs entirely in user space with non-default ports
+- 📦 **Self-Contained** - All binaries bundled, no external dependencies
+- 🎯 **Cross-Platform** - Windows, macOS, and Linux support
+- 🔄 **Version Management** - Switch between multiple PHP and MySQL versions
+- 🎨 **Modern UI** - Built with React and Tauri for a native experience
+- ⚡ **Fast & Lightweight** - Rust-powered backend for optimal performance
 
-The Dashboard includes an HTTPS Preview panel. Press **Start HTTPS** to create a free temporary public URL.
+---
 
-How it works:
+## 🛠️ Tech Stack
 
-1. CHAMP starts the selected local stack if Caddy is not already running.
-2. CHAMP installs `cloudflared` into the runtime folder if it is missing.
-3. CHAMP runs `cloudflared tunnel --url http://127.0.0.1:<web-port>`.
-4. CHAMP waits until the generated `trycloudflare.com` domain resolves and responds over HTTPS.
-5. Open and Copy buttons are enabled only after the public URL is ready.
+### Current Versions
 
-Cloudflare Quick Tunnels are intended for testing and development only. The generated domain is temporary and may change each time the tunnel is restarted.
+| Component   | Version | Description                    |
+| ----------- | ------- | ------------------------------ |
+| **Caddy**   | 2.11.2  | Modern web server with HTTPS   |
+| **PHP**     | 8.5.5   | Latest PHP runtime (switchable)|
+| **MySQL**   | 9.7.0   | LTS database server            |
+| **phpMyAdmin** | 5.2.3 | Database management interface |
 
-## Installation
+### Alternative Options
 
-Download a release from GitHub Releases when available:
+- **PHP**: 7.4.33 (EOL), 8.5.5 (Latest)
+- **Database UI**: phpMyAdmin 5.2.3 or Adminer 5.4.2
 
-- Windows: `.msi` or `.exe`
-- macOS: `.dmg`
-- Linux: `.AppImage` or `.deb`
+---
 
-On first launch, the setup wizard checks dependencies, lets you choose packages, downloads runtimes, and creates the local CHAMP data directories.
+## ✨ Features
 
-## Usage
+### Core Functionality
+- ✅ **One-Click Service Management** - Start/stop/restart all services with a single click
+- ✅ **System Tray Integration** - Minimize to tray and control services from the system tray
+- ✅ **Auto-Start Services** - Optionally start services automatically on app launch
+- ✅ **Real-Time Status Monitoring** - Live service status updates and system metrics
+- ✅ **Port Configuration** - Customize ports to avoid conflicts
+- ✅ **Project Management** - Organize and access your web projects easily
 
-1. Launch CHAMP.
-2. Choose the database tool in Settings if needed.
-3. Press **Start** to run the selected stack.
-4. Open **Website**, **phpMyAdmin/Adminer**, **Projects**, or **Runtime** from the Dashboard.
-5. Use **More > Terminal** to open a terminal with installed runtimes injected into `PATH`.
-6. Use **Create Project** to scaffold a starter project.
-7. Use **Start HTTPS** to test or share the current local website over a temporary HTTPS URL.
+### Advanced Features
+- 🔄 **Multi-Version Support** - Install and switch between different PHP/MySQL versions
+- 📦 **Package Selection** - Choose which components to install during first run
+- 🔒 **Secure by Default** - Isolated user environment, no system-wide changes
+- 📊 **System Metrics** - Monitor CPU, memory, and disk usage
+- 🗂️ **Custom Configuration** - Advanced users can customize runtime configs
+- 🐛 **Debug Mode** - Developer menu with runtime folder access and reset options
+- ⌨️ **Keyboard Shortcuts** - Control the app without touching the mouse
 
-## Keyboard Shortcuts
+---
 
-- `Ctrl/Cmd + S`: start the selected stack.
-- `Ctrl/Cmd + R`: restart the selected stack.
-- `Ctrl/Cmd + X`: stop the selected stack.
-- `Ctrl/Cmd + W`: open the local website.
-- `Ctrl/Cmd + D`: open phpMyAdmin or Adminer.
-- `Ctrl/Cmd + O`: open the projects folder.
-- `Ctrl/Cmd + L`: open the logs folder.
-- `Ctrl/Cmd + T`: open a terminal with CHAMP runtimes on `PATH`.
-- `Ctrl/Cmd + ,`: toggle Settings.
-- `?`: show shortcut help.
-- `Esc`: dismiss a toast or close the active modal.
+## 🌐 Default URLs
 
-## Developer Experience
+| Service          | URL                                  |
+| ---------------- | ------------------------------------ |
+| **Web Server**   | http://localhost:8080                |
+| **phpMyAdmin**   | http://localhost:8080/phpmyadmin     |
+| **Adminer**      | http://localhost:8080/adminer        |
+| **MySQL**        | 127.0.0.1:3306                       |
+| **PHP-FPM**      | 127.0.0.1:9000 (internal)            |
 
-- Dashboard status and HTTPS tunnel status refresh together to reduce duplicate IPC work.
-- System metrics polling is throttled and pauses while the app is hidden.
-- HTTPS Preview waits for DNS and HTTPS readiness before showing Open or Copy.
-- Project terminals include installed runtime paths automatically.
-- Toasts and service cards expose actionable pending, success, and error states.
+> **Note:** All ports can be customized in the Settings panel to avoid conflicts with other services.
 
-## Development
+---
+
+## 📥 Installation
+
+### Download Pre-Built Binaries
+
+Download the latest release for your platform from the [Releases](https://github.com/thirawat27/CHAMP/releases) page:
+
+- **Windows**: `CHAMP_x.x.x_x64_en-US.msi` or `.exe`
+- **macOS**: `CHAMP_x.x.x_aarch64.dmg` (Apple Silicon) or `CHAMP_x.x.x_x64.dmg` (Intel)
+- **Linux**: `CHAMP_x.x.x_amd64.AppImage` or `.deb`
+
+### First Run Setup
+
+1. Launch CHAMP
+2. The **First-Run Wizard** will guide you through:
+   - System dependency checks
+   - Package selection (choose which components to install)
+   - Runtime binary downloads
+   - Initial configuration
+3. Once complete, you're ready to start developing!
+
+---
+
+## 🚀 Usage
+
+### Starting Services
+
+1. Open CHAMP
+2. Click **Start All** to launch all services
+3. Access your projects at http://localhost:8080
+4. Manage your database at http://localhost:8080/phpmyadmin
+
+### Managing Services
+
+- **Individual Control**: Start/stop/restart each service independently
+- **Bulk Operations**: Use "Start All" or "Stop All" for convenience
+- **Auto-Start**: Enable in Settings to start services on app launch
+
+### Keyboard Shortcuts
+
+CHAMP provides comprehensive keyboard shortcuts for efficient workflow:
+
+#### Service Control
+| Shortcut | Action |
+| -------- | ------ |
+| `Ctrl / Cmd + S` | Start all services |
+| `Ctrl / Cmd + R` | Restart all services |
+| `Ctrl / Cmd + X` | Stop all services |
+
+#### Quick Access
+| Shortcut | Action |
+| -------- | ------ |
+| `Ctrl / Cmd + W` | Open website (localhost) |
+| `Ctrl / Cmd + D` | Open database tool (phpMyAdmin/Adminer) |
+| `Ctrl / Cmd + O` | Open projects folder |
+| `Ctrl / Cmd + L` | Open logs folder |
+
+#### UI Navigation
+| Shortcut | Action |
+| -------- | ------ |
+| `Ctrl / Cmd + ,` | Toggle Settings panel |
+| `?` | Show keyboard shortcuts help |
+| `Esc` | Dismiss notification or close Settings |
+
+> **Language-Independent**: All shortcuts use physical key positions (`e.code`) so they work regardless of keyboard language (Thai, English, etc.).
+
+📖 **[View Complete Keyboard Shortcuts Documentation](KEYBOARD_SHORTCUTS.md)**
+
+### System Tray
+
+- **Minimize to Tray**: Close the window to minimize to system tray
+- **Quick Access**: Right-click the tray icon for quick actions
+- **Background Operation**: Services continue running when minimized
+
+### Switching PHP Versions
+
+1. Open **Settings** panel
+2. Navigate to **PHP Version** section
+3. Select desired version from dropdown
+4. Click **Switch Version** (downloads if not installed)
+5. Restart PHP-FPM service
+
+---
+
+## 💻 Development
 
 ### Prerequisites
 
-- Node.js 18+ and pnpm 10+
-- Rust stable
-- Tauri platform dependencies
-- Windows: WebView2 Runtime
-- macOS: Xcode Command Line Tools
-- Linux: WebKitGTK dependencies for Tauri
+- **Node.js** 18+ and **pnpm** 10+
+- **Rust** 1.70+ (for Tauri backend)
+- **Platform-specific requirements**:
+  - Windows: WebView2 Runtime
+  - macOS: Xcode Command Line Tools
+  - Linux: webkit2gtk, libssl-dev
 
-### Commands
+### Setup
 
 ```bash
+# Clone the repository
+git clone https://github.com/thirawat27/CHAMP.git
+cd CHAMP
+
+# Install dependencies
 pnpm install
-pnpm dev
-pnpm build
-pnpm test:run
-pnpm lint
+
+# Run in development mode
 pnpm tauri dev
-pnpm tauri build
 ```
 
-Rust backend commands:
+### Available Scripts
+
+#### Frontend (React + Vite)
+
+```bash
+pnpm dev          # Start Vite dev server (http://localhost:1420)
+pnpm build        # Build frontend for production
+pnpm preview      # Preview production build
+pnpm test         # Run tests with Vitest
+pnpm test:ui      # Run tests with UI
+pnpm lint         # Lint TypeScript files
+pnpm lint:fix     # Fix linting issues
+pnpm format       # Format code with Prettier
+```
+
+#### Backend (Rust + Tauri)
 
 ```bash
 cd src-tauri
-cargo fmt
-cargo test
-cargo clippy --all-targets -- -D warnings
+
+cargo build       # Build Rust backend
+cargo test        # Run Rust tests
+cargo clippy      # Lint Rust code
+cargo fmt         # Format Rust code
 ```
 
-## Architecture
+#### Full Application
 
-```text
-src/
-  App.tsx
-  App.css
-  components/
-    Dashboard.tsx
-    ServiceCard.tsx
-    FirstRunWizard.tsx
-    SettingsPanel.tsx
-    StatusBar.tsx
-    TemplateSelector.tsx
-  i18n/translations.ts
-  stores/languageStore.ts
-  types/services.ts
-
-src-tauri/src/
-  lib.rs
-  commands.rs
-  tunnel.rs
-  process/manager.rs
-  config/
-  runtime/
+```bash
+pnpm tauri dev    # Run full app in dev mode
+pnpm tauri build  # Build production app with installers
 ```
 
-Key backend responsibilities:
+### Project Structure
 
-- `process/manager.rs`: starts, stops, and monitors Caddy, PHP-FPM, MySQL, and PostgreSQL.
-- `runtime/downloader.rs`: downloads and installs runtime archives.
-- `runtime/packages.rs`: loads and refreshes the runtime catalog.
-- `runtime/locator.rs`: resolves installed runtime binaries and CHAMP data paths.
-- `commands.rs`: exposes Tauri IPC commands to the React frontend.
-- `tunnel.rs`: installs and manages Cloudflare Quick Tunnel for HTTPS Preview.
-
-## Data Directories
-
-Default user data directory:
-
-```text
-%LOCALAPPDATA%\CHAMP\       Windows
-~/Library/Application Support/CHAMP/  macOS
-~/.local/share/CHAMP/       Linux, depending on XDG settings
 ```
-
-Directory layout:
-
-```text
 CHAMP/
-  config/
-  logs/
-  mysql/data/
-  postgresql/data/
-  projects/
-  runtime/
+├── src/                      # React frontend
+│   ├── components/           # UI components
+│   │   ├── Dashboard.tsx     # Main dashboard
+│   │   ├── ServiceCard.tsx   # Service control cards
+│   │   ├── FirstRunWizard.tsx # Setup wizard
+│   │   └── SettingsPanel.tsx # Settings UI
+│   ├── hooks/                # Custom React hooks
+│   ├── types/                # TypeScript definitions
+│   └── App.tsx               # Main app component
+├── src-tauri/                # Rust backend
+│   ├── src/
+│   │   ├── commands.rs       # Tauri IPC commands
+│   │   ├── process/          # Service process management
+│   │   ├── config/           # Configuration generation
+│   │   ├── runtime/          # Binary download & locator
+│   │   └── lib.rs            # Main library entry
+│   ├── runtime-config.json   # Runtime binary definitions
+│   └── tauri.conf.json       # Tauri app configuration
+└── package.json              # Node.js dependencies
 ```
 
-Portable mode is supported through `CHAMP_DATA_DIR`, `CHAMP_PORTABLE_DIR`, `CHAMP_PORTABLE`, or portable marker files.
+### Architecture
 
-## Runtime Customization
+**Frontend (React + TypeScript)**
+- Modern React 19 with TypeScript
+- Tailwind CSS for styling
+- Lucide React for icons
+- Tauri IPC for backend communication
 
-See [src-tauri/CUSTOM_VERSIONS.md](src-tauri/CUSTOM_VERSIONS.md).
+**Backend (Rust + Tauri)**
+- Modular architecture with clear separation of concerns
+- Process management for service lifecycle
+- Configuration generation with Mustache templates
+- Runtime binary download and verification
+- Cross-platform path handling
 
-## Testing
+---
 
-See [tests/README.md](tests/README.md).
+## ⚙️ Configuration
 
-Current verification set:
+### User Data Directory
 
-```bash
-pnpm lint
-pnpm build
-pnpm test:run
-cd src-tauri
-cargo test
-cargo clippy --all-targets -- -D warnings
+CHAMP stores all data in platform-specific user directories:
+
+**Windows:**
+```
+%LOCALAPPDATA%\CHAMP\
+├── config\           # Generated service configs
+├── logs\             # Service logs
+├── mysql\data\       # MySQL database files
+├── projects\         # Your web projects
+└── runtime\          # Downloaded binaries
 ```
 
-## Troubleshooting
+**macOS/Linux:**
+```
+~/.campp/
+├── config/
+├── logs/
+├── mysql/data/
+├── projects/
+└── runtime/
+```
 
-### HTTPS Preview shows DNS_PROBE_FINISHED_NXDOMAIN
+### Runtime Configuration
 
-This means the generated Cloudflare domain was opened before DNS was ready, or the quick tunnel expired. Current CHAMP builds keep Open/Copy disabled until the URL responds over HTTPS. If it still happens, stop HTTPS and start it again to generate a fresh tunnel.
+Advanced users can customize binary versions and download URLs by editing:
+- `runtime-config.json` - Default configuration (bundled with app)
+- `runtime-config.user.json` - User overrides (optional)
 
-### Services do not start
+See `runtime-config.schema.json` for the full configuration schema.
 
-Check service logs under `logs/`, verify runtime installation, and review fallback port messages in the Dashboard.
+### Settings
 
-### Runtime download fails
+Accessible via the Settings panel in the app (or press `Ctrl/Cmd + ,`):
+- **Ports**: Customize service ports
+- **Auto-Start**: Enable/disable automatic service startup
+- **Project Folder**: Set default project directory
+- **PHP Version**: Switch between installed PHP versions
+- **MySQL Version**: Switch between installed MySQL versions
 
-Use Settings or the setup wizard to refresh the runtime catalog. Advanced users can override runtime URLs with `runtime-config.json`.
+---
 
-## License
+## 🐛 Troubleshooting
 
-MIT. See [LICENSE](LICENSE).
+### Services Won't Start
 
-## Acknowledgments
+1. Check if ports are already in use
+2. Review service logs in `logs/` directory
+3. Verify runtime binaries are installed
+4. Try "Reset Installation" from Debug menu (dev mode)
 
-- Original project: [CAMPP](https://github.com/KarnYong/campp)
-- [Tauri](https://tauri.app/)
-- [React](https://react.dev/)
-- [Caddy](https://caddyserver.com/)
-- [PHP](https://www.php.net/)
-- [MySQL](https://www.mysql.com/)
-- [PostgreSQL](https://www.postgresql.org/)
-- [phpMyAdmin](https://www.phpmyadmin.net/)
-- [Adminer](https://www.adminer.org/)
-- [Cloudflare Tunnel](https://developers.cloudflare.com/cloudflare-one/networks/connectors/cloudflare-tunnel/)
+### Port Conflicts
+
+1. Open Settings panel
+2. Change conflicting ports
+3. Restart affected services
+
+### Reset Installation
+
+In development mode:
+1. Open Debug menu
+2. Select "Reset Installation"
+3. Re-run First-Run Wizard
+
+---
+
+## 🤝 Contributing
+
+Contributions are welcome! Please feel free to submit a Pull Request.
+
+1. Fork the repository
+2. Create your feature branch (`git checkout -b feature/AmazingFeature`)
+3. Commit your changes (`git commit -m 'Add some AmazingFeature'`)
+4. Push to the branch (`git push origin feature/AmazingFeature`)
+5. Open a Pull Request
+
+---
+
+## 📄 License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+**License Holder:** Thirawat Sinlapasomsak
+
+---
+
+## 🙏 Acknowledgments
+
+- **Original Project**: [CAMPP](https://github.com/KarnYong/campp) by KarnYong - The foundation and inspiration for this project
+- [Tauri](https://tauri.app/) - Desktop app framework
+- [Caddy](https://caddyserver.com/) - Modern web server
+- [PHP](https://www.php.net/) - Server-side scripting
+- [MySQL](https://www.mysql.com/) - Database server
+- [phpMyAdmin](https://www.phpmyadmin.net/) - Database management
+- [React](https://react.dev/) - UI framework
+
+---
+
+## 📞 Support
+
+- **Issues**: [GitHub Issues](https://github.com/thirawat27/CHAMP/issues)
+- **Repository**: [github.com/thirawat27/CHAMP](https://github.com/thirawat27/CHAMP)
+
+---
+
+<div align="center">
+
+Made with ❤️ by [Thirawat27](https://github.com/thirawat27)
+
+</div>
