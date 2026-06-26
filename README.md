@@ -24,7 +24,7 @@ CHAMP is a self-contained desktop application that provides a complete local web
 - 🚀 **No Admin Required** - Runs entirely in user space with non-default ports
 - 📦 **Self-Contained** - All binaries bundled, no external dependencies
 - 🎯 **Cross-Platform** - Windows, macOS, and Linux support
-- 🔄 **Version Management** - Switch between multiple PHP and MySQL versions
+- 🔄 **Version Management** - Switch between multiple PHP, MySQL, and PostgreSQL versions, plus optional Node.js, Python, Go, and Ruby runtimes
 - 🎨 **Modern UI** - Built with React and Tauri for a native experience
 - ⚡ **Fast & Lightweight** - Rust-powered backend for optimal performance
 
@@ -36,15 +36,18 @@ CHAMP is a self-contained desktop application that provides a complete local web
 
 | Component   | Version | Description                    |
 | ----------- | ------- | ------------------------------ |
-| **Caddy**   | 2.11.2  | Modern web server with HTTPS   |
-| **PHP**     | 8.5.5   | Latest PHP runtime (switchable)|
-| **MySQL**   | 9.7.0   | LTS database server            |
-| **phpMyAdmin** | 5.2.3 | Database management interface |
+| **Caddy**      | 2.11.4  | Modern web server with HTTPS   |
+| **PHP**        | 8.5.7   | Latest PHP runtime (switchable)|
+| **MySQL**      | 9.7.1   | LTS database server            |
+| **PostgreSQL** | 18.4    | Stable database server         |
+| **phpMyAdmin** | 5.2.3   | Database management interface |
+| **Adminer**    | 5.4.2   | Lightweight database interface |
 
 ### Alternative Options
 
-- **PHP**: 7.4.33 (EOL), 8.5.5 (Latest)
+- **PHP**: 7.4.33 (EOL), 8.5.7 (Latest)
 - **Database UI**: phpMyAdmin 5.2.3 or Adminer 5.4.2
+- **Databases**: MySQL 9.7.1 or PostgreSQL 18.4
 
 ---
 
@@ -59,8 +62,8 @@ CHAMP is a self-contained desktop application that provides a complete local web
 - ✅ **Project Management** - Organize and access your web projects easily
 
 ### Advanced Features
-- 🔄 **Multi-Version Support** - Install and switch between different PHP/MySQL versions
-- 📦 **Package Selection** - Choose which components to install during first run
+- 🔄 **Multi-Version Support** - Install and switch between different PHP, MySQL, and PostgreSQL versions
+- 📦 **Package Selection** - Choose which components and optional runtimes to install during first run
 - 🔒 **Secure by Default** - Isolated user environment, no system-wide changes
 - 📊 **System Metrics** - Monitor CPU, memory, and disk usage
 - 🗂️ **Custom Configuration** - Advanced users can customize runtime configs
@@ -74,9 +77,9 @@ CHAMP is a self-contained desktop application that provides a complete local web
 | Service          | URL                                  |
 | ---------------- | ------------------------------------ |
 | **Web Server**   | http://localhost:8080                |
-| **phpMyAdmin**   | http://localhost:8080/phpmyadmin     |
-| **Adminer**      | http://localhost:8080/adminer        |
+| **Database Tool** | http://localhost:8080/phpmyadmin or http://localhost:8080/adminer |
 | **MySQL**        | 127.0.0.1:3306                       |
+| **PostgreSQL**   | 127.0.0.1:5432                       |
 | **PHP-FPM**      | 127.0.0.1:9000 (internal)            |
 
 > **Note:** All ports can be customized in the Settings panel to avoid conflicts with other services.
@@ -112,7 +115,7 @@ Download the latest release for your platform from the [Releases](https://github
 1. Open CHAMP
 2. Click **Start All** to launch all services
 3. Access your projects at http://localhost:8080
-4. Manage your database at http://localhost:8080/phpmyadmin
+4. Manage your database at http://localhost:8080/phpmyadmin or http://localhost:8080/adminer, depending on the selected tool
 
 ### Managing Services
 
@@ -138,6 +141,7 @@ CHAMP provides comprehensive keyboard shortcuts for efficient workflow:
 | `Ctrl / Cmd + D` | Open database tool (phpMyAdmin/Adminer) |
 | `Ctrl / Cmd + O` | Open projects folder |
 | `Ctrl / Cmd + L` | Open logs folder |
+| `Ctrl / Cmd + T` | Open a terminal with CHAMP runtimes on PATH |
 
 #### UI Navigation
 | Shortcut | Action |
@@ -170,7 +174,7 @@ CHAMP provides comprehensive keyboard shortcuts for efficient workflow:
 
 ### Prerequisites
 
-- **Node.js** 18+ and **pnpm** 10+
+- **Node.js** 18+ and **pnpm** 11+
 - **Rust** 1.70+ (for Tauri backend)
 - **Platform-specific requirements**:
   - Windows: WebView2 Runtime
@@ -308,6 +312,8 @@ Accessible via the Settings panel in the app (or press `Ctrl/Cmd + ,`):
 - **Project Folder**: Set default project directory
 - **PHP Version**: Switch between installed PHP versions
 - **MySQL Version**: Switch between installed MySQL versions
+- **PostgreSQL Version**: Switch between installed PostgreSQL versions
+- **Additional Runtimes**: Install and manage Node.js, Python, Go, and Ruby versions
 
 ---
 
