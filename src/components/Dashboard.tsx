@@ -10,6 +10,7 @@ import {
   Globe,
   HardDrive,
   LoaderCircle,
+  MoreHorizontal,
   Play,
   RefreshCw,
   Settings,
@@ -68,52 +69,51 @@ interface DashboardNotice {
 
 const STACK_COMMAND_COPY = {
   start_all_services: {
-    pendingTitle: "Starting stack",
-    pendingMessage: "The selected CHAMP stack is starting. This can take a few seconds.",
-    successTitle: "Stack started",
-    successMessage: "All stack commands finished. Statuses are refreshing now.",
-    buttonLabel: "Starting...",
+    pendingTitleKey: "stackStartingTitle",
+    pendingMessageKey: "stackStartingMessage",
+    successTitleKey: "stackStartedTitle",
+    successMessageKey: "stackStartedMessage",
+    buttonLabelKey: "starting",
     action: "start",
   },
   restart_all_services: {
-    pendingTitle: "Restarting stack",
-    pendingMessage:
-      "Services are stopping and starting again. The dashboard will update automatically.",
-    successTitle: "Stack restarted",
-    successMessage: "Restart command finished. Statuses are refreshing now.",
-    buttonLabel: "Restarting...",
+    pendingTitleKey: "stackRestartingTitle",
+    pendingMessageKey: "stackRestartingMessage",
+    successTitleKey: "stackRestartedTitle",
+    successMessageKey: "stackRestartedMessage",
+    buttonLabelKey: "restarting",
     action: "restart",
   },
   stop_all_services: {
-    pendingTitle: "Stopping stack",
-    pendingMessage: "Services are shutting down. This can take a moment.",
-    successTitle: "Stack stopped",
-    successMessage: "All services have received the stop command.",
-    buttonLabel: "Stopping...",
+    pendingTitleKey: "stackStoppingTitle",
+    pendingMessageKey: "stackStoppingMessage",
+    successTitleKey: "stackStoppedTitle",
+    successMessageKey: "stackStoppedMessage",
+    buttonLabelKey: "stopping",
     action: "stop",
   },
 } as const;
 
 const SERVICE_COMMAND_COPY = {
   start_service: {
-    pendingTitle: "Starting service",
-    pendingMessage: "The service is starting. Status will update automatically.",
-    successTitle: "Service started",
-    buttonLabel: "Starting...",
+    pendingTitleKey: "serviceStartingTitle",
+    pendingMessageKey: "serviceStartingMessage",
+    successTitleKey: "serviceStarted",
+    buttonLabelKey: "starting",
     action: "start",
   },
   restart_service: {
-    pendingTitle: "Restarting service",
-    pendingMessage: "The service is restarting. Status will update automatically.",
-    successTitle: "Service restarted",
-    buttonLabel: "Restarting...",
+    pendingTitleKey: "serviceRestartingTitle",
+    pendingMessageKey: "serviceRestartingMessage",
+    successTitleKey: "serviceRestarted",
+    buttonLabelKey: "restarting",
     action: "restart",
   },
   stop_service: {
-    pendingTitle: "Stopping service",
-    pendingMessage: "The service is stopping. Status will update automatically.",
-    successTitle: "Service stopped",
-    buttonLabel: "Stopping...",
+    pendingTitleKey: "serviceStoppingTitle",
+    pendingMessageKey: "serviceStoppingMessage",
+    successTitleKey: "serviceStopped",
+    buttonLabelKey: "stopping",
     action: "stop",
   },
 } as const;
@@ -144,6 +144,7 @@ export function Dashboard() {
   const [busy, setBusy] = useState<string | null>(null);
   const [notice, setNotice] = useState<DashboardNotice | null>(null);
   const [showProjectCreator, setShowProjectCreator] = useState(false);
+  const [showQuickActionsMenu, setShowQuickActionsMenu] = useState(false);
 
   // Initialize audio context on first user interaction
   useEffect(() => {
@@ -278,9 +279,9 @@ export function Dashboard() {
         return fallbackMessage;
       }
 
-      return `Using fallback ports: ${changedPorts.join(", ")}.`;
+      return t.fallbackPortsUsed.replace("{ports}", changedPorts.join(", "));
     };
-  }, [expectedPorts]);
+  }, [expectedPorts, t]);
 
   const runStackCommand = useCallback(
     async (command: "start_all_services" | "stop_all_services" | "restart_all_services") => {
@@ -289,8 +290,8 @@ export function Dashboard() {
       setNotice({
         tone: "info",
         action: copy.action,
-        title: copy.pendingTitle,
-        message: copy.pendingMessage,
+        title: t[copy.pendingTitleKey],
+        message: t[copy.pendingMessageKey],
       });
       markStackTransition(command);
       try {
@@ -300,14 +301,14 @@ export function Dashboard() {
         setNotice({
           tone: "success",
           action: copy.action,
-          title: copy.successTitle,
-          message: fallbackPortMessage(statuses, copy.successMessage),
+          title: t[copy.successTitleKey],
+          message: fallbackPortMessage(statuses, t[copy.successMessageKey]),
         });
       } catch (error) {
         AudioManager.playNotification("error");
         setNotice({
           tone: "error",
-          title: `${command.replace(/_/g, " ")} failed`,
+          title: t.commandFailed,
           message: String(error),
         });
         await refreshStatuses();
@@ -315,7 +316,38 @@ export function Dashboard() {
         setBusy(null);
       }
     },
-    [refreshStatuses, fallbackPortMessage, markStackTransition]
+    [refreshStatuses, fallbackPortMessage, markStackTransition, t]
+  );
+
+  const openFolder = useCallback(
+    async (path?: string) => {
+      if (!path) return;
+      try {
+        await invoke("open_folder", { path });
+      } catch (error) {
+        setNotice({
+          tone: "error",
+          title: t.openFolderFailed,
+          message: String(error),
+        });
+      }
+    },
+    [t]
+  );
+
+  const openTerminal = useCallback(
+    async (path?: string) => {
+      try {
+        await invoke("open_project_terminal", { path: path || null });
+      } catch (error) {
+        setNotice({
+          tone: "error",
+          title: t.openTerminalFailed,
+          message: String(error),
+        });
+      }
+    },
+    [t]
   );
 
   // Keyboard shortcuts
@@ -391,6 +423,8 @@ export function Dashboard() {
     databaseToolUrl,
     showSettings,
     showHelp,
+    openFolder,
+    openTerminal,
   ]);
 
   useEffect(() => {
@@ -416,6 +450,24 @@ export function Dashboard() {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [showProjectCreator]);
 
+  useEffect(() => {
+    if (!showQuickActionsMenu) return undefined;
+
+    const closeMenu = () => setShowQuickActionsMenu(false);
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.code === "Escape") {
+        setShowQuickActionsMenu(false);
+      }
+    };
+
+    window.addEventListener("click", closeMenu);
+    window.addEventListener("keydown", handleKeyDown);
+    return () => {
+      window.removeEventListener("click", closeMenu);
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [showQuickActionsMenu]);
+
   const runServiceCommand = async (
     command: "start_service" | "stop_service" | "restart_service",
     service: ServiceType
@@ -426,8 +478,8 @@ export function Dashboard() {
     setNotice({
       tone: "info",
       action: copy.action,
-      title: `${copy.pendingTitle}: ${displayName}`,
-      message: copy.pendingMessage,
+      title: `${t[copy.pendingTitleKey]}: ${displayName}`,
+      message: t[copy.pendingMessageKey],
     });
     markServiceTransition(command, service);
     try {
@@ -437,44 +489,19 @@ export function Dashboard() {
       setNotice({
         tone: "success",
         action: copy.action,
-        title: `${copy.successTitle}: ${displayName}`,
-        message: fallbackPortMessage(statuses, "The dashboard is refreshing service status."),
+        title: `${t[copy.successTitleKey]}: ${displayName}`,
+        message: fallbackPortMessage(statuses, t.dashboardRefreshingStatus),
       });
     } catch (error) {
       AudioManager.playNotification("error");
       setNotice({
         tone: "error",
-        title: `Failed to ${command.split("_")[0]} ${displayName}`,
+        title: `${t.commandFailed}: ${displayName}`,
         message: String(error),
       });
       await refreshStatuses();
     } finally {
       setBusy(null);
-    }
-  };
-
-  const openFolder = async (path?: string) => {
-    if (!path) return;
-    try {
-      await invoke("open_folder", { path });
-    } catch (error) {
-      setNotice({
-        tone: "error",
-        title: "Failed to open folder",
-        message: String(error),
-      });
-    }
-  };
-
-  const openTerminal = async (path?: string) => {
-    try {
-      await invoke("open_project_terminal", { path: path || null });
-    } catch (error) {
-      setNotice({
-        tone: "error",
-        title: "Failed to open terminal",
-        message: String(error),
-      });
     }
   };
 
@@ -576,8 +603,8 @@ export function Dashboard() {
           <button
             className="icon-button github"
             onClick={() => openUrl(SOURCE_REPO_URL)}
-            title="Source repository"
-            aria-label="Source repository"
+            title={t.sourceRepository}
+            aria-label={t.sourceRepository}
           >
             <GitHubIcon size={18} />
           </button>
@@ -686,62 +713,94 @@ export function Dashboard() {
               <Folder size={16} /> {t.projects}
             </button>
             <button
-              className="btn-quick-action action-terminal"
+              className="btn-quick-action action-runtime"
               onClick={() => {
                 AudioManager.playClick();
-                openTerminal(appPaths?.projects_dir);
+                openFolder(appPaths?.runtime_dir);
               }}
-              title={`${t.openTerminal} (Ctrl+T)`}
+              title={t.openRuntimeFolder}
               onMouseEnter={() => AudioManager.playHover()}
             >
-              <TerminalSquare size={16} /> {t.terminal}
+              <HardDrive size={16} /> {t.runtime}
             </button>
-            <button
-              className="btn-quick-action action-create-project"
-              onClick={() => {
-                AudioManager.playClick();
-                setShowProjectCreator(true);
-              }}
-              title={t.createProject}
-              onMouseEnter={() => AudioManager.playHover()}
-            >
-              <FilePlus2 size={16} /> {t.createProject}
-            </button>
-            <button
-              className="btn-quick-action action-logs"
-              onClick={() => {
-                AudioManager.playClick();
-                openFolder(appPaths?.logs_dir);
-              }}
-              title={`${t.openLogsFolder} (Ctrl+L)`}
-              onMouseEnter={() => AudioManager.playHover()}
-            >
-              <TerminalSquare size={16} /> {t.logs}
-            </button>
-            <button
-              className="btn-quick-action action-config"
-              onClick={() => {
-                AudioManager.playClick();
-                openFolder(appPaths?.config_dir);
-              }}
-              title={t.settings}
-              onMouseEnter={() => AudioManager.playHover()}
-            >
-              <HardDrive size={16} /> {t.settings}
-            </button>
-            <button
-              className="btn-quick-action github"
-              onClick={() => openUrl(SOURCE_REPO_URL)}
-              title="GitHub"
-              onMouseEnter={() => AudioManager.playHover()}
-            >
-              <GitHubIcon size={16} /> GitHub
-            </button>
+            <div className="quick-actions-menu-wrap" onClick={(event) => event.stopPropagation()}>
+              <button
+                className="btn-quick-action action-more"
+                onClick={() => {
+                  AudioManager.playClick();
+                  setShowQuickActionsMenu((current) => !current);
+                }}
+                title={t.more || "More"}
+                aria-haspopup="menu"
+                aria-expanded={showQuickActionsMenu}
+                onMouseEnter={() => AudioManager.playHover()}
+              >
+                <MoreHorizontal size={16} /> {t.more || "More"}
+              </button>
+              {showQuickActionsMenu && (
+                <div className="quick-actions-menu" role="menu">
+                  <button
+                    className="quick-menu-action"
+                    role="menuitem"
+                    onClick={() => {
+                      AudioManager.playClick();
+                      setShowQuickActionsMenu(false);
+                      openTerminal(appPaths?.projects_dir);
+                    }}
+                  >
+                    <TerminalSquare size={16} /> {t.terminal}
+                  </button>
+                  <button
+                    className="quick-menu-action"
+                    role="menuitem"
+                    onClick={() => {
+                      AudioManager.playClick();
+                      setShowQuickActionsMenu(false);
+                      setShowProjectCreator(true);
+                    }}
+                  >
+                    <FilePlus2 size={16} /> {t.createProject}
+                  </button>
+                  <button
+                    className="quick-menu-action"
+                    role="menuitem"
+                    onClick={() => {
+                      AudioManager.playClick();
+                      setShowQuickActionsMenu(false);
+                      openFolder(appPaths?.logs_dir);
+                    }}
+                  >
+                    <TerminalSquare size={16} /> {t.logs}
+                  </button>
+                  <button
+                    className="quick-menu-action"
+                    role="menuitem"
+                    onClick={() => {
+                      AudioManager.playClick();
+                      setShowQuickActionsMenu(false);
+                      openFolder(appPaths?.config_dir);
+                    }}
+                  >
+                    <HardDrive size={16} /> {t.settings}
+                  </button>
+                  <button
+                    className="quick-menu-action"
+                    role="menuitem"
+                    onClick={() => {
+                      setShowQuickActionsMenu(false);
+                      openUrl(SOURCE_REPO_URL);
+                    }}
+                  >
+                    <GitHubIcon size={16} /> GitHub
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
         </section>
 
         {versionBadges.length > 0 && (
-          <section className="version-strip" aria-label="Installed versions">
+          <section className="version-strip" aria-label={t.installedVersionsLabel}>
             {versionBadges.map(([name, version]) => (
               <span key={name}>
                 {name} {version}
@@ -767,7 +826,7 @@ export function Dashboard() {
                 busy={Boolean(busyServiceCommand)}
                 busyLabel={
                   busyServiceCommand
-                    ? SERVICE_COMMAND_COPY[busyServiceCommand].buttonLabel
+                    ? t[SERVICE_COMMAND_COPY[busyServiceCommand].buttonLabelKey]
                     : undefined
                 }
                 onStart={() => runServiceCommand("start_service", serviceType)}

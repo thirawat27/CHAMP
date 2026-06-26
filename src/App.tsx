@@ -4,12 +4,13 @@ import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { Dashboard } from "./components/Dashboard";
 import { FirstRunWizard } from "./components/FirstRunWizard";
-import { initializeLanguage } from "./stores/languageStore";
+import { initializeLanguage, useTranslation } from "./stores/languageStore";
 import "./App.css";
 
 const isTauriRuntime = () => "__TAURI_INTERNALS__" in window;
 
 function App() {
+  const { t } = useTranslation();
   const [isFirstRun, setIsFirstRun] = useState<boolean | null>(null);
   const [showDebugMenu, setShowDebugMenu] = useState(false);
 
@@ -80,7 +81,7 @@ function App() {
   };
 
   const handleResetInstallation = async () => {
-    if (confirm("Reset installation? This will stop all services and delete runtime binaries.")) {
+    if (confirm(t.resetInstallationConfirm)) {
       try {
         // Stop all services first
         await invoke("cleanup_all_services");
@@ -89,7 +90,7 @@ function App() {
         setShowDebugMenu(false);
       } catch (error) {
         console.error("Failed to reset:", error);
-        alert("Failed to reset: " + error);
+        alert(`${t.resetFailed}: ${error}`);
       }
     }
   };
@@ -100,7 +101,7 @@ function App() {
       await invoke("open_folder", { path: runtimeDir });
     } catch (error) {
       console.error("Failed to open folder:", error);
-      alert("Failed to open folder: " + error);
+      alert(`${t.openFolderFailed}: ${error}`);
     }
   };
 
@@ -110,7 +111,7 @@ function App() {
       await invoke("open_folder", { path: downloadDir });
     } catch (error) {
       console.error("Failed to open download folder:", error);
-      alert("Failed to open download folder: " + error);
+      alert(`${t.openDownloadFolderFailed}: ${error}`);
     }
   };
 
@@ -125,7 +126,7 @@ function App() {
           color: "var(--text-secondary)",
         }}
       >
-        <p style={{ fontSize: "1.25rem" }}>Loading...</p>
+        <p style={{ fontSize: "1.25rem" }}>{t.loading}</p>
       </div>
     );
   }
@@ -160,7 +161,7 @@ function App() {
               fontWeight: 500,
             }}
           >
-            <span>Debug Menu</span>
+            <span>{t.debugMenu}</span>
             <button
               onClick={() => setShowDebugMenu(false)}
               style={{
@@ -175,7 +176,9 @@ function App() {
               ×
             </button>
           </div>
-          <div style={{ display: "flex", flexDirection: "column", padding: "0.5rem", gap: "0.5rem" }}>
+          <div
+            style={{ display: "flex", flexDirection: "column", padding: "0.5rem", gap: "0.5rem" }}
+          >
             <button
               onClick={handleOpenRuntimeFolder}
               style={{
@@ -188,10 +191,14 @@ function App() {
                 fontSize: "0.875rem",
                 color: "var(--text-primary)",
               }}
-              onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = "var(--bg-card)"; }}
-              onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = "var(--bg-card-secondary)"; }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.backgroundColor = "var(--bg-card)";
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.backgroundColor = "var(--bg-card-secondary)";
+              }}
             >
-              Open Runtime Folder
+              {t.openRuntimeFolder}
             </button>
             <button
               onClick={handleOpenDownloadFolder}
@@ -205,10 +212,14 @@ function App() {
                 fontSize: "0.875rem",
                 color: "var(--text-primary)",
               }}
-              onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = "var(--bg-card)"; }}
-              onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = "var(--bg-card-secondary)"; }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.backgroundColor = "var(--bg-card)";
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.backgroundColor = "var(--bg-card-secondary)";
+              }}
             >
-              View Download Folder
+              {t.viewDownloadFolder}
             </button>
             <button
               onClick={handleResetInstallation}
@@ -222,10 +233,14 @@ function App() {
                 fontSize: "0.875rem",
                 color: "var(--text-primary)",
               }}
-              onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = "var(--bg-card)"; }}
-              onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = "var(--bg-card-secondary)"; }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.backgroundColor = "var(--bg-card)";
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.backgroundColor = "var(--bg-card-secondary)";
+              }}
             >
-              Reset Installation
+              {t.resetInstallation}
             </button>
             <button
               onClick={() => setIsFirstRun(true)}
@@ -239,10 +254,14 @@ function App() {
                 fontSize: "0.875rem",
                 color: "var(--text-primary)",
               }}
-              onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = "var(--bg-card)"; }}
-              onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = "var(--bg-card-secondary)"; }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.backgroundColor = "var(--bg-card)";
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.backgroundColor = "var(--bg-card-secondary)";
+              }}
             >
-              Show First-Run Wizard
+              {t.showFirstRunWizard}
             </button>
           </div>
         </div>

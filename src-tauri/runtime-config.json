@@ -6,17 +6,17 @@
       "versions": [
         {
           "id": "caddy-2.11",
-          "version": "2.11.2",
+          "version": "2.11.4",
           "selected": true,
-          "display_name": "Caddy 2.11.2",
+          "display_name": "Caddy 2.11.4",
           "checksums": {},
           "urls": {
-            "windowsX64": "https://github.com/caddyserver/caddy/releases/download/v2.11.2/caddy_2.11.2_windows_amd64.zip",
-            "windowsArm64": "https://github.com/caddyserver/caddy/releases/download/v2.11.2/caddy_2.11.2_windows_arm64.zip",
-            "linuxX64": "https://github.com/caddyserver/caddy/releases/download/v2.11.2/caddy_2.11.2_linux_amd64.tar.gz",
-            "linuxArm64": "https://github.com/caddyserver/caddy/releases/download/v2.11.2/caddy_2.11.2_linux_arm64.tar.gz",
-            "macOSX64": "https://github.com/caddyserver/caddy/releases/download/v2.11.2/caddy_2.11.2_mac_amd64.tar.gz",
-            "macOSArm64": "https://github.com/caddyserver/caddy/releases/download/v2.11.2/caddy_2.11.2_mac_arm64.tar.gz"
+            "windowsX64": "https://github.com/caddyserver/caddy/releases/download/v2.11.4/caddy_2.11.4_windows_amd64.zip",
+            "windowsArm64": "https://github.com/caddyserver/caddy/releases/download/v2.11.4/caddy_2.11.4_windows_arm64.zip",
+            "linuxX64": "https://github.com/caddyserver/caddy/releases/download/v2.11.4/caddy_2.11.4_linux_amd64.tar.gz",
+            "linuxArm64": "https://github.com/caddyserver/caddy/releases/download/v2.11.4/caddy_2.11.4_linux_arm64.tar.gz",
+            "macOSX64": "https://github.com/caddyserver/caddy/releases/download/v2.11.4/caddy_2.11.4_mac_amd64.tar.gz",
+            "macOSArm64": "https://github.com/caddyserver/caddy/releases/download/v2.11.4/caddy_2.11.4_mac_arm64.tar.gz"
           }
         }
       ]
@@ -25,24 +25,24 @@
       "versions": [
         {
           "id": "php-8.5",
-          "version": "8.5.6",
+          "version": "8.5.7",
           "selected": true,
-          "display_name": "PHP 8.5 (Dev)",
+          "display_name": "PHP 8.5",
           "eol": false,
           "lts": false,
           "recommended": true,
           "checksums": {},
           "urls": {
-            "windowsX64": "https://windows.php.net/downloads/releases/php-8.5.6-nts-Win32-vs17-x64.zip",
-            "linuxX64": "https://dl.static-php.dev/static-php-cli/bulk/php-8.5.6-fpm-linux-x86_64.tar.gz",
-            "linuxArm64": "https://dl.static-php.dev/static-php-cli/bulk/php-8.5.6-fpm-linux-aarch64.tar.gz",
-            "macOSX64": "https://dl.static-php.dev/static-php-cli/bulk/php-8.5.6-fpm-macos-x86_64.tar.gz",
-            "macOSArm64": "https://dl.static-php.dev/static-php-cli/bulk/php-8.5.6-fpm-macos-aarch64.tar.gz"
+            "windowsX64": "https://windows.php.net/downloads/releases/php-8.5.7-nts-Win32-vs17-x64.zip",
+            "linuxX64": "https://dl.static-php.dev/static-php-cli/bulk/php-8.5.7-fpm-linux-x86_64.tar.gz",
+            "linuxArm64": "https://dl.static-php.dev/static-php-cli/bulk/php-8.5.7-fpm-linux-aarch64.tar.gz",
+            "macOSX64": "https://dl.static-php.dev/static-php-cli/bulk/php-8.5.7-fpm-macos-x86_64.tar.gz",
+            "macOSArm64": "https://dl.static-php.dev/static-php-cli/bulk/php-8.5.7-fpm-macos-aarch64.tar.gz"
           }
         },
         {
           "id": "php-8.4",
-          "version": "8.4.21",
+          "version": "8.4.22",
           "selected": false,
           "display_name": "PHP 8.4",
           "eol": false,
@@ -50,11 +50,11 @@
           "recommended": false,
           "checksums": {},
           "urls": {
-            "windowsX64": "https://windows.php.net/downloads/releases/php-8.4.21-nts-Win32-vs17-x64.zip",
-            "linuxX64": "https://dl.static-php.dev/static-php-cli/bulk/php-8.4.20-fpm-linux-x86_64.tar.gz",
-            "linuxArm64": "https://dl.static-php.dev/static-php-cli/bulk/php-8.4.20-fpm-linux-aarch64.tar.gz",
-            "macOSX64": "https://dl.static-php.dev/static-php-cli/bulk/php-8.4.20-fpm-macos-x86_64.tar.gz",
-            "macOSArm64": "https://dl.static-php.dev/static-php-cli/bulk/php-8.4.20-fpm-macos-aarch64.tar.gz"
+            "windowsX64": "https://windows.php.net/downloads/releases/php-8.4.22-nts-Win32-vs17-x64.zip",
+            "linuxX64": "https://dl.static-php.dev/static-php-cli/bulk/php-8.4.22-fpm-linux-x86_64.tar.gz",
+            "linuxArm64": "https://dl.static-php.dev/static-php-cli/bulk/php-8.4.22-fpm-linux-aarch64.tar.gz",
+            "macOSX64": "https://dl.static-php.dev/static-php-cli/bulk/php-8.4.22-fpm-macos-x86_64.tar.gz",
+            "macOSArm64": "https://dl.static-php.dev/static-php-cli/bulk/php-8.4.22-fpm-macos-aarch64.tar.gz"
           }
         },
         {
@@ -222,18 +222,34 @@
       "versions": [
         {
           "id": "mysql-9.7",
-          "version": "9.7.0",
+          "version": "9.7.1",
           "selected": true,
-          "display_name": "MySQL 9.7.0",
+          "display_name": "MySQL 9.7.1",
           "eol": false,
           "lts": true,
           "checksums": {},
           "urls": {
-            "windowsX64": "https://cdn.mysql.com/Downloads/MySQL-9.7/mysql-9.7.0-winx64.zip",
-            "linuxX64": "https://cdn.mysql.com/Downloads/MySQL-9.7/mysql-9.7.0-linux-glibc2.28-x86_64.tar.xz",
-            "linuxArm64": "https://cdn.mysql.com/Downloads/MySQL-9.7/mysql-9.7.0-linux-glibc2.28-aarch64.tar.xz",
-            "macOSX64": "https://cdn.mysql.com/Downloads/MySQL-9.7/mysql-9.7.0-macos15-x86_64.tar.gz",
-            "macOSArm64": "https://cdn.mysql.com/Downloads/MySQL-9.7/mysql-9.7.0-macos15-arm64.tar.gz"
+            "windowsX64": "https://cdn.mysql.com/Downloads/MySQL-9.7/mysql-9.7.1-winx64.zip",
+            "linuxX64": "https://cdn.mysql.com/Downloads/MySQL-9.7/mysql-9.7.1-linux-glibc2.28-x86_64.tar.xz",
+            "linuxArm64": "https://cdn.mysql.com/Downloads/MySQL-9.7/mysql-9.7.1-linux-glibc2.28-aarch64.tar.xz",
+            "macOSX64": "https://cdn.mysql.com/Downloads/MySQL-9.7/mysql-9.7.1-macos15-x86_64.tar.gz",
+            "macOSArm64": "https://cdn.mysql.com/Downloads/MySQL-9.7/mysql-9.7.1-macos15-arm64.tar.gz"
+          }
+        },
+        {
+          "id": "mysql-8.4",
+          "version": "8.4.10",
+          "selected": false,
+          "display_name": "MySQL 8.4.10 (LTS)",
+          "eol": false,
+          "lts": true,
+          "checksums": {},
+          "urls": {
+            "windowsX64": "https://cdn.mysql.com/Downloads/MySQL-8.4/mysql-8.4.10-winx64.zip",
+            "linuxX64": "https://cdn.mysql.com/Downloads/MySQL-8.4/mysql-8.4.10-linux-glibc2.28-x86_64.tar.xz",
+            "linuxArm64": "https://cdn.mysql.com/Downloads/MySQL-8.4/mysql-8.4.10-linux-glibc2.28-aarch64.tar.xz",
+            "macOSX64": "https://cdn.mysql.com/Downloads/MySQL-8.4/mysql-8.4.10-macos15-x86_64.tar.gz",
+            "macOSArm64": "https://cdn.mysql.com/Downloads/MySQL-8.4/mysql-8.4.10-macos15-arm64.tar.gz"
           }
         }
       ]
@@ -241,12 +257,44 @@
     "postgresql": {
       "versions": [
         {
+          "id": "postgresql-18",
+          "version": "18.4",
+          "selected": true,
+          "display_name": "PostgreSQL 18.4 (Stable)",
+          "eol": false,
+          "lts": false,
+          "checksums": {},
+          "urls": {
+            "windowsX64": "https://get.enterprisedb.com/postgresql/postgresql-18.4-1-windows-x64-binaries.zip",
+            "linuxX64": "https://downloads.percona.com/downloads/postgresql-distribution-18/18.4/binary/tarball/percona-postgresql-18.4-ssl3-linux-x86_64.tar.gz",
+            "linuxArm64": "https://downloads.percona.com/downloads/postgresql-distribution-18/18.4/binary/tarball/percona-postgresql-18.4-ssl3-linux-aarch64.tar.gz",
+            "macOSX64": "https://get.enterprisedb.com/postgresql/postgresql-18.4-1-osx-binaries.zip",
+            "macOSArm64": "https://get.enterprisedb.com/postgresql/postgresql-18.4-1-osx-binaries.zip"
+          }
+        },
+        {
+          "id": "postgresql-17",
+          "version": "17.10",
+          "selected": false,
+          "display_name": "PostgreSQL 17.10 (Stable branch)",
+          "eol": false,
+          "lts": false,
+          "checksums": {},
+          "urls": {
+            "windowsX64": "https://get.enterprisedb.com/postgresql/postgresql-17.10-1-windows-x64-binaries.zip",
+            "linuxX64": "https://downloads.percona.com/downloads/postgresql-distribution-17/17.10/binary/tarball/percona-postgresql-17.10-ssl3-linux-x86_64.tar.gz",
+            "linuxArm64": "https://downloads.percona.com/downloads/postgresql-distribution-17/17.10/binary/tarball/percona-postgresql-17.10-ssl3-linux-aarch64.tar.gz",
+            "macOSX64": "https://get.enterprisedb.com/postgresql/postgresql-17.10-1-osx-binaries.zip",
+            "macOSArm64": "https://get.enterprisedb.com/postgresql/postgresql-17.10-1-osx-binaries.zip"
+          }
+        },
+        {
           "id": "postgresql-16",
           "version": "16.14",
-          "selected": true,
-          "display_name": "PostgreSQL 16.14",
+          "selected": false,
+          "display_name": "PostgreSQL 16.14 (Stable branch)",
           "eol": false,
-          "lts": true,
+          "lts": false,
           "checksums": {},
           "urls": {
             "windowsX64": "https://get.enterprisedb.com/postgresql/postgresql-16.14-1-windows-x64-binaries.zip",
@@ -278,26 +326,78 @@
           "eol": false,
           "lts": false,
           "checksum": null,
-          "url": "https://www.adminer.org/latest.php"
+          "url": "https://www.adminer.org/static/download/5.4.2/adminer-5.4.2.php"
         }
       ]
     },
     "node": {
       "versions": [
         {
-          "id": "node-20",
-          "version": "20.11.1",
+          "id": "node-26",
+          "version": "26.4.0",
+          "selected": false,
+          "display_name": "Node.js 26.4.0 (Stable)",
+          "eol": false,
+          "lts": false,
+          "checksums": {},
+          "urls": {
+            "windowsX64": "https://nodejs.org/dist/v26.4.0/node-v26.4.0-win-x64.zip",
+            "windowsArm64": "https://nodejs.org/dist/v26.4.0/node-v26.4.0-win-arm64.zip",
+            "linuxX64": "https://nodejs.org/dist/v26.4.0/node-v26.4.0-linux-x64.tar.xz",
+            "linuxArm64": "https://nodejs.org/dist/v26.4.0/node-v26.4.0-linux-arm64.tar.xz",
+            "macOSX64": "https://nodejs.org/dist/v26.4.0/node-v26.4.0-darwin-x64.tar.gz",
+            "macOSArm64": "https://nodejs.org/dist/v26.4.0/node-v26.4.0-darwin-arm64.tar.gz"
+          }
+        },
+        {
+          "id": "node-24",
+          "version": "24.18.0",
           "selected": true,
-          "display_name": "Node.js 20.11.1 (LTS)",
+          "display_name": "Node.js 24.18.0 (LTS)",
           "eol": false,
           "lts": true,
           "checksums": {},
           "urls": {
-            "windowsX64": "https://nodejs.org/dist/v20.11.1/node-v20.11.1-win-x64.zip",
-            "linuxX64": "https://nodejs.org/dist/v20.11.1/node-v20.11.1-linux-x64.tar.xz",
-            "linuxArm64": "https://nodejs.org/dist/v20.11.1/node-v20.11.1-linux-arm64.tar.xz",
-            "macOSX64": "https://nodejs.org/dist/v20.11.1/node-v20.11.1-darwin-x64.tar.gz",
-            "macOSArm64": "https://nodejs.org/dist/v20.11.1/node-v20.11.1-darwin-arm64.tar.gz"
+            "windowsX64": "https://nodejs.org/dist/v24.18.0/node-v24.18.0-win-x64.zip",
+            "windowsArm64": "https://nodejs.org/dist/v24.18.0/node-v24.18.0-win-arm64.zip",
+            "linuxX64": "https://nodejs.org/dist/v24.18.0/node-v24.18.0-linux-x64.tar.xz",
+            "linuxArm64": "https://nodejs.org/dist/v24.18.0/node-v24.18.0-linux-arm64.tar.xz",
+            "macOSX64": "https://nodejs.org/dist/v24.18.0/node-v24.18.0-darwin-x64.tar.gz",
+            "macOSArm64": "https://nodejs.org/dist/v24.18.0/node-v24.18.0-darwin-arm64.tar.gz"
+          }
+        },
+        {
+          "id": "node-22",
+          "version": "22.23.1",
+          "selected": false,
+          "display_name": "Node.js 22.23.1 (LTS)",
+          "eol": false,
+          "lts": true,
+          "checksums": {},
+          "urls": {
+            "windowsX64": "https://nodejs.org/dist/v22.23.1/node-v22.23.1-win-x64.zip",
+            "windowsArm64": "https://nodejs.org/dist/v22.23.1/node-v22.23.1-win-arm64.zip",
+            "linuxX64": "https://nodejs.org/dist/v22.23.1/node-v22.23.1-linux-x64.tar.xz",
+            "linuxArm64": "https://nodejs.org/dist/v22.23.1/node-v22.23.1-linux-arm64.tar.xz",
+            "macOSX64": "https://nodejs.org/dist/v22.23.1/node-v22.23.1-darwin-x64.tar.gz",
+            "macOSArm64": "https://nodejs.org/dist/v22.23.1/node-v22.23.1-darwin-arm64.tar.gz"
+          }
+        },
+        {
+          "id": "node-20",
+          "version": "20.20.2",
+          "selected": false,
+          "display_name": "Node.js 20.20.2 (LTS)",
+          "eol": false,
+          "lts": true,
+          "checksums": {},
+          "urls": {
+            "windowsX64": "https://nodejs.org/dist/v20.20.2/node-v20.20.2-win-x64.zip",
+            "windowsArm64": "https://nodejs.org/dist/v20.20.2/node-v20.20.2-win-arm64.zip",
+            "linuxX64": "https://nodejs.org/dist/v20.20.2/node-v20.20.2-linux-x64.tar.xz",
+            "linuxArm64": "https://nodejs.org/dist/v20.20.2/node-v20.20.2-linux-arm64.tar.xz",
+            "macOSX64": "https://nodejs.org/dist/v20.20.2/node-v20.20.2-darwin-x64.tar.gz",
+            "macOSArm64": "https://nodejs.org/dist/v20.20.2/node-v20.20.2-darwin-arm64.tar.gz"
           }
         }
       ]
@@ -305,19 +405,37 @@
     "python": {
       "versions": [
         {
-          "id": "python-3.12",
-          "version": "3.12.2",
+          "id": "python-3.14",
+          "version": "3.14.6",
           "selected": true,
-          "display_name": "Python 3.12.2",
+          "display_name": "Python 3.14.6 (Stable)",
           "eol": false,
           "lts": false,
           "checksums": {},
           "urls": {
-            "windowsX64": "https://www.python.org/ftp/python/3.12.2/python-3.12.2-embed-amd64.zip",
-            "linuxX64": "https://github.com/indygreg/python-build-standalone/releases/download/20240224/cpython-3.12.2+20240224-x86_64-unknown-linux-gnu-install_only.tar.gz",
-            "linuxArm64": "https://github.com/indygreg/python-build-standalone/releases/download/20240224/cpython-3.12.2+20240224-aarch64-unknown-linux-gnu-install_only.tar.gz",
-            "macOSX64": "https://github.com/indygreg/python-build-standalone/releases/download/20240224/cpython-3.12.2+20240224-x86_64-apple-darwin-install_only.tar.gz",
-            "macOSArm64": "https://github.com/indygreg/python-build-standalone/releases/download/20240224/cpython-3.12.2+20240224-aarch64-apple-darwin-install_only.tar.gz"
+            "windowsX64": "https://www.python.org/ftp/python/3.14.6/python-3.14.6-embed-amd64.zip",
+            "windowsArm64": "https://www.python.org/ftp/python/3.14.6/python-3.14.6-embed-arm64.zip",
+            "linuxX64": "https://github.com/astral-sh/python-build-standalone/releases/download/20260623/cpython-3.14.6+20260623-x86_64-unknown-linux-gnu-install_only.tar.gz",
+            "linuxArm64": "https://github.com/astral-sh/python-build-standalone/releases/download/20260623/cpython-3.14.6+20260623-aarch64-unknown-linux-gnu-install_only.tar.gz",
+            "macOSX64": "https://github.com/astral-sh/python-build-standalone/releases/download/20260623/cpython-3.14.6+20260623-x86_64-apple-darwin-install_only.tar.gz",
+            "macOSArm64": "https://github.com/astral-sh/python-build-standalone/releases/download/20260623/cpython-3.14.6+20260623-aarch64-apple-darwin-install_only.tar.gz"
+          }
+        },
+        {
+          "id": "python-3.13",
+          "version": "3.13.14",
+          "selected": false,
+          "display_name": "Python 3.13.14 (Stable)",
+          "eol": false,
+          "lts": false,
+          "checksums": {},
+          "urls": {
+            "windowsX64": "https://www.python.org/ftp/python/3.13.14/python-3.13.14-embed-amd64.zip",
+            "windowsArm64": "https://www.python.org/ftp/python/3.13.14/python-3.13.14-embed-arm64.zip",
+            "linuxX64": "https://github.com/astral-sh/python-build-standalone/releases/download/20260623/cpython-3.13.14+20260623-x86_64-unknown-linux-gnu-install_only.tar.gz",
+            "linuxArm64": "https://github.com/astral-sh/python-build-standalone/releases/download/20260623/cpython-3.13.14+20260623-aarch64-unknown-linux-gnu-install_only.tar.gz",
+            "macOSX64": "https://github.com/astral-sh/python-build-standalone/releases/download/20260623/cpython-3.13.14+20260623-x86_64-apple-darwin-install_only.tar.gz",
+            "macOSArm64": "https://github.com/astral-sh/python-build-standalone/releases/download/20260623/cpython-3.13.14+20260623-aarch64-apple-darwin-install_only.tar.gz"
           }
         }
       ]
@@ -325,19 +443,37 @@
     "go": {
       "versions": [
         {
-          "id": "go-1.22",
-          "version": "1.22.1",
+          "id": "go-1.26",
+          "version": "1.26.4",
           "selected": true,
-          "display_name": "Go 1.22.1",
+          "display_name": "Go 1.26.4 (Stable)",
           "eol": false,
           "lts": false,
           "checksums": {},
           "urls": {
-            "windowsX64": "https://go.dev/dl/go1.22.1.windows-amd64.zip",
-            "linuxX64": "https://go.dev/dl/go1.22.1.linux-amd64.tar.gz",
-            "linuxArm64": "https://go.dev/dl/go1.22.1.linux-arm64.tar.gz",
-            "macOSX64": "https://go.dev/dl/go1.22.1.darwin-amd64.tar.gz",
-            "macOSArm64": "https://go.dev/dl/go1.22.1.darwin-arm64.tar.gz"
+            "windowsX64": "https://go.dev/dl/go1.26.4.windows-amd64.zip",
+            "windowsArm64": "https://go.dev/dl/go1.26.4.windows-arm64.zip",
+            "linuxX64": "https://go.dev/dl/go1.26.4.linux-amd64.tar.gz",
+            "linuxArm64": "https://go.dev/dl/go1.26.4.linux-arm64.tar.gz",
+            "macOSX64": "https://go.dev/dl/go1.26.4.darwin-amd64.tar.gz",
+            "macOSArm64": "https://go.dev/dl/go1.26.4.darwin-arm64.tar.gz"
+          }
+        },
+        {
+          "id": "go-1.25",
+          "version": "1.25.11",
+          "selected": false,
+          "display_name": "Go 1.25.11 (Stable)",
+          "eol": false,
+          "lts": false,
+          "checksums": {},
+          "urls": {
+            "windowsX64": "https://go.dev/dl/go1.25.11.windows-amd64.zip",
+            "windowsArm64": "https://go.dev/dl/go1.25.11.windows-arm64.zip",
+            "linuxX64": "https://go.dev/dl/go1.25.11.linux-amd64.tar.gz",
+            "linuxArm64": "https://go.dev/dl/go1.25.11.linux-arm64.tar.gz",
+            "macOSX64": "https://go.dev/dl/go1.25.11.darwin-amd64.tar.gz",
+            "macOSArm64": "https://go.dev/dl/go1.25.11.darwin-arm64.tar.gz"
           }
         }
       ]
@@ -345,19 +481,51 @@
     "ruby": {
       "versions": [
         {
-          "id": "ruby-3.3",
-          "version": "3.3.0",
+          "id": "ruby-4.0",
+          "version": "4.0.5",
           "selected": true,
-          "display_name": "Ruby 3.3.0",
+          "display_name": "Ruby 4.0.5 (Stable)",
           "eol": false,
           "lts": false,
           "checksums": {},
           "urls": {
-            "windowsX64": "https://github.com/oneclick/rubyinstaller2/releases/download/RubyInstaller-3.3.0-1/rubyinstaller-3.3.0-1-x64.7z",
-            "linuxX64": "https://cache.ruby-lang.org/pub/ruby/3.3/ruby-3.3.0.tar.gz",
-            "linuxArm64": "https://cache.ruby-lang.org/pub/ruby/3.3/ruby-3.3.0.tar.gz",
-            "macOSX64": "https://cache.ruby-lang.org/pub/ruby/3.3/ruby-3.3.0.tar.gz",
-            "macOSArm64": "https://cache.ruby-lang.org/pub/ruby/3.3/ruby-3.3.0.tar.gz"
+            "windowsX64": "https://github.com/oneclick/rubyinstaller2/releases/download/RubyInstaller-4.0.5-1/rubyinstaller-4.0.5-1-x64.7z",
+            "linuxX64": "https://cache.ruby-lang.org/pub/ruby/4.0/ruby-4.0.5.tar.xz",
+            "linuxArm64": "https://cache.ruby-lang.org/pub/ruby/4.0/ruby-4.0.5.tar.xz",
+            "macOSX64": "https://cache.ruby-lang.org/pub/ruby/4.0/ruby-4.0.5.tar.xz",
+            "macOSArm64": "https://cache.ruby-lang.org/pub/ruby/4.0/ruby-4.0.5.tar.xz"
+          }
+        },
+        {
+          "id": "ruby-3.4",
+          "version": "3.4.9",
+          "selected": false,
+          "display_name": "Ruby 3.4.9 (Stable)",
+          "eol": false,
+          "lts": false,
+          "checksums": {},
+          "urls": {
+            "windowsX64": "https://github.com/oneclick/rubyinstaller2/releases/download/RubyInstaller-3.4.9-1/rubyinstaller-3.4.9-1-x64.7z",
+            "linuxX64": "https://cache.ruby-lang.org/pub/ruby/3.4/ruby-3.4.9.tar.xz",
+            "linuxArm64": "https://cache.ruby-lang.org/pub/ruby/3.4/ruby-3.4.9.tar.xz",
+            "macOSX64": "https://cache.ruby-lang.org/pub/ruby/3.4/ruby-3.4.9.tar.xz",
+            "macOSArm64": "https://cache.ruby-lang.org/pub/ruby/3.4/ruby-3.4.9.tar.xz"
+          }
+        },
+        {
+          "id": "ruby-3.3",
+          "version": "3.3.7",
+          "selected": false,
+          "display_name": "Ruby 3.3.7 (Stable)",
+          "eol": false,
+          "lts": false,
+          "checksums": {},
+          "urls": {
+            "windowsX64": "https://github.com/oneclick/rubyinstaller2/releases/download/RubyInstaller-3.3.7-1/rubyinstaller-3.3.7-1-x64.7z",
+            "linuxX64": "https://cache.ruby-lang.org/pub/ruby/3.3/ruby-3.3.7.tar.xz",
+            "linuxArm64": "https://cache.ruby-lang.org/pub/ruby/3.3/ruby-3.3.7.tar.xz",
+            "macOSX64": "https://cache.ruby-lang.org/pub/ruby/3.3/ruby-3.3.7.tar.xz",
+            "macOSArm64": "https://cache.ruby-lang.org/pub/ruby/3.3/ruby-3.3.7.tar.xz"
           }
         }
       ]

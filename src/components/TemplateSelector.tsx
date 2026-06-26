@@ -1,9 +1,22 @@
 import { useState, FormEvent, useEffect, useMemo } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { Folder, FilePlus2, LoaderCircle, Globe, TerminalSquare, HardDrive, Download } from "lucide-react";
+import {
+  Folder,
+  FilePlus2,
+  LoaderCircle,
+  Globe,
+  TerminalSquare,
+  HardDrive,
+  Download,
+} from "lucide-react";
 import { useTranslation } from "../stores/languageStore";
 import { AudioManager } from "../utils/audioManager";
-import { AppPaths, PackagesConfig, PackageSelection } from "../types/services";
+import {
+  AppPaths,
+  PackagesConfig,
+  PackageSelection,
+  hasInstallablePackageForPlatform,
+} from "../types/services";
 
 export type ProjectTemplateId = "static" | "php" | "node" | "python" | "go" | "ruby";
 
@@ -17,7 +30,13 @@ export interface ProjectScaffoldResult {
 export const PROJECT_TEMPLATES: Array<{
   id: ProjectTemplateId;
   icon: typeof Globe;
-  labelKey: "staticTemplate" | "phpTemplate" | "nodeTemplate" | "pythonTemplate" | "goTemplate" | "rubyTemplate";
+  labelKey:
+    | "staticTemplate"
+    | "phpTemplate"
+    | "nodeTemplate"
+    | "pythonTemplate"
+    | "goTemplate"
+    | "rubyTemplate";
   descriptionKey:
     | "staticTemplateDescription"
     | "phpTemplateDescription"
@@ -115,19 +134,38 @@ export function TemplateSelector({
   const handleDownloadRuntime = async () => {
     setIsDownloadingRuntime(true);
     try {
-      const packages = await invoke<PackagesConfig>("get_available_packages_cmd");
+      const packages = await invoke<PackagesConfig>("refresh_runtime_catalog").catch(() =>
+        invoke<PackagesConfig>("get_available_packages_cmd")
+      );
       const currentSelection = await invoke<PackageSelection>("get_selected_package_ids");
+      const platformKey = await invoke<string>("get_runtime_platform");
 
       let nextSelection = { ...currentSelection };
+      const installableNode = packages.node?.filter((pkg) =>
+        hasInstallablePackageForPlatform(pkg, platformKey)
+      );
+      const installablePython = packages.python?.filter((pkg) =>
+        hasInstallablePackageForPlatform(pkg, platformKey)
+      );
+      const installableGo = packages.go?.filter((pkg) =>
+        hasInstallablePackageForPlatform(pkg, platformKey)
+      );
+      const installableRuby = packages.ruby?.filter((pkg) =>
+        hasInstallablePackageForPlatform(pkg, platformKey)
+      );
 
-      if (projectTemplate === "node" && packages.node?.[0]) {
-        nextSelection.node = packages.node[0].id;
-      } else if (projectTemplate === "python" && packages.python?.[0]) {
-        nextSelection.python = packages.python[0].id;
-      } else if (projectTemplate === "go" && packages.go?.[0]) {
-        nextSelection.go = packages.go[0].id;
-      } else if (projectTemplate === "ruby" && packages.ruby?.[0]) {
-        nextSelection.ruby = packages.ruby[0].id;
+      if (projectTemplate === "node" && installableNode?.[0]) {
+        nextSelection.node = installableNode[0].id;
+      } else if (projectTemplate === "python" && installablePython?.[0]) {
+        nextSelection.python = installablePython[0].id;
+      } else if (projectTemplate === "go" && installableGo?.[0]) {
+        nextSelection.go = installableGo[0].id;
+      } else if (projectTemplate === "ruby" && installableRuby?.[0]) {
+        nextSelection.ruby = installableRuby[0].id;
+      } else {
+        throw new Error(
+          t.runtimeUnavailableForPlatform.replace("{name}", projectTemplate.toUpperCase())
+        );
       }
 
       await invoke("update_package_selection", { packageSelection: nextSelection });
@@ -243,20 +281,24 @@ export function TemplateSelector({
               <button
                 className="btn-primary"
                 type="submit"
-                disabled={isCreatingProject || isDownloadingRuntime || projectName.trim().length === 0}
+                disabled={
+                  isCreatingProject || isDownloadingRuntime || projectName.trim().length === 0
+                }
               >
                 {isDownloadingRuntime ? (
                   <LoaderCircle size={15} className="spin-icon" />
                 ) : (
                   <Download size={15} />
                 )}
-                {isDownloadingRuntime ? t.downloading : `${t.install} ${projectTemplate} Runtime`}
+                {isDownloadingRuntime ? t.downloading : `${t.install} ${projectTemplate}`}
               </button>
             ) : (
               <button
                 className="btn-primary"
                 type="submit"
-                disabled={isCreatingProject || isDownloadingRuntime || projectName.trim().length === 0}
+                disabled={
+                  isCreatingProject || isDownloadingRuntime || projectName.trim().length === 0
+                }
               >
                 {isCreatingProject ? (
                   <LoaderCircle size={15} className="spin-icon" />

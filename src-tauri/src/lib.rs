@@ -149,6 +149,7 @@ pub fn run() {
             commands::download_runtime_with_packages,
             commands::download_runtime_with_skip,
             commands::get_available_packages_cmd,
+            commands::refresh_runtime_catalog,
             commands::get_runtime_platform,
             commands::get_package_selection,
             commands::update_package_selection,

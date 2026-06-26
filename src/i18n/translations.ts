@@ -26,6 +26,7 @@ export interface Translations {
   add: string;
   remove: string;
   refresh: string;
+  more: string;
   search: string;
   filter: string;
   sort: string;
@@ -152,6 +153,65 @@ export interface Translations {
   soundEffectsDescription: string;
   databaseToolSelect: string;
   webDatabaseManager: string;
+  runtime: string;
+  openRuntimeFolder: string;
+  sourceRepository: string;
+  stackStartingTitle: string;
+  stackStartingMessage: string;
+  stackStartedTitle: string;
+  stackStartedMessage: string;
+  stackRestartingTitle: string;
+  stackRestartingMessage: string;
+  stackRestartedTitle: string;
+  stackRestartedMessage: string;
+  stackStoppingTitle: string;
+  stackStoppingMessage: string;
+  stackStoppedTitle: string;
+  stackStoppedMessage: string;
+  serviceStartingTitle: string;
+  serviceStartingMessage: string;
+  serviceRestartingTitle: string;
+  serviceRestartingMessage: string;
+  serviceStoppingTitle: string;
+  serviceStoppingMessage: string;
+  dashboardRefreshingStatus: string;
+  fallbackPortsUsed: string;
+  commandFailed: string;
+  openFolderFailed: string;
+  openTerminalFailed: string;
+  installedSuffix: string;
+  installedVersionsLabel: string;
+  settingsSaved: string;
+  failedToLoadSettings: string;
+  failedToSaveSettings: string;
+  phpVersionInstalled: string;
+  activePhpChanged: string;
+  failedToInstallPhpVersion: string;
+  failedToSwitchPhpVersion: string;
+  additionalRuntimes: string;
+  additionalRuntimesDescription: string;
+  noAdditionalRuntimes: string;
+  notInstalled: string;
+  runtimeUnavailableForPlatform: string;
+  runtimeInstalledSuccessfully: string;
+  failedToInstallRuntime: string;
+  databaseUsedWhenStartingStack: string;
+  runtimeCatalogRefreshing: string;
+  runtimeCatalogUpdated: string;
+  runtimeCatalogUpdateFailed: string;
+  ltsBadge: string;
+  stableBadge: string;
+  eolBadge: string;
+  selectedVersion: string;
+  runtimeTerminalHint: string;
+  installedVersion: string;
+  debugMenu: string;
+  viewDownloadFolder: string;
+  resetInstallation: string;
+  resetInstallationConfirm: string;
+  resetFailed: string;
+  openDownloadFolderFailed: string;
+  showFirstRunWizard: string;
 
   // Keyboard Shortcuts
   keyboardShortcuts: string;
@@ -277,6 +337,7 @@ const th: Translations = {
   add: "เพิ่ม",
   remove: "นำออก",
   refresh: "รีเฟรช",
+  more: "เพิ่มเติม",
   search: "ค้นหา",
   filter: "กรอง",
   sort: "เรียง",
@@ -403,6 +464,67 @@ const th: Translations = {
   soundEffectsDescription: "เล่นเสียงเมื่อกดปุ่มและดำเนินการต่างๆ",
   databaseToolSelect: "เครื่องมือฐานข้อมูล",
   webDatabaseManager: "ตัวจัดการฐานข้อมูลบนเว็บ",
+  runtime: "รันไทม์",
+  openRuntimeFolder: "เปิดโฟลเดอร์รันไทม์",
+  sourceRepository: "ซอร์สโค้ดบน GitHub",
+  stackStartingTitle: "กำลังเริ่มสแต็ก",
+  stackStartingMessage: "CHAMP กำลังเริ่มสแต็กที่เลือก อาจใช้เวลาสักครู่",
+  stackStartedTitle: "เริ่มสแต็กแล้ว",
+  stackStartedMessage: "คำสั่งเริ่มสแต็กทำงานเสร็จแล้ว กำลังรีเฟรชสถานะ",
+  stackRestartingTitle: "กำลังรีสตาร์ทสแต็ก",
+  stackRestartingMessage: "บริการกำลังหยุดและเริ่มใหม่ แดชบอร์ดจะอัปเดตอัตโนมัติ",
+  stackRestartedTitle: "รีสตาร์ทสแต็กแล้ว",
+  stackRestartedMessage: "คำสั่งรีสตาร์ททำงานเสร็จแล้ว กำลังรีเฟรชสถานะ",
+  stackStoppingTitle: "กำลังหยุดสแต็ก",
+  stackStoppingMessage: "บริการกำลังปิดตัว อาจใช้เวลาสักครู่",
+  stackStoppedTitle: "หยุดสแต็กแล้ว",
+  stackStoppedMessage: "ส่งคำสั่งหยุดไปยังบริการทั้งหมดแล้ว",
+  serviceStartingTitle: "กำลังเริ่มบริการ",
+  serviceStartingMessage: "บริการกำลังเริ่ม สถานะจะอัปเดตอัตโนมัติ",
+  serviceRestartingTitle: "กำลังรีสตาร์ทบริการ",
+  serviceRestartingMessage: "บริการกำลังรีสตาร์ท สถานะจะอัปเดตอัตโนมัติ",
+  serviceStoppingTitle: "กำลังหยุดบริการ",
+  serviceStoppingMessage: "บริการกำลังหยุด สถานะจะอัปเดตอัตโนมัติ",
+  dashboardRefreshingStatus: "แดชบอร์ดกำลังรีเฟรชสถานะบริการ",
+  fallbackPortsUsed: "ใช้พอร์ตสำรอง: {ports}",
+  commandFailed: "คำสั่งล้มเหลว",
+  openFolderFailed: "เปิดโฟลเดอร์ไม่สำเร็จ",
+  openTerminalFailed: "เปิดเทอร์มินัลไม่สำเร็จ",
+  installedSuffix: "ติดตั้งแล้ว",
+  installedVersionsLabel: "เวอร์ชันที่ติดตั้ง",
+  settingsSaved: "บันทึกการตั้งค่าแล้ว",
+  failedToLoadSettings: "โหลดการตั้งค่าไม่สำเร็จ",
+  failedToSaveSettings: "บันทึกการตั้งค่าไม่สำเร็จ",
+  phpVersionInstalled: "ติดตั้งเวอร์ชัน PHP แล้ว",
+  activePhpChanged: "เปลี่ยน PHP ที่ใช้งานอยู่แล้ว",
+  failedToInstallPhpVersion: "ติดตั้งเวอร์ชัน PHP ไม่สำเร็จ",
+  failedToSwitchPhpVersion: "สลับเวอร์ชัน PHP ไม่สำเร็จ",
+  additionalRuntimes: "รันไทม์เพิ่มเติม",
+  additionalRuntimesDescription: "เลือกและดาวน์โหลดรันไทม์ภาษาอื่นสำหรับเครื่องมือในโปรเจกต์",
+  noAdditionalRuntimes: "ไม่มีรันไทม์เพิ่มเติมที่รองรับบนแพลตฟอร์มนี้",
+  notInstalled: "ยังไม่ได้ติดตั้ง",
+  runtimeUnavailableForPlatform: "{name} ยังไม่มีแพ็กเกจแบบ portable ที่รองรับบนแพลตฟอร์มนี้",
+  runtimeInstalledSuccessfully: "ติดตั้ง {name} สำเร็จ",
+  failedToInstallRuntime: "ติดตั้ง {name} ไม่สำเร็จ",
+  databaseUsedWhenStartingStack: "จะใช้ {name} เมื่อเริ่มสแต็กหลัก",
+  runtimeCatalogRefreshing: "กำลังตรวจสอบเวอร์ชันรันไทม์ล่าสุด",
+  runtimeCatalogUpdated: "อัปเดตรายการรันไทม์ล่าสุดแล้ว",
+  runtimeCatalogUpdateFailed: "ตรวจสอบเวอร์ชันรันไทม์ล่าสุดไม่สำเร็จ ใช้รายการในเครื่องแทน",
+  ltsBadge: "LTS",
+  stableBadge: "Stable",
+  eolBadge: "EOL",
+  selectedVersion: "เวอร์ชันที่เลือก",
+  runtimeTerminalHint:
+    "หลังติดตั้งแล้ว เปิดเมนูเพิ่มเติม > เทอร์มินัล เพื่อใช้คำสั่งจากรันไทม์นี้ใน PATH",
+  installedVersion: "เวอร์ชันที่ติดตั้ง",
+  debugMenu: "เมนูดีบัก",
+  viewDownloadFolder: "เปิดโฟลเดอร์ดาวน์โหลด",
+  resetInstallation: "รีเซ็ตการติดตั้ง",
+  resetInstallationConfirm:
+    "รีเซ็ตการติดตั้งหรือไม่ การทำงานนี้จะหยุดบริการทั้งหมดและลบไฟล์รันไทม์",
+  resetFailed: "รีเซ็ตไม่สำเร็จ",
+  openDownloadFolderFailed: "เปิดโฟลเดอร์ดาวน์โหลดไม่สำเร็จ",
+  showFirstRunWizard: "แสดงตัวช่วยติดตั้งครั้งแรก",
 
   // Keyboard Shortcuts
   keyboardShortcuts: "คีย์ลัด",
@@ -532,6 +654,7 @@ const en: Translations = {
   add: "Add",
   remove: "Remove",
   refresh: "Refresh",
+  more: "More",
   search: "Search",
   filter: "Filter",
   sort: "Sort",
@@ -658,6 +781,70 @@ const en: Translations = {
   soundEffectsDescription: "Play sounds when pressing buttons and performing actions",
   databaseToolSelect: "Database Tool",
   webDatabaseManager: "Web database manager",
+  runtime: "Runtime",
+  openRuntimeFolder: "Open Runtime Folder",
+  sourceRepository: "Source repository",
+  stackStartingTitle: "Starting stack",
+  stackStartingMessage: "The selected CHAMP stack is starting. This can take a few seconds.",
+  stackStartedTitle: "Stack started",
+  stackStartedMessage: "All stack commands finished. Statuses are refreshing now.",
+  stackRestartingTitle: "Restarting stack",
+  stackRestartingMessage:
+    "Services are stopping and starting again. The dashboard will update automatically.",
+  stackRestartedTitle: "Stack restarted",
+  stackRestartedMessage: "Restart command finished. Statuses are refreshing now.",
+  stackStoppingTitle: "Stopping stack",
+  stackStoppingMessage: "Services are shutting down. This can take a moment.",
+  stackStoppedTitle: "Stack stopped",
+  stackStoppedMessage: "All services have received the stop command.",
+  serviceStartingTitle: "Starting service",
+  serviceStartingMessage: "The service is starting. Status will update automatically.",
+  serviceRestartingTitle: "Restarting service",
+  serviceRestartingMessage: "The service is restarting. Status will update automatically.",
+  serviceStoppingTitle: "Stopping service",
+  serviceStoppingMessage: "The service is stopping. Status will update automatically.",
+  dashboardRefreshingStatus: "The dashboard is refreshing service status.",
+  fallbackPortsUsed: "Using fallback ports: {ports}.",
+  commandFailed: "Command failed",
+  openFolderFailed: "Failed to open folder",
+  openTerminalFailed: "Failed to open terminal",
+  installedSuffix: "installed",
+  installedVersionsLabel: "Installed versions",
+  settingsSaved: "Settings saved",
+  failedToLoadSettings: "Failed to load settings",
+  failedToSaveSettings: "Failed to save settings",
+  phpVersionInstalled: "PHP version installed",
+  activePhpChanged: "Active PHP version changed",
+  failedToInstallPhpVersion: "Failed to install PHP version",
+  failedToSwitchPhpVersion: "Failed to switch PHP version",
+  additionalRuntimes: "Additional Runtimes",
+  additionalRuntimesDescription:
+    "Select and download additional language runtimes for your projects.",
+  noAdditionalRuntimes: "No additional runtimes are available for this platform.",
+  notInstalled: "Not installed",
+  runtimeUnavailableForPlatform:
+    "{name} does not have a supported portable package for this platform.",
+  runtimeInstalledSuccessfully: "{name} installed successfully",
+  failedToInstallRuntime: "Failed to install {name}",
+  databaseUsedWhenStartingStack: "{name} will be used when starting the main stack.",
+  runtimeCatalogRefreshing: "Checking latest runtime versions",
+  runtimeCatalogUpdated: "Runtime catalog updated",
+  runtimeCatalogUpdateFailed: "Could not check latest runtime versions. Using local catalog.",
+  ltsBadge: "LTS",
+  stableBadge: "Stable",
+  eolBadge: "EOL",
+  selectedVersion: "Selected version",
+  runtimeTerminalHint:
+    "After installing, open More > Terminal to use this runtime on the injected PATH.",
+  installedVersion: "Installed version",
+  debugMenu: "Debug Menu",
+  viewDownloadFolder: "View Download Folder",
+  resetInstallation: "Reset Installation",
+  resetInstallationConfirm:
+    "Reset installation? This will stop all services and delete runtime binaries.",
+  resetFailed: "Failed to reset",
+  openDownloadFolderFailed: "Failed to open download folder",
+  showFirstRunWizard: "Show First-Run Wizard",
 
   // Keyboard Shortcuts
   keyboardShortcuts: "Shortcuts",

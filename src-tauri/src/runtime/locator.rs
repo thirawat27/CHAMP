@@ -665,7 +665,7 @@ fn detect_node_binary(runtime_dir: &Path) -> Result<PathBuf, String> {
     } else {
         "node"
     };
-    
+
     // Check root and common extracted folders
     let paths = vec![
         runtime_dir.join(executable),
@@ -673,16 +673,20 @@ fn detect_node_binary(runtime_dir: &Path) -> Result<PathBuf, String> {
         runtime_dir.join("node").join(executable),
         runtime_dir.join("node").join("bin").join(executable),
     ];
-    
+
     // Also try to find any directory starting with node
     if let Ok(entries) = fs::read_dir(runtime_dir) {
         for entry in entries.flatten() {
             if let Ok(name) = entry.file_name().into_string() {
                 if name.starts_with("node-") && entry.path().is_dir() {
                     let path1 = entry.path().join(executable);
-                    if path1.exists() { return Ok(path1); }
+                    if path1.exists() {
+                        return Ok(path1);
+                    }
                     let path2 = entry.path().join("bin").join(executable);
-                    if path2.exists() { return Ok(path2); }
+                    if path2.exists() {
+                        return Ok(path2);
+                    }
                 }
             }
         }
@@ -702,22 +706,26 @@ fn detect_python_binary(runtime_dir: &Path) -> Result<PathBuf, String> {
     } else {
         "python3"
     };
-    
+
     let paths = vec![
         runtime_dir.join(executable),
         runtime_dir.join("bin").join(executable),
         runtime_dir.join("python").join(executable),
         runtime_dir.join("python").join("bin").join(executable),
     ];
-    
+
     if let Ok(entries) = fs::read_dir(runtime_dir) {
         for entry in entries.flatten() {
             if let Ok(name) = entry.file_name().into_string() {
                 if name.starts_with("python-") && entry.path().is_dir() {
                     let path1 = entry.path().join(executable);
-                    if path1.exists() { return Ok(path1); }
+                    if path1.exists() {
+                        return Ok(path1);
+                    }
                     let path2 = entry.path().join("bin").join(executable);
-                    if path2.exists() { return Ok(path2); }
+                    if path2.exists() {
+                        return Ok(path2);
+                    }
                 }
             }
         }
@@ -732,7 +740,9 @@ fn detect_python_binary(runtime_dir: &Path) -> Result<PathBuf, String> {
     #[cfg(not(target_os = "windows"))]
     {
         let fallback = runtime_dir.join("bin").join("python");
-        if fallback.exists() { return Ok(fallback); }
+        if fallback.exists() {
+            return Ok(fallback);
+        }
     }
     Err("Python binary not found".to_string())
 }
@@ -743,13 +753,13 @@ fn detect_go_binary(runtime_dir: &Path) -> Result<PathBuf, String> {
     } else {
         "go"
     };
-    
+
     let paths = vec![
         runtime_dir.join(executable),
         runtime_dir.join("bin").join(executable),
         runtime_dir.join("go").join("bin").join(executable),
     ];
-    
+
     for path in paths {
         if path.exists() {
             return Ok(path);
@@ -764,19 +774,21 @@ fn detect_ruby_binary(runtime_dir: &Path) -> Result<PathBuf, String> {
     } else {
         "ruby"
     };
-    
+
     let paths = vec![
         runtime_dir.join(executable),
         runtime_dir.join("bin").join(executable),
         runtime_dir.join("ruby").join("bin").join(executable),
     ];
-    
+
     if let Ok(entries) = fs::read_dir(runtime_dir) {
         for entry in entries.flatten() {
             if let Ok(name) = entry.file_name().into_string() {
                 if name.starts_with("ruby-") && entry.path().is_dir() {
                     let path1 = entry.path().join("bin").join(executable);
-                    if path1.exists() { return Ok(path1); }
+                    if path1.exists() {
+                        return Ok(path1);
+                    }
                 }
             }
         }
@@ -946,6 +958,10 @@ mod tests {
                 .join("bin")
                 .join("postgres.exe"),
             adminer: temp_dir.path().join("adminer"),
+            node: None,
+            python: None,
+            go: None,
+            ruby: None,
             mysql_data_dir: temp_dir.path().join("mysql").join("data"),
             postgresql_data_dir: temp_dir.path().join("postgresql").join("data"),
             logs_dir: temp_dir.path().join("logs"),
@@ -976,6 +992,10 @@ mod tests {
                 .join("bin")
                 .join("postgres.exe"),
             adminer: temp_dir.path().join("adminer"),
+            node: None,
+            python: None,
+            go: None,
+            ruby: None,
             mysql_data_dir: temp_dir.path().join("mysql").join("data"),
             postgresql_data_dir: temp_dir.path().join("postgresql").join("data"),
             logs_dir: temp_dir.path().join("logs"),

@@ -79,9 +79,11 @@ pub async fn open_project_terminal(path: Option<String>) -> Result<(), String> {
 
     let target_dir = match path {
         Some(p) => std::path::PathBuf::from(p),
-        None => crate::runtime::locator::get_app_data_paths()
-            .map_err(|e| format!("Failed to get app paths: {}", e))?
-            .projects_dir,
+        None => {
+            crate::runtime::locator::get_app_data_paths()
+                .map_err(|e| format!("Failed to get app paths: {}", e))?
+                .projects_dir
+        }
     };
 
     if !target_dir.exists() {
@@ -1102,6 +1104,12 @@ pub async fn cleanup_all_services(state: State<'_, AppState>) -> Result<String, 
 #[tauri::command]
 pub async fn get_available_packages_cmd() -> Result<PackagesConfig, String> {
     Ok(crate::runtime::packages::get_available_packages())
+}
+
+/// Refresh runtime packages from upstream release metadata, then return the active catalog.
+#[tauri::command]
+pub async fn refresh_runtime_catalog() -> Result<PackagesConfig, String> {
+    crate::runtime::packages::refresh_runtime_catalog().await
 }
 
 #[tauri::command]

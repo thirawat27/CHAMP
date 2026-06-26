@@ -3,7 +3,7 @@ use std::io::{self, BufReader, BufWriter, Read, Write};
 use std::path::{Path, PathBuf};
 use std::sync::{
     atomic::{AtomicU64, Ordering},
-    Arc, OnceLock,
+    Arc,
 };
 use std::time::{Duration, Instant};
 
@@ -22,48 +22,15 @@ use sha2::{Digest, Sha256};
 /// Runtime configuration loaded from runtime-config.json (shared with packages.rs)
 pub use crate::runtime::packages::RuntimeConfig;
 
-/// Global runtime config (loaded once)
-static RUNTIME_CONFIG: OnceLock<RuntimeConfig> = OnceLock::new();
 const SEGMENTED_DOWNLOAD_MIN_BYTES: u64 = 12 * 1024 * 1024;
 const SEGMENTED_DOWNLOAD_MIN_PART_BYTES: u64 = 8 * 1024 * 1024;
 const SEGMENTED_DOWNLOAD_MAX_CHANNELS: usize = 16;
 const PROGRESS_EMIT_INTERVAL: Duration = Duration::from_millis(250);
 const MERGE_BUFFER_BYTES: usize = 1024 * 1024;
 
-/// Load runtime configuration from bundled resource or file
-pub fn load_runtime_config() -> RuntimeConfig {
-    // Try to load from various locations
-    let config_content = load_config_content();
-
-    match config_content {
-        Some(content) => match serde_json::from_str(&content) {
-            Ok(config) => {
-                eprintln!("Loaded runtime configuration from file");
-                config
-            }
-            Err(e) => {
-                eprintln!(
-                    "Failed to parse runtime-config.json: {}. Using defaults.",
-                    e
-                );
-                get_default_config()
-            }
-        },
-        None => {
-            eprintln!("runtime-config.json not found. Using default configuration.");
-            get_default_config()
-        }
-    }
-}
-
-/// Try to load config content from various locations
-fn load_config_content() -> Option<String> {
-    crate::runtime::packages::read_runtime_config_content().map(|(_, content)| content)
-}
-
-/// Get the global runtime config (loads once, then caches)
-fn get_config() -> &'static RuntimeConfig {
-    RUNTIME_CONFIG.get_or_init(load_runtime_config)
+/// Get the shared runtime config from packages.rs so catalog refreshes affect downloads.
+fn get_config() -> RuntimeConfig {
+    crate::runtime::packages::get_config().unwrap_or_else(get_default_config)
 }
 
 /// Default hardcoded configuration (fallback when config file is not available)
@@ -187,28 +154,48 @@ impl BinaryComponent {
                 .binaries
                 .node
                 .as_ref()
-                .and_then(|b| b.versions.iter().find(|v| v.selected).or_else(|| b.versions.first()))
+                .and_then(|b| {
+                    b.versions
+                        .iter()
+                        .find(|v| v.selected)
+                        .or_else(|| b.versions.first())
+                })
                 .map(|v| v.version.clone())
                 .unwrap_or_default(),
             BinaryComponent::Python => config
                 .binaries
                 .python
                 .as_ref()
-                .and_then(|b| b.versions.iter().find(|v| v.selected).or_else(|| b.versions.first()))
+                .and_then(|b| {
+                    b.versions
+                        .iter()
+                        .find(|v| v.selected)
+                        .or_else(|| b.versions.first())
+                })
                 .map(|v| v.version.clone())
                 .unwrap_or_default(),
             BinaryComponent::Go => config
                 .binaries
                 .go
                 .as_ref()
-                .and_then(|b| b.versions.iter().find(|v| v.selected).or_else(|| b.versions.first()))
+                .and_then(|b| {
+                    b.versions
+                        .iter()
+                        .find(|v| v.selected)
+                        .or_else(|| b.versions.first())
+                })
                 .map(|v| v.version.clone())
                 .unwrap_or_default(),
             BinaryComponent::Ruby => config
                 .binaries
                 .ruby
                 .as_ref()
-                .and_then(|b| b.versions.iter().find(|v| v.selected).or_else(|| b.versions.first()))
+                .and_then(|b| {
+                    b.versions
+                        .iter()
+                        .find(|v| v.selected)
+                        .or_else(|| b.versions.first())
+                })
                 .map(|v| v.version.clone())
                 .unwrap_or_default(),
         }
@@ -774,15 +761,28 @@ impl RuntimeDownloader {
                     .binaries
                     .node
                     .as_ref()
-                    .and_then(|b| b.versions.iter().find(|v| v.selected).or_else(|| b.versions.first()))
+                    .and_then(|b| {
+                        b.versions
+                            .iter()
+                            .find(|v| v.selected)
+                            .or_else(|| b.versions.first())
+                    })
                     .expect("Node is not configured");
                 match self.platform {
-                    Platform::WindowsX64 => version_info.urls.windows_x64.clone().unwrap_or_default(),
-                    Platform::WindowsArm64 => version_info.urls.windows_arm64.clone().unwrap_or_default(),
+                    Platform::WindowsX64 => {
+                        version_info.urls.windows_x64.clone().unwrap_or_default()
+                    }
+                    Platform::WindowsArm64 => {
+                        version_info.urls.windows_arm64.clone().unwrap_or_default()
+                    }
                     Platform::MacOSX64 => version_info.urls.macos_x64.clone().unwrap_or_default(),
-                    Platform::MacOSArm64 => version_info.urls.macos_arm64.clone().unwrap_or_default(),
+                    Platform::MacOSArm64 => {
+                        version_info.urls.macos_arm64.clone().unwrap_or_default()
+                    }
                     Platform::LinuxX64 => version_info.urls.linux_x64.clone().unwrap_or_default(),
-                    Platform::LinuxArm64 => version_info.urls.linux_arm64.clone().unwrap_or_default(),
+                    Platform::LinuxArm64 => {
+                        version_info.urls.linux_arm64.clone().unwrap_or_default()
+                    }
                 }
             }
             BinaryComponent::Python => {
@@ -790,15 +790,28 @@ impl RuntimeDownloader {
                     .binaries
                     .python
                     .as_ref()
-                    .and_then(|b| b.versions.iter().find(|v| v.selected).or_else(|| b.versions.first()))
+                    .and_then(|b| {
+                        b.versions
+                            .iter()
+                            .find(|v| v.selected)
+                            .or_else(|| b.versions.first())
+                    })
                     .expect("Python is not configured");
                 match self.platform {
-                    Platform::WindowsX64 => version_info.urls.windows_x64.clone().unwrap_or_default(),
-                    Platform::WindowsArm64 => version_info.urls.windows_arm64.clone().unwrap_or_default(),
+                    Platform::WindowsX64 => {
+                        version_info.urls.windows_x64.clone().unwrap_or_default()
+                    }
+                    Platform::WindowsArm64 => {
+                        version_info.urls.windows_arm64.clone().unwrap_or_default()
+                    }
                     Platform::MacOSX64 => version_info.urls.macos_x64.clone().unwrap_or_default(),
-                    Platform::MacOSArm64 => version_info.urls.macos_arm64.clone().unwrap_or_default(),
+                    Platform::MacOSArm64 => {
+                        version_info.urls.macos_arm64.clone().unwrap_or_default()
+                    }
                     Platform::LinuxX64 => version_info.urls.linux_x64.clone().unwrap_or_default(),
-                    Platform::LinuxArm64 => version_info.urls.linux_arm64.clone().unwrap_or_default(),
+                    Platform::LinuxArm64 => {
+                        version_info.urls.linux_arm64.clone().unwrap_or_default()
+                    }
                 }
             }
             BinaryComponent::Go => {
@@ -806,15 +819,28 @@ impl RuntimeDownloader {
                     .binaries
                     .go
                     .as_ref()
-                    .and_then(|b| b.versions.iter().find(|v| v.selected).or_else(|| b.versions.first()))
+                    .and_then(|b| {
+                        b.versions
+                            .iter()
+                            .find(|v| v.selected)
+                            .or_else(|| b.versions.first())
+                    })
                     .expect("Go is not configured");
                 match self.platform {
-                    Platform::WindowsX64 => version_info.urls.windows_x64.clone().unwrap_or_default(),
-                    Platform::WindowsArm64 => version_info.urls.windows_arm64.clone().unwrap_or_default(),
+                    Platform::WindowsX64 => {
+                        version_info.urls.windows_x64.clone().unwrap_or_default()
+                    }
+                    Platform::WindowsArm64 => {
+                        version_info.urls.windows_arm64.clone().unwrap_or_default()
+                    }
                     Platform::MacOSX64 => version_info.urls.macos_x64.clone().unwrap_or_default(),
-                    Platform::MacOSArm64 => version_info.urls.macos_arm64.clone().unwrap_or_default(),
+                    Platform::MacOSArm64 => {
+                        version_info.urls.macos_arm64.clone().unwrap_or_default()
+                    }
                     Platform::LinuxX64 => version_info.urls.linux_x64.clone().unwrap_or_default(),
-                    Platform::LinuxArm64 => version_info.urls.linux_arm64.clone().unwrap_or_default(),
+                    Platform::LinuxArm64 => {
+                        version_info.urls.linux_arm64.clone().unwrap_or_default()
+                    }
                 }
             }
             BinaryComponent::Ruby => {
@@ -822,15 +848,28 @@ impl RuntimeDownloader {
                     .binaries
                     .ruby
                     .as_ref()
-                    .and_then(|b| b.versions.iter().find(|v| v.selected).or_else(|| b.versions.first()))
+                    .and_then(|b| {
+                        b.versions
+                            .iter()
+                            .find(|v| v.selected)
+                            .or_else(|| b.versions.first())
+                    })
                     .expect("Ruby is not configured");
                 match self.platform {
-                    Platform::WindowsX64 => version_info.urls.windows_x64.clone().unwrap_or_default(),
-                    Platform::WindowsArm64 => version_info.urls.windows_arm64.clone().unwrap_or_default(),
+                    Platform::WindowsX64 => {
+                        version_info.urls.windows_x64.clone().unwrap_or_default()
+                    }
+                    Platform::WindowsArm64 => {
+                        version_info.urls.windows_arm64.clone().unwrap_or_default()
+                    }
                     Platform::MacOSX64 => version_info.urls.macos_x64.clone().unwrap_or_default(),
-                    Platform::MacOSArm64 => version_info.urls.macos_arm64.clone().unwrap_or_default(),
+                    Platform::MacOSArm64 => {
+                        version_info.urls.macos_arm64.clone().unwrap_or_default()
+                    }
                     Platform::LinuxX64 => version_info.urls.linux_x64.clone().unwrap_or_default(),
-                    Platform::LinuxArm64 => version_info.urls.linux_arm64.clone().unwrap_or_default(),
+                    Platform::LinuxArm64 => {
+                        version_info.urls.linux_arm64.clone().unwrap_or_default()
+                    }
                 }
             }
         }
@@ -838,6 +877,7 @@ impl RuntimeDownloader {
 
     /// Extract file extension from URL
     fn get_extension_from_url(url: &str) -> String {
+        let url = url.split(['?', '#']).next().unwrap_or(url);
         // Get the filename from the URL
         if let Some(filename) = url.split('/').next_back() {
             // Check for .tar.gz first (compound extension)
@@ -851,6 +891,13 @@ impl RuntimeDownloader {
         }
         // Default to zip if we can't determine
         "zip".to_string()
+    }
+
+    fn is_supported_download_extension(extension: &str) -> bool {
+        matches!(
+            extension,
+            "zip" | "gz" | "tar.gz" | "xz" | "tar.xz" | "7z" | "php"
+        )
     }
 
     /// Download a single binary component
@@ -871,6 +918,13 @@ impl RuntimeDownloader {
             ));
         }
         let extension = Self::get_extension_from_url(&url);
+        if !Self::is_supported_download_extension(&extension) {
+            return Err(format!(
+                "{} uses an unsupported archive format '.{}'. CHAMP can install .zip, .tar.gz, .tar.xz, .7z, and .php runtime packages.",
+                self.component_display_name(component),
+                extension
+            ));
+        }
         let version = self.get_component_version(&component);
         let file_path = dest_dir.join(format!(
             "{}-{}.{}",
@@ -1446,6 +1500,8 @@ impl RuntimeDownloader {
         let is_gzip = downloaded_file.magic_bytes.len() >= 2
             && downloaded_file.magic_bytes[0] == 0x1f
             && downloaded_file.magic_bytes[1] == 0x8b;
+        let is_7z = downloaded_file.magic_bytes.len() >= 6
+            && downloaded_file.magic_bytes[..6] == [0x37, 0x7a, 0xbc, 0xaf, 0x27, 0x1c];
 
         if request.extension == "zip" && !is_zip {
             return Err("Expected ZIP file but downloaded file doesn't have ZIP magic bytes. URL may have redirected to HTML page.".to_string());
@@ -1454,6 +1510,12 @@ impl RuntimeDownloader {
         if (request.extension == "gz" || request.extension == "tar.gz") && !is_gzip {
             return Err(
                 "Expected gzip file but downloaded file doesn't have gzip magic bytes.".to_string(),
+            );
+        }
+
+        if request.extension == "7z" && !is_7z {
+            return Err(
+                "Expected 7z file but downloaded file doesn't have 7z magic bytes.".to_string(),
             );
         }
 
@@ -1588,7 +1650,9 @@ impl RuntimeDownloader {
                 };
 
                 for version in &version_info.versions {
-                    if target_id == Some(version.id.as_str()) || (target_id.is_none() && version.selected) {
+                    if target_id == Some(version.id.as_str())
+                        || (target_id.is_none() && version.selected)
+                    {
                         return match platform_key.as_str() {
                             "windowsX64" => version.checksums.windows_x64.clone(),
                             "windowsArm64" => version.checksums.windows_arm64.clone(),
@@ -1787,6 +1851,12 @@ impl RuntimeDownloader {
         Ok(())
     }
 
+    /// Extract a 7z archive
+    fn extract_7z(&self, archive_path: &Path, dest_dir: &Path) -> Result<(), String> {
+        sevenz_rust::decompress_file(archive_path, dest_dir)
+            .map_err(|e| format!("Failed to extract {}: {}", archive_path.display(), e))
+    }
+
     /// Download and install all runtime binaries
     pub async fn download_all(
         &self,
@@ -1813,14 +1883,8 @@ impl RuntimeDownloader {
                         || (selected_database_tool_id.starts_with("phpmyadmin")
                             && skip_list.contains(&"phpmyadmin")));
 
-                if (skip_list.contains(&component_name) || should_skip_database_tool)
-                    && (*component != BinaryComponent::Php
-                        || self
-                            .get_runtime_dir()
-                            .map(|runtime_dir| self.is_selected_php_installed(&runtime_dir))
-                            .unwrap_or(false))
-                {
-                    eprintln!("Skipping {} (already installed)", component.name());
+                if skip_list.contains(&component_name) || should_skip_database_tool {
+                    eprintln!("Skipping {} (requested by caller)", component.name());
                     false
                 } else {
                     true
@@ -1879,10 +1943,15 @@ impl RuntimeDownloader {
                     _ = tokio::time::sleep(PROGRESS_EMIT_INTERVAL) => {}
                 }
 
-                let sum_downloaded: u64 = agg_downloaded.iter().map(|a| a.load(Ordering::Relaxed)).sum();
+                let sum_downloaded: u64 = agg_downloaded
+                    .iter()
+                    .map(|a| a.load(Ordering::Relaxed))
+                    .sum();
                 let sum_total: u64 = agg_totals.iter().map(|a| a.load(Ordering::Relaxed)).sum();
                 let percent = if sum_total > 0 {
-                    ((sum_downloaded as f64 / sum_total as f64) * 100.0).round().clamp(0.0, 100.0) as u8
+                    ((sum_downloaded as f64 / sum_total as f64) * 100.0)
+                        .round()
+                        .clamp(0.0, 100.0) as u8
                 } else {
                     0
                 };
@@ -1940,14 +2009,16 @@ impl RuntimeDownloader {
         let mut completed = 0_usize;
 
         while let Some(result) = join_set.join_next().await {
-            let (component, path) = result
-                .map_err(|e| format!("Download task panicked: {}", e))??;
+            let (component, path) =
+                result.map_err(|e| format!("Download task panicked: {}", e))??;
 
             // Find the index for this component
             let index = components
                 .iter()
                 .position(|&c| c == component)
-                .ok_or_else(|| format!("Unknown component in download result: {}", component.name()))?;
+                .ok_or_else(|| {
+                    format!("Unknown component in download result: {}", component.name())
+                })?;
             download_results[index] = Some((component, path));
             completed += 1;
 
@@ -1968,10 +2039,7 @@ impl RuntimeDownloader {
 
         for (index, result) in download_results.into_iter().enumerate() {
             let (component, path) = result.ok_or_else(|| {
-                format!(
-                    "Missing download result for component at index {}",
-                    index
-                )
+                format!("Missing download result for component at index {}", index)
             })?;
 
             progress_cb(DownloadProgress {
@@ -2048,27 +2116,6 @@ impl RuntimeDownloader {
         }
     }
 
-    fn is_selected_php_installed(&self, runtime_dir: &Path) -> bool {
-        let php_id = self.selected_php_id();
-        let selected_version = get_php_package(&php_id).map(|package| package.version);
-        let legacy_version = fs::read_to_string(runtime_dir.join("php_installed.txt"))
-            .ok()
-            .and_then(|content| {
-                content
-                    .lines()
-                    .find_map(|line| line.strip_prefix("version=").map(str::to_string))
-            });
-
-        runtime_dir
-            .join("php_versions")
-            .join(format!("{}_installed.txt", php_id))
-            .exists()
-            || selected_version
-                .zip(legacy_version)
-                .map(|(selected, legacy)| selected == legacy)
-                .unwrap_or(false)
-    }
-
     fn install_downloaded_component(
         &self,
         component: BinaryComponent,
@@ -2100,6 +2147,8 @@ impl RuntimeDownloader {
             self.extract_tar_gz(downloaded_path, &install_dir)?;
         } else if is_tar_xz || extension == "xz" {
             self.extract_tar_xz(downloaded_path, &install_dir)?;
+        } else if extension == "7z" {
+            self.extract_7z(downloaded_path, &install_dir)?;
         } else if extension == "zip" {
             self.extract_zip(downloaded_path, &install_dir)?;
             if component == BinaryComponent::PhpMyAdmin {
@@ -2165,8 +2214,11 @@ impl RuntimeDownloader {
             BinaryComponent::PhpMyAdmin,
         ];
 
-        let selection = self.package_selection.clone().unwrap_or_else(|| crate::config::AppSettings::load().package_selection);
-        
+        let selection = self
+            .package_selection
+            .clone()
+            .unwrap_or_else(|| crate::config::AppSettings::load().package_selection);
+
         if let Some(node) = &selection.node {
             if !node.is_empty() {
                 components.push(BinaryComponent::Node);

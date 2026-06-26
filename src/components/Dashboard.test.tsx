@@ -329,7 +329,8 @@ describe("Dashboard Component", () => {
 
       render(<Dashboard />);
 
-      fireEvent.click(await screen.findByRole("button", { name: /^create project$/i }));
+      fireEvent.click(await screen.findByRole("button", { name: /^more$/i }));
+      fireEvent.click(await screen.findByRole("menuitem", { name: /^create project$/i }));
       fireEvent.click(await screen.findByRole("button", { name: /node/i }));
       fireEvent.change(screen.getByPlaceholderText("Project name"), {
         target: { value: "demo-node" },

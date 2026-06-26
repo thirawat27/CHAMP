@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::sync::OnceLock;
+use std::sync::{OnceLock, RwLock};
 
 const EMBEDDED_RUNTIME_CONFIG: &str = include_str!("../../runtime-config.json");
 
@@ -288,7 +288,7 @@ fn default_postgresql_version() -> VersionInfo {
 }
 
 /// Global runtime config cache
-static RUNTIME_CONFIG: OnceLock<Option<RuntimeConfig>> = OnceLock::new();
+static RUNTIME_CONFIG: OnceLock<RwLock<Option<RuntimeConfig>>> = OnceLock::new();
 static TAURI_RESOURCE_DIR: OnceLock<PathBuf> = OnceLock::new();
 
 pub fn set_tauri_resource_dir(path: PathBuf) {
@@ -298,24 +298,35 @@ pub fn set_tauri_resource_dir(path: PathBuf) {
 pub fn runtime_config_search_paths() -> Vec<PathBuf> {
     let mut paths = Vec::new();
 
+    if let Ok(app_paths) = crate::runtime::locator::get_app_data_paths() {
+        paths.push(app_paths.config_dir.join("runtime-config.json"));
+        paths.push(app_paths.base_dir.join("runtime-config.json"));
+    }
+
+    for env_name in ["CHAMP_DATA_DIR", "CHAMP_PORTABLE_DIR"] {
+        if let Some(dir) = std::env::var_os(env_name).map(PathBuf::from) {
+            paths.push(dir.join("config").join("runtime-config.json"));
+            paths.push(dir.join("runtime-config.json"));
+        }
+    }
+
+    if let Some(data_dir) = dirs::data_local_dir() {
+        paths.push(
+            data_dir
+                .join("CHAMP")
+                .join("config")
+                .join("runtime-config.json"),
+        );
+        paths.push(data_dir.join("CHAMP").join("runtime-config.json"));
+        paths.push(data_dir.join("campp").join("runtime-config.json"));
+    }
+
     if let Some(resource_dir) = TAURI_RESOURCE_DIR.get() {
         paths.push(resource_dir.join("runtime-config.json"));
     }
 
     paths.push(PathBuf::from("runtime-config.json"));
     paths.push(PathBuf::from("src-tauri").join("runtime-config.json"));
-
-    if let Ok(app_paths) = crate::runtime::locator::get_app_data_paths() {
-        paths.push(app_paths.base_dir.join("runtime-config.json"));
-        paths.push(app_paths.config_dir.join("runtime-config.json"));
-    }
-
-    for env_name in ["CHAMP_DATA_DIR", "CHAMP_PORTABLE_DIR"] {
-        if let Some(dir) = std::env::var_os(env_name).map(PathBuf::from) {
-            paths.push(dir.join("runtime-config.json"));
-            paths.push(dir.join("config").join("runtime-config.json"));
-        }
-    }
 
     if let Ok(exe_path) = std::env::current_exe() {
         if let Some(exe_dir) = exe_path.parent() {
@@ -327,17 +338,6 @@ pub fn runtime_config_search_paths() -> Vec<PathBuf> {
                 }
             }
         }
-    }
-
-    if let Some(data_dir) = dirs::data_local_dir() {
-        paths.push(data_dir.join("CHAMP").join("runtime-config.json"));
-        paths.push(
-            data_dir
-                .join("CHAMP")
-                .join("config")
-                .join("runtime-config.json"),
-        );
-        paths.push(data_dir.join("campp").join("runtime-config.json"));
     }
 
     #[cfg(target_os = "linux")]
@@ -442,9 +442,639 @@ pub fn load_runtime_config_from_file() -> Option<RuntimeConfig> {
     Some(embedded_default_runtime_config())
 }
 
+fn replace_runtime_config(config: Option<RuntimeConfig>) {
+    let cache = RUNTIME_CONFIG.get_or_init(|| RwLock::new(None));
+    if let Ok(mut guard) = cache.write() {
+        *guard = config;
+    }
+}
+
 pub fn embedded_default_runtime_config() -> RuntimeConfig {
     serde_json::from_str(EMBEDDED_RUNTIME_CONFIG)
         .expect("embedded runtime-config.json must be valid")
+}
+
+#[derive(Debug, Deserialize)]
+struct GitHubLatestRelease {
+    tag_name: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct NodeIndexEntry {
+    version: String,
+    lts: serde_json::Value,
+}
+
+#[derive(Debug, Deserialize)]
+struct GoDownloadEntry {
+    version: String,
+    stable: bool,
+}
+
+/// Refresh the runtime catalog from upstream release metadata.
+///
+/// Network failures are non-fatal; the current local catalog is returned so the
+/// UI can continue to work offline.
+pub async fn refresh_runtime_catalog() -> Result<PackagesConfig, String> {
+    let mut config = get_config().unwrap_or_else(embedded_default_runtime_config);
+    let client = reqwest::Client::builder()
+        .user_agent("CHAMP runtime catalog refresher")
+        .build()
+        .map_err(|e| format!("Failed to create HTTP client: {}", e))?;
+    let mut changed = false;
+
+    if let Some(version) = fetch_github_latest(&client, "caddyserver", "caddy")
+        .await
+        .map(|tag| tag.strip_prefix('v').map_or(tag.clone(), str::to_string))
+    {
+        changed |= replace_versions(&mut config.binaries.caddy.versions, caddy_version(&version));
+    }
+
+    if let Some(version) =
+        fetch_version_from_text(&client, "https://www.php.net/", "downloads of PHP ").await
+    {
+        changed |=
+            upsert_selected_version(&mut config.binaries.php.versions, php_version(&version));
+    }
+
+    if let Some(version) = fetch_version_from_text(
+        &client,
+        "https://dev.mysql.com/downloads/mysql/?os=3&platform=",
+        "MySQL Community Server ",
+    )
+    .await
+    {
+        changed |= replace_version_list(
+            &mut config.binaries.mysql.versions,
+            vec![
+                mysql_version(&version),
+                selected_version(mysql_version("8.4.10"), false),
+            ],
+        );
+    }
+
+    if let Some(version) = fetch_version_from_text(
+        &client,
+        "https://www.enterprisedb.com/downloads/postgres-postgresql-downloads",
+        "PostgreSQL Version",
+    )
+    .await
+    {
+        changed |= replace_version_list(
+            &mut config.binaries.postgresql.versions,
+            vec![
+                postgresql_version(&version),
+                selected_version(postgresql_version("17.10"), false),
+                selected_version(postgresql_version("16.14"), false),
+            ],
+        );
+    }
+
+    if let Some(version) = fetch_version_from_text(
+        &client,
+        "https://www.phpmyadmin.net/downloads/",
+        "phpMyAdmin ",
+    )
+    .await
+    {
+        changed |= upsert_selected_single_url(
+            &mut config.binaries.phpmyadmin.versions,
+            phpmyadmin_version(&version),
+            false,
+        );
+    }
+
+    if let Some(version) = fetch_version_from_text(
+        &client,
+        "https://www.adminer.org/version/?current=0&lang=en",
+        "",
+    )
+    .await
+    {
+        changed |= upsert_selected_single_url(
+            &mut config.binaries.phpmyadmin.versions,
+            adminer_version(&version),
+            false,
+        );
+    }
+
+    if let Some(versions) = fetch_node_release_lines(&client).await {
+        changed |= replace_version_list(
+            &mut config
+                .binaries
+                .node
+                .get_or_insert_with(empty_binary_config)
+                .versions,
+            versions,
+        );
+    }
+
+    if let Some(version) = fetch_version_from_text(
+        &client,
+        "https://www.python.org/downloads/",
+        "Download Python ",
+    )
+    .await
+    {
+        changed |= replace_version_list(
+            &mut config
+                .binaries
+                .python
+                .get_or_insert_with(empty_binary_config)
+                .versions,
+            vec![
+                python_version(&version),
+                selected_version(python_version("3.13.14"), false),
+            ],
+        );
+    }
+
+    if let Some(versions) = fetch_go_stable_versions(&client).await {
+        changed |= replace_version_list(
+            &mut config
+                .binaries
+                .go
+                .get_or_insert_with(empty_binary_config)
+                .versions,
+            versions,
+        );
+    }
+
+    if let Some(version) = fetch_github_latest(&client, "oneclick", "rubyinstaller2")
+        .await
+        .and_then(|tag| {
+            tag.strip_prefix("RubyInstaller-").and_then(|value| {
+                value
+                    .rsplit_once('-')
+                    .map(|(version, _)| version.to_string())
+            })
+        })
+    {
+        changed |= replace_version_list(
+            &mut config
+                .binaries
+                .ruby
+                .get_or_insert_with(empty_binary_config)
+                .versions,
+            vec![
+                ruby_version(&version),
+                selected_version(ruby_version("3.4.9"), false),
+                selected_version(ruby_version("3.3.7"), false),
+            ],
+        );
+    }
+
+    if changed {
+        persist_runtime_config_override(&config)?;
+        replace_runtime_config(Some(config.clone()));
+    }
+
+    Ok(runtime_config_to_packages(&config))
+}
+
+fn empty_binary_config() -> BinaryConfig {
+    BinaryConfig { versions: vec![] }
+}
+
+async fn fetch_github_latest(client: &reqwest::Client, owner: &str, repo: &str) -> Option<String> {
+    let url = format!("https://api.github.com/repos/{owner}/{repo}/releases/latest");
+    client
+        .get(url)
+        .send()
+        .await
+        .ok()?
+        .error_for_status()
+        .ok()?
+        .json::<GitHubLatestRelease>()
+        .await
+        .ok()
+        .map(|release| release.tag_name)
+}
+
+async fn fetch_node_release_lines(client: &reqwest::Client) -> Option<Vec<VersionInfo>> {
+    let entries = client
+        .get("https://nodejs.org/dist/index.json")
+        .send()
+        .await
+        .ok()?
+        .error_for_status()
+        .ok()?
+        .json::<Vec<NodeIndexEntry>>()
+        .await
+        .ok()?;
+
+    let mut seen_majors = std::collections::HashSet::new();
+    let mut versions = Vec::new();
+    let mut selected_lts = false;
+
+    for entry in entries {
+        let version = entry.version.trim_start_matches('v').to_string();
+        let major = version.split('.').next().unwrap_or_default().to_string();
+        if major.is_empty() || !seen_majors.insert(major) {
+            continue;
+        }
+
+        let is_lts = !entry.lts.is_boolean() || entry.lts.as_bool() != Some(false);
+        if is_lts {
+            let selected = !selected_lts;
+            selected_lts = true;
+            versions.push(node_version_with_label(&version, true, selected, "LTS"));
+        } else if versions.is_empty() {
+            versions.push(node_version_with_label(&version, false, false, "Stable"));
+        }
+
+        if versions.len() >= 4 {
+            break;
+        }
+    }
+
+    if versions.is_empty() {
+        None
+    } else {
+        Some(versions)
+    }
+}
+
+async fn fetch_go_stable_versions(client: &reqwest::Client) -> Option<Vec<VersionInfo>> {
+    let entries = client
+        .get("https://go.dev/dl/?mode=json")
+        .send()
+        .await
+        .ok()?
+        .error_for_status()
+        .ok()?
+        .json::<Vec<GoDownloadEntry>>()
+        .await
+        .ok()?;
+
+    let versions: Vec<_> = entries
+        .into_iter()
+        .filter(|entry| entry.stable)
+        .take(2)
+        .enumerate()
+        .map(|(index, entry)| {
+            selected_version(
+                go_version(entry.version.trim_start_matches("go")),
+                index == 0,
+            )
+        })
+        .collect();
+
+    if versions.is_empty() {
+        None
+    } else {
+        Some(versions)
+    }
+}
+
+async fn fetch_version_from_text(
+    client: &reqwest::Client,
+    url: &str,
+    marker: &str,
+) -> Option<String> {
+    let text = client
+        .get(url)
+        .send()
+        .await
+        .ok()?
+        .error_for_status()
+        .ok()?
+        .text()
+        .await
+        .ok()?;
+    version_after_marker(&text, marker)
+}
+
+fn version_after_marker(text: &str, marker: &str) -> Option<String> {
+    let haystack = if marker.is_empty() {
+        text
+    } else {
+        let index = text.find(marker)? + marker.len();
+        &text[index..]
+    };
+
+    for (start, ch) in haystack.char_indices() {
+        if !ch.is_ascii_digit() {
+            continue;
+        }
+
+        let candidate: String = haystack[start..]
+            .chars()
+            .take_while(|value| value.is_ascii_digit() || *value == '.')
+            .collect();
+        let candidate = candidate.trim_end_matches('.').to_string();
+        if candidate.matches('.').count() >= 1 {
+            return Some(candidate);
+        }
+    }
+
+    None
+}
+
+fn persist_runtime_config_override(config: &RuntimeConfig) -> Result<(), String> {
+    let app_paths = crate::runtime::locator::get_app_data_paths()
+        .map_err(|e| format!("Failed to get app data paths: {}", e))?;
+    fs::create_dir_all(&app_paths.config_dir)
+        .map_err(|e| format!("Failed to create config directory: {}", e))?;
+    let target = app_paths.config_dir.join("runtime-config.json");
+    let content = serde_json::to_string_pretty(config)
+        .map_err(|e| format!("Failed to serialize runtime config: {}", e))?;
+    fs::write(&target, format!("{content}\n"))
+        .map_err(|e| format!("Failed to write {}: {}", target.display(), e))
+}
+
+fn replace_versions(versions: &mut Vec<VersionInfo>, next: VersionInfo) -> bool {
+    if versions.len() == 1 && versions[0].id == next.id && versions[0].version == next.version {
+        versions[0].selected = true;
+        return false;
+    }
+    *versions = vec![next];
+    true
+}
+
+fn replace_version_list(versions: &mut Vec<VersionInfo>, next: Vec<VersionInfo>) -> bool {
+    let changed = versions.len() != next.len()
+        || versions.iter().zip(&next).any(|(current, updated)| {
+            current.id != updated.id
+                || current.version != updated.version
+                || current.selected != updated.selected
+                || current.display_name != updated.display_name
+                || current.eol != updated.eol
+                || current.lts != updated.lts
+        });
+
+    if changed {
+        *versions = next;
+    }
+
+    changed
+}
+
+fn selected_version(mut version: VersionInfo, selected: bool) -> VersionInfo {
+    version.selected = selected;
+    version
+}
+
+fn upsert_selected_version(versions: &mut Vec<VersionInfo>, next: VersionInfo) -> bool {
+    let mut changed = false;
+    for version in versions.iter_mut() {
+        version.selected = false;
+    }
+
+    if let Some(existing) = versions.iter_mut().find(|version| version.id == next.id) {
+        if existing.version != next.version || existing.display_name != next.display_name {
+            changed = true;
+        }
+        *existing = next;
+    } else {
+        versions.insert(0, next);
+        changed = true;
+    }
+
+    versions.sort_by(|a, b| b.version.cmp(&a.version));
+    changed
+}
+
+fn upsert_selected_single_url(
+    versions: &mut Vec<VersionInfoSingleUrl>,
+    next: VersionInfoSingleUrl,
+    select: bool,
+) -> bool {
+    let mut changed = false;
+    if select {
+        for version in versions.iter_mut() {
+            version.selected = false;
+        }
+    }
+
+    if let Some(existing) = versions.iter_mut().find(|version| version.id == next.id) {
+        if existing.version != next.version || existing.url != next.url {
+            changed = true;
+        }
+        *existing = VersionInfoSingleUrl {
+            selected: select || existing.selected,
+            ..next
+        };
+    } else {
+        versions.push(VersionInfoSingleUrl {
+            selected: select,
+            ..next
+        });
+        changed = true;
+    }
+
+    changed
+}
+
+fn version_major_minor(version: &str) -> String {
+    let mut parts = version.split('.');
+    match (parts.next(), parts.next()) {
+        (Some(major), Some(minor)) => format!("{major}.{minor}"),
+        _ => version.to_string(),
+    }
+}
+
+fn caddy_version(version: &str) -> VersionInfo {
+    VersionInfo {
+        id: format!("caddy-{}", version_major_minor(version)),
+        version: version.to_string(),
+        selected: true,
+        display_name: format!("Caddy {version}"),
+        eol: false,
+        lts: true,
+        checksums: Checksums::default(),
+        urls: Urls {
+            windows_x64: Some(format!("https://github.com/caddyserver/caddy/releases/download/v{version}/caddy_{version}_windows_amd64.zip")),
+            windows_arm64: Some(format!("https://github.com/caddyserver/caddy/releases/download/v{version}/caddy_{version}_windows_arm64.zip")),
+            linux_x64: Some(format!("https://github.com/caddyserver/caddy/releases/download/v{version}/caddy_{version}_linux_amd64.tar.gz")),
+            linux_arm64: Some(format!("https://github.com/caddyserver/caddy/releases/download/v{version}/caddy_{version}_linux_arm64.tar.gz")),
+            macos_x64: Some(format!("https://github.com/caddyserver/caddy/releases/download/v{version}/caddy_{version}_mac_amd64.tar.gz")),
+            macos_arm64: Some(format!("https://github.com/caddyserver/caddy/releases/download/v{version}/caddy_{version}_mac_arm64.tar.gz")),
+        },
+    }
+}
+
+fn php_version(version: &str) -> VersionInfo {
+    let family = version_major_minor(version);
+    VersionInfo {
+        id: format!("php-{family}"),
+        version: version.to_string(),
+        selected: true,
+        display_name: format!("PHP {family}"),
+        eol: false,
+        lts: false,
+        checksums: Checksums::default(),
+        urls: Urls {
+            windows_x64: Some(format!("https://windows.php.net/downloads/releases/php-{version}-nts-Win32-vs17-x64.zip")),
+            windows_arm64: None,
+            linux_x64: Some(format!("https://dl.static-php.dev/static-php-cli/bulk/php-{version}-fpm-linux-x86_64.tar.gz")),
+            linux_arm64: Some(format!("https://dl.static-php.dev/static-php-cli/bulk/php-{version}-fpm-linux-aarch64.tar.gz")),
+            macos_x64: Some(format!("https://dl.static-php.dev/static-php-cli/bulk/php-{version}-fpm-macos-x86_64.tar.gz")),
+            macos_arm64: Some(format!("https://dl.static-php.dev/static-php-cli/bulk/php-{version}-fpm-macos-aarch64.tar.gz")),
+        },
+    }
+}
+
+fn mysql_version(version: &str) -> VersionInfo {
+    let family = version_major_minor(version);
+    VersionInfo {
+        id: format!("mysql-{family}"),
+        version: version.to_string(),
+        selected: true,
+        display_name: format!("MySQL {version}"),
+        eol: false,
+        lts: false,
+        checksums: Checksums::default(),
+        urls: Urls {
+            windows_x64: Some(format!("https://cdn.mysql.com/Downloads/MySQL-{family}/mysql-{version}-winx64.zip")),
+            windows_arm64: None,
+            linux_x64: Some(format!("https://cdn.mysql.com/Downloads/MySQL-{family}/mysql-{version}-linux-glibc2.28-x86_64.tar.xz")),
+            linux_arm64: Some(format!("https://cdn.mysql.com/Downloads/MySQL-{family}/mysql-{version}-linux-glibc2.28-aarch64.tar.xz")),
+            macos_x64: Some(format!("https://cdn.mysql.com/Downloads/MySQL-{family}/mysql-{version}-macos15-x86_64.tar.gz")),
+            macos_arm64: Some(format!("https://cdn.mysql.com/Downloads/MySQL-{family}/mysql-{version}-macos15-arm64.tar.gz")),
+        },
+    }
+}
+
+fn postgresql_version(version: &str) -> VersionInfo {
+    let major = version.split('.').next().unwrap_or(version);
+    VersionInfo {
+        id: format!("postgresql-{major}"),
+        version: version.to_string(),
+        selected: true,
+        display_name: format!("PostgreSQL {version}"),
+        eol: false,
+        lts: false,
+        checksums: Checksums::default(),
+        urls: Urls {
+            windows_x64: Some(format!("https://get.enterprisedb.com/postgresql/postgresql-{version}-1-windows-x64-binaries.zip")),
+            windows_arm64: None,
+            linux_x64: Some(format!("https://downloads.percona.com/downloads/postgresql-distribution-{major}/{version}/binary/tarball/percona-postgresql-{version}-ssl3-linux-x86_64.tar.gz")),
+            linux_arm64: Some(format!("https://downloads.percona.com/downloads/postgresql-distribution-{major}/{version}/binary/tarball/percona-postgresql-{version}-ssl3-linux-aarch64.tar.gz")),
+            macos_x64: Some(format!("https://get.enterprisedb.com/postgresql/postgresql-{version}-1-osx-binaries.zip")),
+            macos_arm64: Some(format!("https://get.enterprisedb.com/postgresql/postgresql-{version}-1-osx-binaries.zip")),
+        },
+    }
+}
+
+fn phpmyadmin_version(version: &str) -> VersionInfoSingleUrl {
+    VersionInfoSingleUrl {
+        id: format!("phpmyadmin-{}", version_major_minor(version)),
+        version: version.to_string(),
+        selected: true,
+        display_name: format!("phpMyAdmin {version}"),
+        eol: false,
+        lts: false,
+        checksum: None,
+        url: format!("https://files.phpmyadmin.net/phpMyAdmin/{version}/phpMyAdmin-{version}-all-languages.zip"),
+    }
+}
+
+fn adminer_version(version: &str) -> VersionInfoSingleUrl {
+    VersionInfoSingleUrl {
+        id: format!("adminer-{}", version_major_minor(version)),
+        version: version.to_string(),
+        selected: false,
+        display_name: format!("Adminer {version}"),
+        eol: false,
+        lts: false,
+        checksum: None,
+        url: format!("https://www.adminer.org/static/download/{version}/adminer-{version}.php"),
+    }
+}
+
+fn node_version_with_label(version: &str, lts: bool, selected: bool, label: &str) -> VersionInfo {
+    VersionInfo {
+        id: format!("node-{}", version.split('.').next().unwrap_or(version)),
+        version: version.to_string(),
+        selected,
+        display_name: format!("Node.js {version} ({label})"),
+        eol: false,
+        lts,
+        checksums: Checksums::default(),
+        urls: Urls {
+            windows_x64: Some(format!(
+                "https://nodejs.org/dist/v{version}/node-v{version}-win-x64.zip"
+            )),
+            windows_arm64: Some(format!(
+                "https://nodejs.org/dist/v{version}/node-v{version}-win-arm64.zip"
+            )),
+            linux_x64: Some(format!(
+                "https://nodejs.org/dist/v{version}/node-v{version}-linux-x64.tar.xz"
+            )),
+            linux_arm64: Some(format!(
+                "https://nodejs.org/dist/v{version}/node-v{version}-linux-arm64.tar.xz"
+            )),
+            macos_x64: Some(format!(
+                "https://nodejs.org/dist/v{version}/node-v{version}-darwin-x64.tar.gz"
+            )),
+            macos_arm64: Some(format!(
+                "https://nodejs.org/dist/v{version}/node-v{version}-darwin-arm64.tar.gz"
+            )),
+        },
+    }
+}
+
+fn python_version(version: &str) -> VersionInfo {
+    let build_tag = "20260623";
+    VersionInfo {
+        id: format!("python-{}", version_major_minor(version)),
+        version: version.to_string(),
+        selected: true,
+        display_name: format!("Python {version}"),
+        eol: false,
+        lts: false,
+        checksums: Checksums::default(),
+        urls: Urls {
+            windows_x64: Some(format!("https://www.python.org/ftp/python/{version}/python-{version}-embed-amd64.zip")),
+            windows_arm64: Some(format!("https://www.python.org/ftp/python/{version}/python-{version}-embed-arm64.zip")),
+            linux_x64: Some(format!("https://github.com/astral-sh/python-build-standalone/releases/download/{build_tag}/cpython-{version}+{build_tag}-x86_64-unknown-linux-gnu-install_only.tar.gz")),
+            linux_arm64: Some(format!("https://github.com/astral-sh/python-build-standalone/releases/download/{build_tag}/cpython-{version}+{build_tag}-aarch64-unknown-linux-gnu-install_only.tar.gz")),
+            macos_x64: Some(format!("https://github.com/astral-sh/python-build-standalone/releases/download/{build_tag}/cpython-{version}+{build_tag}-x86_64-apple-darwin-install_only.tar.gz")),
+            macos_arm64: Some(format!("https://github.com/astral-sh/python-build-standalone/releases/download/{build_tag}/cpython-{version}+{build_tag}-aarch64-apple-darwin-install_only.tar.gz")),
+        },
+    }
+}
+
+fn go_version(version: &str) -> VersionInfo {
+    VersionInfo {
+        id: format!("go-{}", version_major_minor(version)),
+        version: version.to_string(),
+        selected: true,
+        display_name: format!("Go {version}"),
+        eol: false,
+        lts: false,
+        checksums: Checksums::default(),
+        urls: Urls {
+            windows_x64: Some(format!("https://go.dev/dl/go{version}.windows-amd64.zip")),
+            windows_arm64: Some(format!("https://go.dev/dl/go{version}.windows-arm64.zip")),
+            linux_x64: Some(format!("https://go.dev/dl/go{version}.linux-amd64.tar.gz")),
+            linux_arm64: Some(format!("https://go.dev/dl/go{version}.linux-arm64.tar.gz")),
+            macos_x64: Some(format!("https://go.dev/dl/go{version}.darwin-amd64.tar.gz")),
+            macos_arm64: Some(format!("https://go.dev/dl/go{version}.darwin-arm64.tar.gz")),
+        },
+    }
+}
+
+fn ruby_version(version: &str) -> VersionInfo {
+    let family = version_major_minor(version);
+    VersionInfo {
+        id: format!("ruby-{family}"),
+        version: version.to_string(),
+        selected: true,
+        display_name: format!("Ruby {version}"),
+        eol: false,
+        lts: false,
+        checksums: Checksums::default(),
+        urls: Urls {
+            windows_x64: Some(format!("https://github.com/oneclick/rubyinstaller2/releases/download/RubyInstaller-{version}-1/rubyinstaller-{version}-1-x64.7z")),
+            windows_arm64: None,
+            linux_x64: Some(format!("https://cache.ruby-lang.org/pub/ruby/{family}/ruby-{version}.tar.xz")),
+            linux_arm64: Some(format!("https://cache.ruby-lang.org/pub/ruby/{family}/ruby-{version}.tar.xz")),
+            macos_x64: Some(format!("https://cache.ruby-lang.org/pub/ruby/{family}/ruby-{version}.tar.xz")),
+            macos_arm64: Some(format!("https://cache.ruby-lang.org/pub/ruby/{family}/ruby-{version}.tar.xz")),
+        },
+    }
 }
 
 /// Get the platform-appropriate database display name.
@@ -454,10 +1084,10 @@ fn get_database_display_name(display_name: &str) -> String {
 
 /// Get all available packages from config file or defaults
 pub fn get_available_packages() -> PackagesConfig {
-    let config = RUNTIME_CONFIG.get_or_init(load_runtime_config_from_file);
+    let config = get_config();
 
     if let Some(cfg) = config {
-        runtime_config_to_packages(cfg)
+        runtime_config_to_packages(&cfg)
     } else {
         eprintln!("Using embedded default package configuration");
         get_default_packages()
@@ -587,10 +1217,10 @@ fn version_info_to_generic(v: &VersionInfo) -> GenericPackage {
 
 /// Get the selected package IDs from config
 pub fn get_selected_package_ids() -> PackageSelection {
-    let config = RUNTIME_CONFIG.get_or_init(load_runtime_config_from_file);
+    let config = get_config();
 
     if let Some(cfg) = config {
-        selected_package_ids_from_config(cfg)
+        selected_package_ids_from_config(&cfg)
     } else {
         PackageSelection::default()
     }
@@ -613,10 +1243,10 @@ fn selected_package_ids_from_config(cfg: &RuntimeConfig) -> PackageSelection {
             .or_else(|| cfg.binaries.phpmyadmin.versions.first())
             .map(|v| v.id.clone())
             .expect("runtime-config.json must define a database tool package"),
-        node: cfg.binaries.node.as_ref().and_then(|b| selected_version_id(&b.versions)),
-        python: cfg.binaries.python.as_ref().and_then(|b| selected_version_id(&b.versions)),
-        go: cfg.binaries.go.as_ref().and_then(|b| selected_version_id(&b.versions)),
-        ruby: cfg.binaries.ruby.as_ref().and_then(|b| selected_version_id(&b.versions)),
+        node: None,
+        python: None,
+        go: None,
+        ruby: None,
     }
 }
 
@@ -678,10 +1308,7 @@ pub fn get_python_package(id: &str) -> Option<GenericPackage> {
 
 /// Get Go package by ID
 pub fn get_go_package(id: &str) -> Option<GenericPackage> {
-    get_available_packages()
-        .go
-        .into_iter()
-        .find(|p| p.id == id)
+    get_available_packages().go.into_iter().find(|p| p.id == id)
 }
 
 /// Get Ruby package by ID
@@ -694,14 +1321,13 @@ pub fn get_ruby_package(id: &str) -> Option<GenericPackage> {
 
 /// Reload the runtime configuration (call after modifying the config file)
 pub fn reload_runtime_config() {
-    let _ = RUNTIME_CONFIG.set(load_runtime_config_from_file());
+    replace_runtime_config(load_runtime_config_from_file());
 }
 
 /// Get the runtime configuration
 pub fn get_config() -> Option<RuntimeConfig> {
-    RUNTIME_CONFIG
-        .get_or_init(load_runtime_config_from_file)
-        .clone()
+    let cache = RUNTIME_CONFIG.get_or_init(|| RwLock::new(load_runtime_config_from_file()));
+    cache.read().ok().and_then(|guard| guard.clone())
 }
 
 pub fn selected_caddy_version() -> String {

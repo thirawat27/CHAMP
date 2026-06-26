@@ -190,6 +190,28 @@ export const hasPackageUrlForPlatform = (
   platformKey: string
 ): boolean => getPackageUrlForPlatform(pkg, platformKey).trim().length > 0;
 
+export const isSupportedRuntimeArchiveUrl = (url: string): boolean => {
+  const pathname = url.split(/[?#]/, 1)[0].toLowerCase();
+  return (
+    pathname.endsWith(".zip") ||
+    pathname.endsWith(".tar.gz") ||
+    pathname.endsWith(".tar.xz") ||
+    pathname.endsWith(".7z") ||
+    pathname.endsWith(".php")
+  );
+};
+
+export const hasInstallablePackageForPlatform = (
+  pkg: Pick<
+    PhpPackage,
+    "windowsX64" | "windowsArm64" | "linuxX64" | "linuxArm64" | "macOSX64" | "macOSArm64"
+  >,
+  platformKey: string
+): boolean => {
+  const url = getPackageUrlForPlatform(pkg, platformKey).trim();
+  return url.length > 0 && isSupportedRuntimeArchiveUrl(url);
+};
+
 export interface InstalledPhpVersion {
   id: string;
   version: string;

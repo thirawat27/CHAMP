@@ -44,10 +44,19 @@ export function PackageSelector({ onSelectionChange, initialSelection }: Package
     return badges.length > 0 ? `${pkg.display_name} [${badges.join(", ")}]` : pkg.display_name;
   };
 
+  const getPackageLabel = (pkg: Pick<PhpPackage, "display_name" | "lts" | "eol">): string => {
+    const badges = [pkg.lts ? t.ltsBadge : t.stableBadge, pkg.eol ? t.eolBadge : ""].filter(
+      Boolean
+    );
+    return `${pkg.display_name} [${badges.join(", ")}]`;
+  };
+
   const loadPackages = useCallback(async () => {
     try {
       const [data, platformKey] = await Promise.all([
-        invoke<PackagesConfig>("get_available_packages_cmd"),
+        invoke<PackagesConfig>("refresh_runtime_catalog").catch(() =>
+          invoke<PackagesConfig>("get_available_packages_cmd")
+        ),
         invoke<string>("get_runtime_platform"),
       ]);
       setPackages(data);
@@ -176,6 +185,7 @@ export function PackageSelector({ onSelectionChange, initialSelection }: Package
     : availableMysqlPackages;
   const activeDatabaseValue = adminerSelected ? selection.postgresql : selection.mysql;
   const handleActiveDatabaseChange = adminerSelected ? handlePostgreSQLChange : handleMySQLChange;
+  const selectedPhpPackage = availablePhpPackages.find((pkg) => pkg.id === selection.php);
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
@@ -245,7 +255,7 @@ export function PackageSelector({ onSelectionChange, initialSelection }: Package
         >
           {activeDatabasePackages.map((pkg: MySQLPackage) => (
             <option key={pkg.id} value={pkg.id}>
-              {pkg.display_name}
+              {getPackageLabel(pkg)}
             </option>
           ))}
         </select>
@@ -256,8 +266,8 @@ export function PackageSelector({ onSelectionChange, initialSelection }: Package
         <p
           style={{ fontSize: "0.875rem", color: "var(--text-secondary)", margin: "0 0 0.375rem 0" }}
         >
-          <strong>{t.wizardDefault}:</strong> PHP 8.5, {activeDatabaseName},{" "}
-          {adminerSelected ? "Adminer" : "phpMyAdmin"}
+          <strong>{t.wizardDefault}:</strong> {selectedPhpPackage?.display_name || "PHP"},{" "}
+          {activeDatabaseName}, {adminerSelected ? "Adminer" : "phpMyAdmin"}
         </p>
         <p style={{ fontSize: "0.875rem", color: "var(--text-secondary)", margin: 0 }}>
           <strong>{t.wizardNote}:</strong> {t.wizardEolNote}
