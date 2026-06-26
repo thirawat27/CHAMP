@@ -5,6 +5,7 @@ mod constants;
 mod error;
 mod process;
 mod runtime;
+mod tunnel;
 
 // Re-exports
 pub use error::{ChampError, Result};
@@ -134,6 +135,9 @@ pub fn run() {
             commands::stop_all_services,
             commands::restart_all_services,
             commands::get_all_statuses,
+            commands::start_https_tunnel,
+            commands::stop_https_tunnel,
+            commands::get_https_tunnel_status,
             // Settings commands
             commands::get_settings,
             commands::save_settings,

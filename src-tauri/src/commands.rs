@@ -8,6 +8,7 @@
 //! - **Folder Operations**: `open_folder`, `open_manual`
 //! - **Service Control**: `start_service`, `stop_service`, `restart_service`, `start_all_services`, `stop_all_services`, `restart_all_services`
 //! - **Service Status**: `get_all_statuses`
+//! - **HTTPS Tunnel**: `start_https_tunnel`, `stop_https_tunnel`, `get_https_tunnel_status`
 //! - **Settings**: `get_settings`, `save_settings`, `validate_settings`
 //! - **Port Checking**: `check_ports`
 //! - **Runtime Management**: `check_runtime_installed`, `download_runtime`, `download_runtime_with_packages`, `download_runtime_with_skip`
@@ -490,6 +491,7 @@ pub async fn stop_all_services(state: State<'_, AppState>) -> Result<ServiceMap,
         .lock()
         .map_err(|e| format!("Failed to acquire process manager lock: {}", e))?;
 
+    let _ = crate::tunnel::stop_https_tunnel();
     manager.stop_stack()?;
     manager.update_health();
     Ok(manager.get_all_statuses())
@@ -520,6 +522,54 @@ pub async fn get_all_statuses(state: State<'_, AppState>) -> Result<ServiceMap, 
     // Update health before returning statuses
     manager.update_health();
     Ok(manager.get_all_statuses())
+}
+
+/// Start a free public HTTPS URL for the local CHAMP web server.
+///
+/// This uses Cloudflare Quick Tunnel (`*.trycloudflare.com`) and starts the
+/// selected CHAMP stack first when the web server is not already running.
+#[tauri::command]
+pub async fn start_https_tunnel(
+    state: State<'_, AppState>,
+) -> Result<crate::tunnel::HttpsTunnelStatus, String> {
+    let web_port = {
+        let mut manager = state
+            .process_manager
+            .lock()
+            .map_err(|e| format!("Failed to acquire process manager lock: {}", e))?;
+
+        manager.update_health();
+        let statuses = manager.get_all_statuses();
+        let caddy_running = statuses
+            .get(&ServiceType::Caddy)
+            .map(|service| service.state == ServiceState::Running)
+            .unwrap_or(false);
+
+        if !caddy_running {
+            manager.start_all()?;
+            manager.update_health();
+        }
+
+        manager
+            .get_all_statuses()
+            .get(&ServiceType::Caddy)
+            .map(|service| service.port)
+            .unwrap_or(ServiceType::Caddy.default_port())
+    };
+
+    crate::tunnel::start_https_tunnel(web_port).await
+}
+
+/// Stop the current public HTTPS tunnel, if one is running.
+#[tauri::command]
+pub async fn stop_https_tunnel() -> Result<crate::tunnel::HttpsTunnelStatus, String> {
+    crate::tunnel::stop_https_tunnel()
+}
+
+/// Get the current public HTTPS tunnel status.
+#[tauri::command]
+pub async fn get_https_tunnel_status() -> Result<crate::tunnel::HttpsTunnelStatus, String> {
+    crate::tunnel::get_https_tunnel_status()
 }
 
 /// Get app settings
@@ -1095,6 +1145,7 @@ pub async fn cleanup_all_services(state: State<'_, AppState>) -> Result<String, 
         .lock()
         .map_err(|e| format!("Failed to acquire process manager lock: {}", e))?;
 
+    let _ = crate::tunnel::stop_https_tunnel();
     manager.stop_all()?;
 
     Ok("All services stopped".to_string())
@@ -1326,6 +1377,7 @@ pub async fn get_installed_versions() -> Result<std::collections::HashMap<String
         "python",
         "go",
         "ruby",
+        "cloudflared",
     ] {
         let marker_file = runtime_dir.join(format!("{}_installed.txt", component));
         if let Ok(content) = fs::read_to_string(&marker_file) {

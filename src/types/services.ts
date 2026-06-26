@@ -235,6 +235,16 @@ export interface AppPaths {
   projects_dir: string;
 }
 
+export interface HttpsTunnelStatus {
+  running: boolean;
+  url: string | null;
+  ready: boolean;
+  local_url: string;
+  error: string | null;
+  log_path: string | null;
+  pid: number | null;
+}
+
 export const DEFAULT_PORTS = {
   [ServiceType.Caddy]: 8080,
   [ServiceType.PhpFpm]: 9000,

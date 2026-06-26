@@ -1,6 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { Activity, HardDrive } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "../stores/languageStore";
 import { PackageSelection, ServiceMap, getStackServiceTypes } from "../types/services";
 
@@ -19,7 +19,7 @@ interface SystemMetrics {
   network_tx_bps: number;
 }
 
-const METRICS_REFRESH_INTERVAL_MS = 1000;
+const METRICS_REFRESH_INTERVAL_MS = 2500;
 
 function isSystemMetrics(value: unknown): value is SystemMetrics {
   if (!value || typeof value !== "object") return false;
@@ -53,11 +53,14 @@ export function StatusBar({ services, appPaths, packageSelection, ...props }: St
   ).length;
   const totalCount = stackServiceTypes.length;
   const [metrics, setMetrics] = useState<SystemMetrics | null>(null);
+  const metricsInFlight = useRef(false);
 
   useEffect(() => {
     let isActive = true;
 
     const refreshSystemMetrics = async () => {
+      if (metricsInFlight.current || document.visibilityState !== "visible") return;
+      metricsInFlight.current = true;
       try {
         const response = await invoke<unknown>("get_system_metrics");
         if (isActive && isSystemMetrics(response)) {
@@ -65,6 +68,8 @@ export function StatusBar({ services, appPaths, packageSelection, ...props }: St
         }
       } catch (error) {
         console.error("Failed to fetch system metrics:", error);
+      } finally {
+        metricsInFlight.current = false;
       }
     };
 

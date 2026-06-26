@@ -88,6 +88,20 @@ export interface Translations {
   openDatabaseTool: string;
   openProjectsFolder: string;
   openLogsFolder: string;
+  httpsPreview: string;
+  publicHttpsDomain: string;
+  httpsTunnelDescription: string;
+  httpsTunnelStart: string;
+  httpsTunnelStop: string;
+  httpsTunnelOpen: string;
+  httpsTunnelCopy: string;
+  httpsTunnelStarting: string;
+  httpsTunnelStarted: string;
+  httpsTunnelStopped: string;
+  httpsTunnelWaitingForDomain: string;
+  httpsTunnelValidating: string;
+  httpsTunnelError: string;
+  httpsTunnelDevOnly: string;
   terminal: string;
   openTerminal: string;
   projectTemplates: string;
@@ -241,6 +255,7 @@ export interface Translations {
   notificationSuccess: string;
   notificationError: string;
   copiedToClipboard: string;
+  copyFailed: string;
   copyError: string;
 
   // First Run Wizard
@@ -407,6 +422,21 @@ const th: Translations = {
   openDatabaseTool: "เปิดเครื่องมือฐานข้อมูล",
   openProjectsFolder: "เปิดโฟลเดอร์โปรเจกต์",
   openLogsFolder: "เปิดโฟลเดอร์ Log",
+  httpsPreview: "พรีวิว HTTPS",
+  publicHttpsDomain: "โดเมน HTTPS ฟรีสำหรับทดสอบเว็บ",
+  httpsTunnelDescription:
+    "สร้างลิงก์ HTTPS สาธารณะอัตโนมัติผ่าน trycloudflare.com สำหรับทดสอบและแชร์งานชั่วคราว",
+  httpsTunnelStart: "เริ่ม HTTPS",
+  httpsTunnelStop: "หยุด HTTPS",
+  httpsTunnelOpen: "เปิดลิงก์ HTTPS",
+  httpsTunnelCopy: "คัดลอก",
+  httpsTunnelStarting: "กำลังสร้าง HTTPS tunnel",
+  httpsTunnelStarted: "สร้าง HTTPS tunnel แล้ว",
+  httpsTunnelStopped: "หยุด HTTPS tunnel แล้ว",
+  httpsTunnelWaitingForDomain: "กำลังรอโดเมนฟรีจาก Cloudflare...",
+  httpsTunnelValidating: "ได้โดเมนแล้ว กำลังตรวจสอบ DNS และ HTTPS ให้พร้อมใช้งาน...",
+  httpsTunnelError: "HTTPS tunnel ล้มเหลว",
+  httpsTunnelDevOnly: "ลิงก์นี้เหมาะสำหรับทดสอบและพัฒนาเท่านั้น",
   terminal: "เทอร์มินัล",
   openTerminal: "เปิดเทอร์มินัลในโฟลเดอร์โปรเจกต์",
   projectTemplates: "เทมเพลตโปรเจกต์",
@@ -562,6 +592,7 @@ const th: Translations = {
   notificationSuccess: "สำเร็จ",
   notificationError: "ข้อผิดพลาด",
   copiedToClipboard: "คัดลอกไปยังคลิปบอร์ดแล้ว",
+  copyFailed: "ไม่สามารถคัดลอกได้",
   copyError: "ไม่สามารถคัดลอกข้อผิดพลาดได้",
 
   // First Run Wizard
@@ -732,6 +763,21 @@ const en: Translations = {
   openDatabaseTool: "Open Database Tool",
   openProjectsFolder: "Open Projects Folder",
   openLogsFolder: "Open Logs Folder",
+  httpsPreview: "HTTPS Preview",
+  publicHttpsDomain: "Free HTTPS domain for website testing",
+  httpsTunnelDescription:
+    "Automatically creates a temporary public HTTPS link through trycloudflare.com for testing and sharing work.",
+  httpsTunnelStart: "Start HTTPS",
+  httpsTunnelStop: "Stop HTTPS",
+  httpsTunnelOpen: "Open HTTPS link",
+  httpsTunnelCopy: "Copy",
+  httpsTunnelStarting: "Creating HTTPS tunnel",
+  httpsTunnelStarted: "HTTPS tunnel ready",
+  httpsTunnelStopped: "HTTPS tunnel stopped",
+  httpsTunnelWaitingForDomain: "Waiting for a free Cloudflare domain...",
+  httpsTunnelValidating: "Domain received. Validating DNS and HTTPS readiness...",
+  httpsTunnelError: "HTTPS tunnel failed",
+  httpsTunnelDevOnly: "This link is intended for testing and development only.",
   terminal: "Terminal",
   openTerminal: "Open Terminal in Projects",
   projectTemplates: "Project Templates",
@@ -890,6 +936,7 @@ const en: Translations = {
   notificationSuccess: "Success",
   notificationError: "Error",
   copiedToClipboard: "Copied to clipboard",
+  copyFailed: "Failed to copy",
   copyError: "Failed to copy error",
 
   // First Run Wizard

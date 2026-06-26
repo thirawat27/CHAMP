@@ -347,6 +347,43 @@ describe("Dashboard Component", () => {
     });
   });
 
+  describe("HTTPS tunnel preview", () => {
+    it("should show the generated public HTTPS URL", async () => {
+      vi.mocked(invoke).mockImplementation(async (cmd: string) => {
+        switch (cmd) {
+          case "get_all_statuses":
+            return mockServiceMap;
+          case "get_app_paths":
+            return mockAppPaths;
+          case "get_installed_versions":
+            return {};
+          case "get_settings":
+            return {};
+          case "get_system_metrics":
+            return mockSystemMetrics;
+          case "get_https_tunnel_status":
+            return {
+              running: true,
+              url: "https://demo.trycloudflare.com",
+              ready: true,
+              local_url: "http://127.0.0.1:8080",
+              error: null,
+              log_path: "C:\\CHAMP\\logs\\https-tunnel.log",
+              pid: 1234,
+            };
+          default:
+            return {};
+        }
+      });
+
+      render(<Dashboard />);
+
+      expect(await screen.findByTestId("https-tunnel-panel")).toBeInTheDocument();
+      expect(await screen.findByText("https://demo.trycloudflare.com")).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: /^copy$/i })).toBeInTheDocument();
+    });
+  });
+
   describe("TC-PM-DASH-08: All Services Running", () => {
     it("should show all services as running when all started", async () => {
       const allRunningMap = {

@@ -3,8 +3,10 @@ import { openUrl } from "@tauri-apps/plugin-opener";
 import {
   AlertTriangle,
   CheckCircle2,
+  Copy,
   CircleHelp,
   Database,
+  ExternalLink,
   FilePlus2,
   Folder,
   Globe,
@@ -14,6 +16,7 @@ import {
   Play,
   RefreshCw,
   Settings,
+  ShieldCheck,
   Square,
   TerminalSquare,
 } from "lucide-react";
@@ -24,6 +27,7 @@ import { useTranslation } from "../stores/languageStore";
 import { AudioManager } from "../utils/audioManager";
 import {
   AppSettings,
+  HttpsTunnelStatus,
   SERVICE_DISPLAY_NAMES,
   ServiceMap,
   ServiceState,
@@ -56,6 +60,16 @@ const DASHBOARD_SERVICE_TYPES = [
   ServiceType.MySQL,
   ServiceType.PostgreSQL,
 ] as const;
+
+const DEFAULT_TUNNEL_STATUS: HttpsTunnelStatus = {
+  running: false,
+  url: null,
+  ready: false,
+  local_url: "",
+  error: null,
+  log_path: null,
+  pid: null,
+};
 
 type NoticeTone = "info" | "success" | "error";
 type NoticeAction = "start" | "restart" | "stop";
@@ -133,6 +147,22 @@ function GitHubIcon({ size = 16 }: { size?: number }) {
   );
 }
 
+function normalizeTunnelStatus(value: unknown): HttpsTunnelStatus {
+  if (
+    value &&
+    typeof value === "object" &&
+    typeof (value as HttpsTunnelStatus).running === "boolean"
+  ) {
+    return {
+      ...DEFAULT_TUNNEL_STATUS,
+      ...(value as HttpsTunnelStatus),
+      ready: Boolean((value as HttpsTunnelStatus).ready),
+    };
+  }
+
+  return DEFAULT_TUNNEL_STATUS;
+}
+
 export function Dashboard() {
   const { t } = useTranslation();
   const [services, setServices] = useState<Partial<ServiceMap>>({});
@@ -142,6 +172,8 @@ export function Dashboard() {
   const [settings, setSettings] = useState<AppSettings | null>(null);
   const [installedVersions, setInstalledVersions] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState<string | null>(null);
+  const [tunnelBusy, setTunnelBusy] = useState<"start" | "stop" | null>(null);
+  const [tunnelStatus, setTunnelStatus] = useState<HttpsTunnelStatus>(DEFAULT_TUNNEL_STATUS);
   const [notice, setNotice] = useState<DashboardNotice | null>(null);
   const [showProjectCreator, setShowProjectCreator] = useState(false);
   const [showQuickActionsMenu, setShowQuickActionsMenu] = useState(false);
@@ -189,12 +221,25 @@ export function Dashboard() {
     if (statusRefreshInFlight.current) return;
     statusRefreshInFlight.current = true;
     try {
-      const statuses = await invoke<ServiceMap>("get_all_statuses");
+      const [statuses, tunnel] = await Promise.all([
+        invoke<ServiceMap>("get_all_statuses"),
+        invoke<HttpsTunnelStatus>("get_https_tunnel_status"),
+      ]);
       setServices(statuses);
+      setTunnelStatus(normalizeTunnelStatus(tunnel));
     } catch (error) {
-      console.error("Failed to get service statuses:", error);
+      console.error("Failed to refresh dashboard status:", error);
     } finally {
       statusRefreshInFlight.current = false;
+    }
+  }, []);
+
+  const refreshTunnelStatus = useCallback(async () => {
+    try {
+      const status = await invoke<HttpsTunnelStatus>("get_https_tunnel_status");
+      setTunnelStatus(normalizeTunnelStatus(status));
+    } catch (error) {
+      console.error("Failed to get HTTPS tunnel status:", error);
     }
   }, []);
 
@@ -220,7 +265,7 @@ export function Dashboard() {
       if (document.visibilityState === "visible") {
         refreshStatuses();
       }
-    }, 2500);
+    }, 3500);
     return () => window.clearInterval(interval);
   }, [refreshMetadata, refreshStatuses]);
 
@@ -306,6 +351,9 @@ export function Dashboard() {
       try {
         const statuses = await invoke<ServiceMap>(command);
         setServices(statuses);
+        if (command === "stop_all_services") {
+          setTunnelStatus(DEFAULT_TUNNEL_STATUS);
+        }
         AudioManager.playNotification("success", copy.action);
         setNotice({
           tone: "success",
@@ -358,6 +406,81 @@ export function Dashboard() {
     },
     [t]
   );
+
+  const startHttpsTunnel = useCallback(async () => {
+    setTunnelBusy("start");
+    setNotice({
+      tone: "info",
+      action: "start",
+      title: t.httpsTunnelStarting,
+      message: t.httpsTunnelDescription,
+    });
+
+    try {
+      const status = normalizeTunnelStatus(await invoke<HttpsTunnelStatus>("start_https_tunnel"));
+      setTunnelStatus(status);
+      await Promise.all([refreshStatuses(), refreshMetadata()]);
+      AudioManager.playNotification("success", "start");
+      setNotice({
+        tone: "success",
+        action: "start",
+        title: t.httpsTunnelStarted,
+        message: status.ready && status.url ? status.url : t.httpsTunnelValidating,
+      });
+    } catch (error) {
+      AudioManager.playNotification("error");
+      setNotice({
+        tone: "error",
+        title: t.httpsTunnelError,
+        message: String(error),
+      });
+      await refreshTunnelStatus();
+    } finally {
+      setTunnelBusy(null);
+    }
+  }, [refreshMetadata, refreshStatuses, refreshTunnelStatus, t]);
+
+  const stopHttpsTunnel = useCallback(async () => {
+    setTunnelBusy("stop");
+    try {
+      const status = normalizeTunnelStatus(await invoke<HttpsTunnelStatus>("stop_https_tunnel"));
+      setTunnelStatus(status);
+      AudioManager.playNotification("success", "stop");
+      setNotice({
+        tone: "success",
+        action: "stop",
+        title: t.httpsTunnelStopped,
+        message: t.httpsTunnelDevOnly,
+      });
+    } catch (error) {
+      AudioManager.playNotification("error");
+      setNotice({
+        tone: "error",
+        title: t.httpsTunnelError,
+        message: String(error),
+      });
+    } finally {
+      setTunnelBusy(null);
+    }
+  }, [t]);
+
+  const copyHttpsTunnelUrl = useCallback(async () => {
+    if (!tunnelStatus.url) return;
+    try {
+      await navigator.clipboard.writeText(tunnelStatus.url);
+      setNotice({
+        tone: "success",
+        title: t.copiedToClipboard,
+        message: tunnelStatus.url,
+      });
+    } catch (error) {
+      setNotice({
+        tone: "error",
+        title: t.copyFailed,
+        message: String(error),
+      });
+    }
+  }, [t, tunnelStatus.url]);
 
   // Keyboard shortcuts
   useEffect(() => {
@@ -539,11 +662,14 @@ export function Dashboard() {
       ["MySQL", installedVersions.mysql],
       ["PostgreSQL", installedVersions.postgresql],
       [databaseToolName, installedVersions.phpmyadmin || installedVersions.adminer],
+      ["cloudflared", installedVersions.cloudflared],
     ];
     return entries.filter(
       (entry): entry is [string, string] => typeof entry[1] === "string" && entry[1].length > 0
     );
   }, [databaseToolName, installedVersions]);
+  const tunnelReady = Boolean(tunnelStatus.running && tunnelStatus.ready && tunnelStatus.url);
+  const tunnelHasPendingUrl = Boolean(tunnelStatus.running && tunnelStatus.url && !tunnelReady);
 
   return (
     <div className="app-shell" data-testid="dashboard">
@@ -808,6 +934,80 @@ export function Dashboard() {
           </div>
         </section>
 
+        <section
+          className={`https-tunnel-panel ${tunnelReady ? "ready" : tunnelStatus.running ? "running" : ""}`}
+          data-testid="https-tunnel-panel"
+        >
+          <div className="https-tunnel-copy">
+            <span className="https-tunnel-icon" aria-hidden="true">
+              <ShieldCheck size={18} />
+            </span>
+            <div className="https-tunnel-main">
+              <span className="https-tunnel-kicker">{t.httpsPreview}</span>
+              <h3>{t.publicHttpsDomain}</h3>
+              <p className={tunnelStatus.url ? "https-tunnel-url" : undefined}>
+                {tunnelReady
+                  ? tunnelStatus.url
+                  : tunnelHasPendingUrl
+                    ? t.httpsTunnelValidating
+                    : tunnelStatus.running
+                      ? t.httpsTunnelWaitingForDomain
+                      : t.httpsTunnelDescription}
+              </p>
+              {tunnelHasPendingUrl && (
+                <small className="https-tunnel-pending-url">{tunnelStatus.url}</small>
+              )}
+              {tunnelStatus.error && <small>{tunnelStatus.error}</small>}
+            </div>
+          </div>
+          <div className="https-tunnel-actions">
+            {tunnelReady && (
+              <>
+                <button
+                  className="btn-secondary"
+                  type="button"
+                  onClick={() => openUrl(tunnelStatus.url ?? "")}
+                  title={t.httpsTunnelOpen}
+                  onMouseEnter={() => AudioManager.playHover()}
+                >
+                  <ExternalLink size={15} /> {t.open}
+                </button>
+                <button
+                  className="btn-secondary"
+                  type="button"
+                  onClick={copyHttpsTunnelUrl}
+                  title={t.httpsTunnelCopy}
+                  onMouseEnter={() => AudioManager.playHover()}
+                >
+                  <Copy size={15} /> {t.httpsTunnelCopy}
+                </button>
+              </>
+            )}
+            <button
+              className={tunnelStatus.running ? "btn-secondary danger" : "btn-primary"}
+              type="button"
+              onClick={tunnelStatus.running ? stopHttpsTunnel : startHttpsTunnel}
+              disabled={Boolean(tunnelBusy)}
+              onMouseEnter={() => AudioManager.playHover()}
+            >
+              {tunnelBusy ? (
+                <LoaderCircle size={15} className="spin-icon" />
+              ) : tunnelStatus.running ? (
+                <Square size={15} />
+              ) : (
+                <ShieldCheck size={15} />
+              )}
+              {tunnelBusy === "start"
+                ? t.starting
+                : tunnelBusy === "stop"
+                  ? t.stopping
+                  : tunnelStatus.running
+                    ? t.httpsTunnelStop
+                    : t.httpsTunnelStart}
+            </button>
+          </div>
+        </section>
+
         {versionBadges.length > 0 && (
           <section className="version-strip" aria-label={t.installedVersionsLabel}>
             {versionBadges.map(([name, version]) => (
@@ -875,7 +1075,6 @@ export function Dashboard() {
           onError={handleProjectError}
         />
       )}
-
     </div>
   );
 }
