@@ -17,7 +17,7 @@ import {
   Square,
   TerminalSquare,
 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import packageInfo from "../../package.json";
 import champLogo from "../assets/CHAMP.png";
 import { useTranslation } from "../stores/languageStore";
@@ -145,6 +145,7 @@ export function Dashboard() {
   const [notice, setNotice] = useState<DashboardNotice | null>(null);
   const [showProjectCreator, setShowProjectCreator] = useState(false);
   const [showQuickActionsMenu, setShowQuickActionsMenu] = useState(false);
+  const statusRefreshInFlight = useRef(false);
 
   // Initialize audio context on first user interaction
   useEffect(() => {
@@ -185,11 +186,15 @@ export function Dashboard() {
   );
 
   const refreshStatuses = useCallback(async () => {
+    if (statusRefreshInFlight.current) return;
+    statusRefreshInFlight.current = true;
     try {
       const statuses = await invoke<ServiceMap>("get_all_statuses");
       setServices(statuses);
     } catch (error) {
       console.error("Failed to get service statuses:", error);
+    } finally {
+      statusRefreshInFlight.current = false;
     }
   }, []);
 
@@ -211,7 +216,11 @@ export function Dashboard() {
   useEffect(() => {
     refreshStatuses();
     refreshMetadata();
-    const interval = window.setInterval(refreshStatuses, 2000);
+    const interval = window.setInterval(() => {
+      if (document.visibilityState === "visible") {
+        refreshStatuses();
+      }
+    }, 2500);
     return () => window.clearInterval(interval);
   }, [refreshMetadata, refreshStatuses]);
 
@@ -866,6 +875,7 @@ export function Dashboard() {
           onError={handleProjectError}
         />
       )}
+
     </div>
   );
 }

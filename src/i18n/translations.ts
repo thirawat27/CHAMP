@@ -92,6 +92,14 @@ export interface Translations {
   openTerminal: string;
   projectTemplates: string;
   createProject: string;
+  tools: string;
+  developerTools: string;
+  smartTerminal: string;
+  smartTerminalDescription: string;
+  runtimeInventory: string;
+  runtimeInventoryDescription: string;
+  configFolder: string;
+  openConfigFolder: string;
   projectName: string;
   projectNameRequired: string;
   projectCreated: string;
@@ -403,6 +411,14 @@ const th: Translations = {
   openTerminal: "เปิดเทอร์มินัลในโฟลเดอร์โปรเจกต์",
   projectTemplates: "เทมเพลตโปรเจกต์",
   createProject: "สร้างโปรเจกต์",
+  tools: "เครื่องมือ",
+  developerTools: "เครื่องมือนักพัฒนา",
+  smartTerminal: "เทอร์มินัลพร้อมรันไทม์",
+  smartTerminalDescription: "เปิดพร้อม PATH ของ PHP, Node, Python, Go และ Ruby",
+  runtimeInventory: "รันไทม์ที่พร้อมใช้งาน",
+  runtimeInventoryDescription: "คำสั่งเหล่านี้ใช้ได้ในเทอร์มินัลของ CHAMP",
+  configFolder: "โฟลเดอร์ config",
+  openConfigFolder: "เปิดโฟลเดอร์ config",
   projectName: "ชื่อโปรเจกต์",
   projectNameRequired: "กรุณาใส่ชื่อโปรเจกต์",
   projectCreated: "สร้างโปรเจกต์แล้ว",
@@ -720,6 +736,14 @@ const en: Translations = {
   openTerminal: "Open Terminal in Projects",
   projectTemplates: "Project Templates",
   createProject: "Create Project",
+  tools: "Tools",
+  developerTools: "Developer Tools",
+  smartTerminal: "Runtime Terminal",
+  smartTerminalDescription: "Opens with PHP, Node, Python, Go, and Ruby on PATH",
+  runtimeInventory: "Runtime Inventory",
+  runtimeInventoryDescription: "These commands are available in the CHAMP terminal",
+  configFolder: "Config folder",
+  openConfigFolder: "Open config folder",
   projectName: "Project name",
   projectNameRequired: "Enter a project name",
   projectCreated: "Project created",

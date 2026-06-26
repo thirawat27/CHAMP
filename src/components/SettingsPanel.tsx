@@ -86,10 +86,7 @@ export function SettingsPanel({ onClose, onSettingsChanged, ...props }: Settings
       const [loaded, availablePackages, installedPhp, platformKey, installedRuntimesData] =
         await Promise.all([
           invoke<AppSettings>("get_settings"),
-          invoke<PackagesConfig>("refresh_runtime_catalog").catch((refreshError) => {
-            console.warn(t.runtimeCatalogUpdateFailed, refreshError);
-            return invoke<PackagesConfig>("get_available_packages_cmd");
-          }),
+          invoke<PackagesConfig>("get_available_packages_cmd"),
           invoke<InstalledPhpVersion[]>("get_installed_php_versions"),
           invoke<string>("get_runtime_platform"),
           invoke<Record<string, string>>("get_installed_versions"),
@@ -146,6 +143,12 @@ export function SettingsPanel({ onClose, onSettingsChanged, ...props }: Settings
       setPhpVersions(installedPhp);
       setSelectedPhpId(normalizedPackageSelection.php);
       setInstalledRuntimes(installedRuntimesData || {});
+
+      invoke<PackagesConfig>("refresh_runtime_catalog")
+        .then((freshPackages) => setPackages(freshPackages))
+        .catch((refreshError) => {
+          console.warn(t.runtimeCatalogUpdateFailed, refreshError);
+        });
     } catch (e) {
       setError(`${t.failedToLoadSettings}: ${e}`);
     } finally {

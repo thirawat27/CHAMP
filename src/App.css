@@ -198,6 +198,13 @@ button {
   gap: 8px;
 }
 
+.quick-actions {
+  flex: 1 1 520px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  min-width: 0;
+}
+
 .workspace {
   width: min(1180px, 100%);
   margin: 0 auto;
@@ -367,6 +374,8 @@ button {
 }
 
 .overview-band {
+  position: relative;
+  z-index: 30;
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -379,7 +388,9 @@ button {
   transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
+.overview-band:focus-within,
 .overview-band:hover {
+  z-index: 80;
   transform: translateY(-2px);
   box-shadow:
     0 16px 32px rgba(119, 72, 45, 0.12),
@@ -656,13 +667,14 @@ button {
 
 .quick-actions-menu-wrap {
   position: relative;
+  z-index: 90;
 }
 
 .quick-actions-menu {
   position: absolute;
   right: 0;
   top: calc(100% + 8px);
-  z-index: 20;
+  z-index: 100;
   width: 210px;
   display: grid;
   gap: 4px;
@@ -867,6 +879,8 @@ button:disabled {
 }
 
 .service-grid-responsive {
+  position: relative;
+  z-index: 1;
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 14px;
