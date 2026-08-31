@@ -2,6 +2,9 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 const APP_DIR_NAME: &str = "CHAMP";
+// Deliberate legacy migration name: the app was previously named "campp".
+// resolve_runtime_dir still reads this directory so old installs keep working.
+// Do not "fix" this to "champ" — it is intentional back-compat, not a typo.
 const LEGACY_APP_DIR_NAME: &str = "campp";
 const PORTABLE_DATA_DIR_NAME: &str = "data";
 const PORTABLE_MARKER_NAMES: [&str; 3] =
@@ -16,13 +19,9 @@ pub struct RuntimePaths {
     pub mysql: PathBuf,
     pub postgresql: PathBuf,
     pub adminer: PathBuf,
-    #[allow(dead_code)]
     pub node: Option<PathBuf>,
-    #[allow(dead_code)]
     pub python: Option<PathBuf>,
-    #[allow(dead_code)]
     pub go: Option<PathBuf>,
-    #[allow(dead_code)]
     pub ruby: Option<PathBuf>,
     /// Data directory for MySQL
     pub mysql_data_dir: PathBuf,
@@ -161,6 +160,8 @@ fn portable_marker_dirs() -> Vec<PathBuf> {
             dirs.push(dir.to_path_buf());
         }
     }
+    // Dev-only: honoring a portable marker in the CWD is unsafe in release. (S-05)
+    #[cfg(debug_assertions)]
     if let Ok(current_dir) = std::env::current_dir() {
         if !dirs.iter().any(|dir| dir == &current_dir) {
             dirs.push(current_dir);
@@ -816,39 +817,39 @@ pub fn postgresql_initdb_binary(postgres_binary: &Path) -> PathBuf {
 }
 
 #[cfg(test)]
-fn is_valid_binary(path: &Path) -> bool {
-    if !path.exists() {
-        return false;
-    }
-
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt;
-        match fs::metadata(path) {
-            Ok(metadata) => {
-                let permissions = metadata.permissions();
-                let mode = permissions.mode();
-                // Check if owner has execute permission
-                mode & 0o100 != 0
-            }
-            Err(_) => false,
-        }
-    }
-
-    #[cfg(windows)]
-    {
-        // On Windows, just check if the file exists
-        true
-    }
-}
-
-#[cfg(test)]
 mod tests {
     use super::*;
     use std::fs::File;
     use std::io::Write;
     use std::path::{Path, PathBuf};
     use tempfile::TempDir;
+
+    /// Validate that a path points to an executable binary (test helper).
+    fn is_valid_binary(path: &Path) -> bool {
+        if !path.exists() {
+            return false;
+        }
+
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            match fs::metadata(path) {
+                Ok(metadata) => {
+                    let permissions = metadata.permissions();
+                    let mode = permissions.mode();
+                    // Check if owner has execute permission
+                    mode & 0o100 != 0
+                }
+                Err(_) => false,
+            }
+        }
+
+        #[cfg(windows)]
+        {
+            // On Windows, just check if the file exists
+            true
+        }
+    }
 
     fn create_mock_binary(path: &Path) -> Result<(), String> {
         let mut file = File::create(path).map_err(|e| format!("Failed to create binary: {}", e))?;

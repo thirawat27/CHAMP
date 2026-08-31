@@ -245,6 +245,11 @@ export interface HttpsTunnelStatus {
   pid: number | null;
 }
 
+/**
+ * UI pre-load fallback port numbers, used only before real settings arrive
+ * from the backend. The Rust backend (`config/settings.rs` DEFAULT_PORTS) is
+ * the source of truth once settings load via get_settings / get_all_statuses.
+ */
 export const DEFAULT_PORTS = {
   [ServiceType.Caddy]: 8080,
   [ServiceType.PhpFpm]: 9000,

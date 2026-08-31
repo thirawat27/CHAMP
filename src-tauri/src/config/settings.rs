@@ -121,29 +121,29 @@ impl AppSettings {
             ));
         }
 
-        // Check for port conflicts
-        if let Err(e) = std::net::TcpListener::bind(format!("127.0.0.1:{}", self.web_port)) {
-            warnings.push(format!("Web port {} may be in use: {}", self.web_port, e));
+        // Check for port conflicts using the shared availability primitive.
+        if !crate::config::is_port_available(self.web_port) {
+            warnings.push(format!("Web port {} may already be in use.", self.web_port));
         }
 
-        if let Err(e) = std::net::TcpListener::bind(format!("127.0.0.1:{}", self.php_port)) {
+        if !crate::config::is_port_available(self.php_port) {
             warnings.push(format!(
-                "PHP-FPM port {} may be in use: {}",
-                self.php_port, e
+                "PHP-FPM port {} may already be in use.",
+                self.php_port
             ));
         }
 
-        if let Err(e) = std::net::TcpListener::bind(format!("127.0.0.1:{}", self.mysql_port)) {
+        if !crate::config::is_port_available(self.mysql_port) {
             warnings.push(format!(
-                "MySQL port {} may be in use: {}",
-                self.mysql_port, e
+                "MySQL port {} may already be in use.",
+                self.mysql_port
             ));
         }
 
-        if let Err(e) = std::net::TcpListener::bind(format!("127.0.0.1:{}", self.postgresql_port)) {
+        if !crate::config::is_port_available(self.postgresql_port) {
             warnings.push(format!(
-                "PostgreSQL port {} may be in use: {}",
-                self.postgresql_port, e
+                "PostgreSQL port {} may already be in use.",
+                self.postgresql_port
             ));
         }
 
@@ -154,6 +154,28 @@ impl AppSettings {
             || self.postgresql_port == 0
         {
             errors.push("Port numbers must be greater than 0".to_string());
+        }
+
+        // Check for duplicate ports across services. Zero ports are handled by the
+        // ">0" check above, so ignore them here to avoid duplicate/confusing errors.
+        let labeled_ports = [
+            ("HTTP/Web", self.web_port),
+            ("PHP-FPM", self.php_port),
+            ("MySQL", self.mysql_port),
+            ("PostgreSQL", self.postgresql_port),
+        ];
+        // Compare each unique pair once, in a stable, deterministic order.
+        for i in 0..labeled_ports.len() {
+            for j in (i + 1)..labeled_ports.len() {
+                let (label_a, port_a) = labeled_ports[i];
+                let (label_b, port_b) = labeled_ports[j];
+                if port_a != 0 && port_a == port_b {
+                    errors.push(format!(
+                        "Ports must be unique: {} and {} are both set to {}",
+                        label_a, label_b, port_a
+                    ));
+                }
+            }
         }
 
         if errors.is_empty() {
@@ -185,4 +207,38 @@ fn default_project_root() -> PathBuf {
                 .join(APP_DIR_NAME)
                 .join("projects")
         })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn validate_rejects_duplicate_ports() {
+        let mut settings = AppSettings::default();
+        settings.mysql_port = settings.web_port;
+
+        let result = settings.validate();
+        assert!(result.is_err(), "expected duplicate ports to be rejected");
+
+        let errors = result.unwrap_err();
+        let port = settings.web_port;
+        assert!(
+            errors.iter().any(|e| {
+                e.contains("HTTP/Web") && e.contains("MySQL") && e.contains(&port.to_string())
+            }),
+            "expected an error mentioning both services and the port, got: {:?}",
+            errors
+        );
+    }
+
+    #[test]
+    fn validate_allows_distinct_ports() {
+        // Default ports are all distinct (web 8080, php 9000, mysql 3306, postgresql 5432).
+        let settings = AppSettings::default();
+        assert!(
+            settings.validate().is_ok(),
+            "expected distinct default ports to validate successfully"
+        );
+    }
 }

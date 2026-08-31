@@ -110,9 +110,11 @@ pub fn run() {
                 let app_handle = app.handle().clone();
                 tauri::async_runtime::spawn(async move {
                     if let Some(state) = app_handle.try_state::<AppState>() {
-                        if let Ok(mut manager) = state.process_manager.lock() {
-                            let _ = manager.start_all();
-                        }
+                        let mut manager = state
+                            .process_manager
+                            .lock()
+                            .unwrap_or_else(std::sync::PoisonError::into_inner);
+                        let _ = manager.start_all();
                     }
                 });
             }
@@ -149,19 +151,16 @@ pub fn run() {
             // Runtime download commands
             commands::check_runtime_installed,
             commands::check_system_dependencies,
-            commands::download_runtime,
             commands::download_runtime_with_packages,
             commands::download_runtime_with_skip,
             commands::get_available_packages_cmd,
             commands::refresh_runtime_catalog,
             commands::get_runtime_platform,
-            commands::get_package_selection,
             commands::update_package_selection,
             commands::get_installed_php_versions,
             commands::switch_php_version,
             commands::download_php_version,
             commands::get_selected_package_ids,
-            commands::reload_runtime_config,
             commands::get_installed_versions,
             commands::check_existing_components,
             commands::get_runtime_dir,
@@ -169,7 +168,6 @@ pub fn run() {
             commands::create_project_template,
             commands::get_system_metrics,
             commands::get_download_dir,
-            commands::get_install_dir,
             commands::open_folder,
             commands::open_project_terminal,
             commands::open_manual,
@@ -201,9 +199,11 @@ fn handle_menu_event(app: &AppHandle, event: MenuEvent) {
             let app = app.clone();
             tauri::async_runtime::spawn(async move {
                 if let Some(state) = app.try_state::<AppState>() {
-                    if let Ok(mut manager) = state.process_manager.lock() {
-                        let _ = manager.stop_all();
-                    }
+                    let mut manager = state
+                        .process_manager
+                        .lock()
+                        .unwrap_or_else(std::sync::PoisonError::into_inner);
+                    let _ = manager.stop_all();
                 }
                 if commands::reset_runtime_dir().await.is_ok() {
                     let _ = app.emit("show-wizard", ());
@@ -228,9 +228,11 @@ fn handle_menu_event(app: &AppHandle, event: MenuEvent) {
         "tray-quit" => {
             // Cleanup services before quitting
             if let Some(state) = app.try_state::<AppState>() {
-                if let Ok(mut manager) = state.process_manager.lock() {
-                    let _ = manager.stop_all();
-                }
+                let mut manager = state
+                    .process_manager
+                    .lock()
+                    .unwrap_or_else(std::sync::PoisonError::into_inner);
+                let _ = manager.stop_all();
             }
             std::process::exit(0);
         }

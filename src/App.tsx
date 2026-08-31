@@ -1,7 +1,6 @@
 import { useState, useEffect } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
-import { getCurrentWindow } from "@tauri-apps/api/window";
 import { Dashboard } from "./components/Dashboard";
 import { FirstRunWizard } from "./components/FirstRunWizard";
 import { initializeLanguage, useTranslation } from "./stores/languageStore";
@@ -47,21 +46,17 @@ function App() {
         })
       : Promise.resolve(() => {});
 
-    const unlistenClose = tauriRuntime
-      ? getCurrentWindow().onCloseRequested(async () => {
-          try {
-            await invoke("cleanup_all_services");
-          } catch (error) {
-            console.error("Failed to cleanup services:", error);
-          }
-        })
-      : Promise.resolve(() => {});
+    // NOTE: Closing the window must NOT stop services. The Rust side
+    // (lib.rs on_window_event CloseRequested) hides the window to the tray and
+    // calls prevent_close(), keeping the stack running. Service cleanup happens
+    // only on real exit via the tray "Quit CHAMP" item (lib.rs tray-quit).
+    // A frontend onCloseRequested -> cleanup_all_services handler here used to
+    // contradict that and silently stopped Caddy/PHP/MySQL/PostgreSQL. (R-02)
 
     return () => {
       window.removeEventListener("keydown", handleKeyPress);
       window.removeEventListener("keydown", blockDevtoolsShortcuts, true);
       unlistenWizard.then((fn) => fn());
-      unlistenClose.then((fn) => fn());
     };
   }, []);
 

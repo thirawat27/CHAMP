@@ -15,7 +15,7 @@ use tokio::task::JoinSet;
 use crate::runtime::locator::get_app_data_paths;
 use crate::runtime::packages::{
     get_mysql_package, get_php_package, get_phpmyadmin_package, get_postgresql_package,
-    PackageSelection,
+    PackageSelection, Urls, VersionInfo,
 };
 use sha2::{Digest, Sha256};
 
@@ -36,6 +36,17 @@ fn get_config() -> RuntimeConfig {
 /// Default hardcoded configuration (fallback when config file is not available)
 fn get_default_config() -> RuntimeConfig {
     crate::runtime::packages::embedded_default_runtime_config()
+}
+
+/// Return the selected version string, falling back to the first configured
+/// version, or an empty string when no versions are configured. (M-02)
+fn selected_or_first_version(versions: &[VersionInfo]) -> String {
+    versions
+        .iter()
+        .find(|v| v.selected)
+        .or_else(|| versions.first())
+        .map(|v| v.version.clone())
+        .unwrap_or_default()
 }
 
 /// Binary component types
@@ -69,135 +80,61 @@ impl BinaryComponent {
 
     pub fn version(&self) -> String {
         let config = get_config();
+        // Collapsed 9 near-identical selected-or-first-version arms into one
+        // helper. Optional components pass an empty slice when unconfigured,
+        // preserving the previous `unwrap_or_default()` (empty string). (M-02)
+        let empty: &[VersionInfo] = &[];
         match self {
-            BinaryComponent::Caddy => config
-                .binaries
-                .caddy
-                .versions
-                .iter()
-                .find(|v| v.selected)
-                .map(|v| v.version.clone())
-                .unwrap_or_else(|| {
-                    config
-                        .binaries
-                        .caddy
-                        .versions
-                        .first()
-                        .map(|v| v.version.clone())
-                        .unwrap_or_default()
-                }),
-            BinaryComponent::Php => config
-                .binaries
-                .php
-                .versions
-                .iter()
-                .find(|v| v.selected)
-                .map(|v| v.version.clone())
-                .unwrap_or_else(|| {
-                    config
-                        .binaries
-                        .php
-                        .versions
-                        .first()
-                        .map(|v| v.version.clone())
-                        .unwrap_or_default()
-                }),
-            BinaryComponent::MySQL => config
-                .binaries
-                .mysql
-                .versions
-                .iter()
-                .find(|v| v.selected)
-                .map(|v| v.version.clone())
-                .unwrap_or_else(|| {
-                    config
-                        .binaries
-                        .mysql
-                        .versions
-                        .first()
-                        .map(|v| v.version.clone())
-                        .unwrap_or_default()
-                }),
-            BinaryComponent::PostgreSQL => config
-                .binaries
-                .postgresql
-                .versions
-                .iter()
-                .find(|v| v.selected)
-                .map(|v| v.version.clone())
-                .unwrap_or_else(|| {
-                    config
-                        .binaries
-                        .postgresql
-                        .versions
-                        .first()
-                        .map(|v| v.version.clone())
-                        .unwrap_or_default()
-                }),
-            BinaryComponent::PhpMyAdmin => config
-                .binaries
-                .phpmyadmin
-                .versions
-                .iter()
-                .find(|v| v.selected)
-                .map(|v| v.version.clone())
-                .unwrap_or_else(|| {
-                    config
-                        .binaries
-                        .phpmyadmin
-                        .versions
-                        .first()
-                        .map(|v| v.version.clone())
-                        .unwrap_or_default()
-                }),
-            BinaryComponent::Node => config
-                .binaries
-                .node
-                .as_ref()
-                .and_then(|b| {
-                    b.versions
-                        .iter()
-                        .find(|v| v.selected)
-                        .or_else(|| b.versions.first())
-                })
-                .map(|v| v.version.clone())
-                .unwrap_or_default(),
-            BinaryComponent::Python => config
-                .binaries
-                .python
-                .as_ref()
-                .and_then(|b| {
-                    b.versions
-                        .iter()
-                        .find(|v| v.selected)
-                        .or_else(|| b.versions.first())
-                })
-                .map(|v| v.version.clone())
-                .unwrap_or_default(),
-            BinaryComponent::Go => config
-                .binaries
-                .go
-                .as_ref()
-                .and_then(|b| {
-                    b.versions
-                        .iter()
-                        .find(|v| v.selected)
-                        .or_else(|| b.versions.first())
-                })
-                .map(|v| v.version.clone())
-                .unwrap_or_default(),
-            BinaryComponent::Ruby => config
-                .binaries
-                .ruby
-                .as_ref()
-                .and_then(|b| {
-                    b.versions
-                        .iter()
-                        .find(|v| v.selected)
-                        .or_else(|| b.versions.first())
-                })
-                .map(|v| v.version.clone())
-                .unwrap_or_default(),
+            BinaryComponent::Caddy => selected_or_first_version(&config.binaries.caddy.versions),
+            BinaryComponent::Php => selected_or_first_version(&config.binaries.php.versions),
+            BinaryComponent::MySQL => selected_or_first_version(&config.binaries.mysql.versions),
+            BinaryComponent::PostgreSQL => {
+                selected_or_first_version(&config.binaries.postgresql.versions)
+            }
+            BinaryComponent::PhpMyAdmin => {
+                // phpMyAdmin uses VersionInfoSingleUrl (not VersionInfo), so the
+                // shared helper does not apply; kept inline. selected → first →
+                // empty string, matching the other components. (M-02)
+                let versions = &config.binaries.phpmyadmin.versions;
+                versions
+                    .iter()
+                    .find(|v| v.selected)
+                    .or_else(|| versions.first())
+                    .map(|v| v.version.clone())
+                    .unwrap_or_default()
+            }
+            BinaryComponent::Node => selected_or_first_version(
+                config
+                    .binaries
+                    .node
+                    .as_ref()
+                    .map(|b| b.versions.as_slice())
+                    .unwrap_or(empty),
+            ),
+            BinaryComponent::Python => selected_or_first_version(
+                config
+                    .binaries
+                    .python
+                    .as_ref()
+                    .map(|b| b.versions.as_slice())
+                    .unwrap_or(empty),
+            ),
+            BinaryComponent::Go => selected_or_first_version(
+                config
+                    .binaries
+                    .go
+                    .as_ref()
+                    .map(|b| b.versions.as_slice())
+                    .unwrap_or(empty),
+            ),
+            BinaryComponent::Ruby => selected_or_first_version(
+                config
+                    .binaries
+                    .ruby
+                    .as_ref()
+                    .map(|b| b.versions.as_slice())
+                    .unwrap_or(empty),
+            ),
         }
     }
 
@@ -423,6 +360,10 @@ pub struct RuntimeDownloader {
     platform: Platform,
     client: Client,
     package_selection: Option<PackageSelection>,
+    /// When `false` (default, fail-closed) a download whose component/platform
+    /// has no configured SHA-256 checksum is rejected. Set to `true` only after
+    /// the user has explicitly acknowledged installing an unverified binary. (S-01)
+    allow_unverified_checksums: bool,
 }
 
 impl RuntimeDownloader {
@@ -435,20 +376,43 @@ impl RuntimeDownloader {
             .unwrap_or_else(|_| Client::new())
     }
 
-    fn user_agent(&self) -> &'static str {
+    /// Map a `Urls` struct to the URL string for the current platform, or an
+    /// empty string when the platform has no configured URL. Collapses the
+    /// platform-selection match that was repeated across every fallback config
+    /// arm of `get_binary_url`. (M-02)
+    fn url_for_platform(&self, urls: &Urls) -> String {
         match self.platform {
-            Platform::LinuxX64 | Platform::LinuxArm64 => "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-            Platform::MacOSX64 | Platform::MacOSArm64 => "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-            Platform::WindowsX64 | Platform::WindowsArm64 => "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+            Platform::WindowsX64 => urls.windows_x64.clone(),
+            Platform::WindowsArm64 => urls.windows_arm64.clone(),
+            Platform::MacOSX64 => urls.macos_x64.clone(),
+            Platform::MacOSArm64 => urls.macos_arm64.clone(),
+            Platform::LinuxX64 => urls.linux_x64.clone(),
+            Platform::LinuxArm64 => urls.linux_arm64.clone(),
         }
+        .unwrap_or_default()
     }
 
-    fn build_download_request(&self, url: &str, component: BinaryComponent) -> RequestBuilder {
-        let mut request = self.client.get(url).header("User-Agent", self.user_agent());
+    /// Default User-Agent for runtime downloads. CHAMP identifies itself
+    /// honestly rather than impersonating a browser. Hosts that genuinely
+    /// require a browser-like UA get one via the per-request exception in
+    /// `build_download_request` / `build_head_request`. (M-11)
+    fn user_agent(&self) -> &'static str {
+        "CHAMP-Runtime-Installer/1.3 (+https://github.com/thirawat27/CHAMP)"
+    }
 
-        // MySQL downloads require specific headers when routed through dev.mysql.com.
+    /// Browser-like User-Agent kept only for hosts that reject non-browser
+    /// clients. Currently used exclusively for dev.mysql.com. (M-11)
+    const MYSQL_BROWSER_USER_AGENT: &'static str = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
+
+    fn build_download_request(&self, url: &str, component: BinaryComponent) -> RequestBuilder {
+        // MySQL downloads via dev.mysql.com reject non-browser clients, so this
+        // one host keeps a browser-like UA alongside its Referer/Accept headers.
+        // Every other host gets the honest CHAMP UA. (M-11)
         if component == BinaryComponent::MySQL && url.contains("dev.mysql.com") {
-            request = request
+            return self
+                .client
+                .get(url)
+                .header("User-Agent", Self::MYSQL_BROWSER_USER_AGENT)
                 .header("Referer", "https://dev.mysql.com/downloads/mysql/")
                 .header(
                     "Accept",
@@ -456,17 +420,16 @@ impl RuntimeDownloader {
                 );
         }
 
-        request
+        self.client.get(url).header("User-Agent", self.user_agent())
     }
 
     fn build_head_request(&self, url: &str, component: BinaryComponent) -> RequestBuilder {
-        let mut request = self
-            .client
-            .head(url)
-            .header("User-Agent", self.user_agent());
-
+        // See build_download_request: dev.mysql.com needs the browser UA. (M-11)
         if component == BinaryComponent::MySQL && url.contains("dev.mysql.com") {
-            request = request
+            return self
+                .client
+                .head(url)
+                .header("User-Agent", Self::MYSQL_BROWSER_USER_AGENT)
                 .header("Referer", "https://dev.mysql.com/downloads/mysql/")
                 .header(
                     "Accept",
@@ -474,7 +437,9 @@ impl RuntimeDownloader {
                 );
         }
 
-        request
+        self.client
+            .head(url)
+            .header("User-Agent", self.user_agent())
     }
 
     fn component_name(&self, component: BinaryComponent) -> String {
@@ -517,6 +482,7 @@ impl RuntimeDownloader {
             platform: Platform::current(),
             client: Self::build_client(),
             package_selection: None,
+            allow_unverified_checksums: false,
         }
     }
 
@@ -526,7 +492,16 @@ impl RuntimeDownloader {
             platform: Platform::current(),
             client: Self::build_client(),
             package_selection: Some(package_selection),
+            allow_unverified_checksums: false,
         }
+    }
+
+    /// Opt in to installing binaries that have no configured SHA-256 checksum.
+    /// This bypasses the fail-closed guard in `finalize_downloaded_file` and must
+    /// only be enabled after the user has explicitly accepted the risk. (S-01)
+    pub fn allow_unverified_checksums(mut self, allow: bool) -> Self {
+        self.allow_unverified_checksums = allow;
+        self
     }
 
     /// Get the URL for a binary component from config
@@ -650,22 +625,7 @@ impl RuntimeDownloader {
                     .find(|v| v.selected)
                     .or_else(|| config.binaries.caddy.versions.first())
                     .unwrap();
-                match self.platform {
-                    Platform::WindowsX64 => {
-                        version_info.urls.windows_x64.clone().unwrap_or_default()
-                    }
-                    Platform::WindowsArm64 => {
-                        version_info.urls.windows_arm64.clone().unwrap_or_default()
-                    }
-                    Platform::MacOSX64 => version_info.urls.macos_x64.clone().unwrap_or_default(),
-                    Platform::MacOSArm64 => {
-                        version_info.urls.macos_arm64.clone().unwrap_or_default()
-                    }
-                    Platform::LinuxX64 => version_info.urls.linux_x64.clone().unwrap_or_default(),
-                    Platform::LinuxArm64 => {
-                        version_info.urls.linux_arm64.clone().unwrap_or_default()
-                    }
-                }
+                self.url_for_platform(&version_info.urls)
             }
             BinaryComponent::Php => {
                 let version_info = config
@@ -676,22 +636,7 @@ impl RuntimeDownloader {
                     .find(|v| v.selected)
                     .or_else(|| config.binaries.php.versions.first())
                     .unwrap();
-                match self.platform {
-                    Platform::WindowsX64 => {
-                        version_info.urls.windows_x64.clone().unwrap_or_default()
-                    }
-                    Platform::WindowsArm64 => {
-                        version_info.urls.windows_arm64.clone().unwrap_or_default()
-                    }
-                    Platform::MacOSX64 => version_info.urls.macos_x64.clone().unwrap_or_default(),
-                    Platform::MacOSArm64 => {
-                        version_info.urls.macos_arm64.clone().unwrap_or_default()
-                    }
-                    Platform::LinuxX64 => version_info.urls.linux_x64.clone().unwrap_or_default(),
-                    Platform::LinuxArm64 => {
-                        version_info.urls.linux_arm64.clone().unwrap_or_default()
-                    }
-                }
+                self.url_for_platform(&version_info.urls)
             }
             BinaryComponent::MySQL => {
                 let version_info = config
@@ -702,22 +647,7 @@ impl RuntimeDownloader {
                     .find(|v| v.selected)
                     .or_else(|| config.binaries.mysql.versions.first())
                     .unwrap();
-                match self.platform {
-                    Platform::WindowsX64 => {
-                        version_info.urls.windows_x64.clone().unwrap_or_default()
-                    }
-                    Platform::WindowsArm64 => {
-                        version_info.urls.windows_arm64.clone().unwrap_or_default()
-                    }
-                    Platform::MacOSX64 => version_info.urls.macos_x64.clone().unwrap_or_default(),
-                    Platform::MacOSArm64 => {
-                        version_info.urls.macos_arm64.clone().unwrap_or_default()
-                    }
-                    Platform::LinuxX64 => version_info.urls.linux_x64.clone().unwrap_or_default(),
-                    Platform::LinuxArm64 => {
-                        version_info.urls.linux_arm64.clone().unwrap_or_default()
-                    }
-                }
+                self.url_for_platform(&version_info.urls)
             }
             BinaryComponent::PostgreSQL => {
                 let version_info = config
@@ -728,22 +658,7 @@ impl RuntimeDownloader {
                     .find(|v| v.selected)
                     .or_else(|| config.binaries.postgresql.versions.first())
                     .unwrap();
-                match self.platform {
-                    Platform::WindowsX64 => {
-                        version_info.urls.windows_x64.clone().unwrap_or_default()
-                    }
-                    Platform::WindowsArm64 => {
-                        version_info.urls.windows_arm64.clone().unwrap_or_default()
-                    }
-                    Platform::MacOSX64 => version_info.urls.macos_x64.clone().unwrap_or_default(),
-                    Platform::MacOSArm64 => {
-                        version_info.urls.macos_arm64.clone().unwrap_or_default()
-                    }
-                    Platform::LinuxX64 => version_info.urls.linux_x64.clone().unwrap_or_default(),
-                    Platform::LinuxArm64 => {
-                        version_info.urls.linux_arm64.clone().unwrap_or_default()
-                    }
-                }
+                self.url_for_platform(&version_info.urls)
             }
             BinaryComponent::PhpMyAdmin => {
                 let version_info = config
@@ -768,22 +683,7 @@ impl RuntimeDownloader {
                             .or_else(|| b.versions.first())
                     })
                     .expect("Node is not configured");
-                match self.platform {
-                    Platform::WindowsX64 => {
-                        version_info.urls.windows_x64.clone().unwrap_or_default()
-                    }
-                    Platform::WindowsArm64 => {
-                        version_info.urls.windows_arm64.clone().unwrap_or_default()
-                    }
-                    Platform::MacOSX64 => version_info.urls.macos_x64.clone().unwrap_or_default(),
-                    Platform::MacOSArm64 => {
-                        version_info.urls.macos_arm64.clone().unwrap_or_default()
-                    }
-                    Platform::LinuxX64 => version_info.urls.linux_x64.clone().unwrap_or_default(),
-                    Platform::LinuxArm64 => {
-                        version_info.urls.linux_arm64.clone().unwrap_or_default()
-                    }
-                }
+                self.url_for_platform(&version_info.urls)
             }
             BinaryComponent::Python => {
                 let version_info = config
@@ -797,22 +697,7 @@ impl RuntimeDownloader {
                             .or_else(|| b.versions.first())
                     })
                     .expect("Python is not configured");
-                match self.platform {
-                    Platform::WindowsX64 => {
-                        version_info.urls.windows_x64.clone().unwrap_or_default()
-                    }
-                    Platform::WindowsArm64 => {
-                        version_info.urls.windows_arm64.clone().unwrap_or_default()
-                    }
-                    Platform::MacOSX64 => version_info.urls.macos_x64.clone().unwrap_or_default(),
-                    Platform::MacOSArm64 => {
-                        version_info.urls.macos_arm64.clone().unwrap_or_default()
-                    }
-                    Platform::LinuxX64 => version_info.urls.linux_x64.clone().unwrap_or_default(),
-                    Platform::LinuxArm64 => {
-                        version_info.urls.linux_arm64.clone().unwrap_or_default()
-                    }
-                }
+                self.url_for_platform(&version_info.urls)
             }
             BinaryComponent::Go => {
                 let version_info = config
@@ -826,22 +711,7 @@ impl RuntimeDownloader {
                             .or_else(|| b.versions.first())
                     })
                     .expect("Go is not configured");
-                match self.platform {
-                    Platform::WindowsX64 => {
-                        version_info.urls.windows_x64.clone().unwrap_or_default()
-                    }
-                    Platform::WindowsArm64 => {
-                        version_info.urls.windows_arm64.clone().unwrap_or_default()
-                    }
-                    Platform::MacOSX64 => version_info.urls.macos_x64.clone().unwrap_or_default(),
-                    Platform::MacOSArm64 => {
-                        version_info.urls.macos_arm64.clone().unwrap_or_default()
-                    }
-                    Platform::LinuxX64 => version_info.urls.linux_x64.clone().unwrap_or_default(),
-                    Platform::LinuxArm64 => {
-                        version_info.urls.linux_arm64.clone().unwrap_or_default()
-                    }
-                }
+                self.url_for_platform(&version_info.urls)
             }
             BinaryComponent::Ruby => {
                 let version_info = config
@@ -855,22 +725,7 @@ impl RuntimeDownloader {
                             .or_else(|| b.versions.first())
                     })
                     .expect("Ruby is not configured");
-                match self.platform {
-                    Platform::WindowsX64 => {
-                        version_info.urls.windows_x64.clone().unwrap_or_default()
-                    }
-                    Platform::WindowsArm64 => {
-                        version_info.urls.windows_arm64.clone().unwrap_or_default()
-                    }
-                    Platform::MacOSX64 => version_info.urls.macos_x64.clone().unwrap_or_default(),
-                    Platform::MacOSArm64 => {
-                        version_info.urls.macos_arm64.clone().unwrap_or_default()
-                    }
-                    Platform::LinuxX64 => version_info.urls.linux_x64.clone().unwrap_or_default(),
-                    Platform::LinuxArm64 => {
-                        version_info.urls.linux_arm64.clone().unwrap_or_default()
-                    }
-                }
+                self.url_for_platform(&version_info.urls)
             }
         }
     }
@@ -1519,23 +1374,45 @@ impl RuntimeDownloader {
             );
         }
 
-        if let Some(expected_checksum) = self.get_expected_checksum(&request.component, request.url)
-        {
-            let actual_checksum = hex::encode(downloaded_file.hasher.finalize());
+        // Checksum verification is fail-closed (S-01): a component/platform with no
+        // configured SHA-256 is rejected rather than silently trusted. The only escape
+        // hatch is `allow_unverified_checksums`, which the caller sets only after the
+        // user has explicitly accepted installing an unverified binary.
+        match self.get_expected_checksum(&request.component, request.url) {
+            Some(expected_checksum) => {
+                let actual_checksum = hex::encode(downloaded_file.hasher.finalize());
 
-            if actual_checksum.to_lowercase() != expected_checksum.to_lowercase() {
-                return Err(format!(
-                    "Checksum verification failed for {}.\nExpected: {}\nActual: {}\n\nThe downloaded file may be corrupted or tampered with.",
+                if actual_checksum.to_lowercase() != expected_checksum.to_lowercase() {
+                    return Err(format!(
+                        "Checksum verification failed for {}.\nExpected: {}\nActual: {}\n\nThe downloaded file may be corrupted or tampered with.",
+                        request.component.name(),
+                        expected_checksum,
+                        actual_checksum
+                    ));
+                }
+                eprintln!(
+                    "Checksum verified for {}: {}",
                     request.component.name(),
-                    expected_checksum,
                     actual_checksum
+                );
+            }
+            None if self.allow_unverified_checksums => {
+                eprintln!(
+                    "WARNING: no checksum configured for {} on {} — installing UNVERIFIED (user-accepted).",
+                    request.component.name(),
+                    self.platform.url_key()
+                );
+            }
+            None => {
+                return Err(format!(
+                    "No SHA-256 checksum is configured for {} on {}. \
+                     Installation was refused because the downloaded binary cannot be verified. \
+                     Add the expected checksum to runtime-config.json, or explicitly opt in to \
+                     installing unverified binaries.",
+                    request.component.name(),
+                    self.platform.url_key()
                 ));
             }
-            eprintln!(
-                "Checksum verified for {}: {}",
-                request.component.name(),
-                actual_checksum
-            );
         }
 
         fs::rename(request.partial_path, request.file_path)
@@ -1909,7 +1786,7 @@ impl RuntimeDownloader {
         }
 
         // Create temp directory for downloads
-        let temp_dir = std::env::temp_dir().join("campp-download");
+        let temp_dir = std::env::temp_dir().join("champ-download");
         fs::create_dir_all(&temp_dir)
             .map_err(|e| format!("Failed to create temp directory: {}", e))?;
         let runtime_dir = self.get_runtime_dir()?;

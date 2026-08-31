@@ -318,6 +318,8 @@ pub fn runtime_config_search_paths() -> Vec<PathBuf> {
                 .join("runtime-config.json"),
         );
         paths.push(data_dir.join("CHAMP").join("runtime-config.json"));
+        // Deliberate legacy migration path: old "campp" installs stored their
+        // runtime-config.json here. Kept so existing users keep working; not a typo.
         paths.push(data_dir.join("campp").join("runtime-config.json"));
     }
 
@@ -325,8 +327,14 @@ pub fn runtime_config_search_paths() -> Vec<PathBuf> {
         paths.push(resource_dir.join("runtime-config.json"));
     }
 
-    paths.push(PathBuf::from("runtime-config.json"));
-    paths.push(PathBuf::from("src-tauri").join("runtime-config.json"));
+    // Dev convenience only: reading config relative to the current working
+    // directory is unsafe in a shipped app (attacker-writable CWD could inject
+    // download URLs). Restricted to debug builds. (S-05)
+    #[cfg(debug_assertions)]
+    {
+        paths.push(PathBuf::from("runtime-config.json"));
+        paths.push(PathBuf::from("src-tauri").join("runtime-config.json"));
+    }
 
     if let Ok(exe_path) = std::env::current_exe() {
         if let Some(exe_dir) = exe_path.parent() {
@@ -753,6 +761,8 @@ fn version_after_marker(text: &str, marker: &str) -> Option<String> {
         &text[index..]
     };
 
+    let marker_found = marker.is_empty() || text.contains(marker);
+
     for (start, ch) in haystack.char_indices() {
         if !ch.is_ascii_digit() {
             continue;
@@ -763,12 +773,60 @@ fn version_after_marker(text: &str, marker: &str) -> Option<String> {
             .take_while(|value| value.is_ascii_digit() || *value == '.')
             .collect();
         let candidate = candidate.trim_end_matches('.').to_string();
-        if candidate.matches('.').count() >= 1 {
+
+        // M-10: only accept a candidate that looks like a real version. If the
+        // upstream page wording changed and the first digit run after the marker
+        // is not a plausible version (e.g. a year "2024" with no dot, or "0"),
+        // keep scanning rather than composing a wrong number into download URLs.
+        if is_plausible_version(&candidate) {
             return Some(candidate);
         }
     }
 
+    // M-10: a marker was found but nothing after it parsed as a plausible
+    // version. Surface this in logs so a broken scrape is visible instead of
+    // silently keeping (or worse, picking a wrong) value. Returning None makes
+    // the caller keep its existing local catalog entry, the safe outcome.
+    if marker_found {
+        eprintln!(
+            "runtime catalog refresh: marker {:?} found but no plausible version followed; keeping local catalog entry",
+            marker
+        );
+    }
+
     None
+}
+
+/// M-10: reject implausible version strings scraped from upstream HTML.
+///
+/// A plausible version has at least one `.`, every dot-separated segment is a
+/// non-empty run of ASCII digits, the major segment parses to a `u16` in
+/// `1..=99` (rejecting "0" and absurd values), and the whole thing is short.
+fn is_plausible_version(candidate: &str) -> bool {
+    if candidate.len() > 14 {
+        return false;
+    }
+    if !candidate.contains('.') {
+        return false;
+    }
+
+    let mut segments = candidate.split('.');
+
+    let major = match segments.next() {
+        Some(segment) => segment,
+        None => return false,
+    };
+    if major.is_empty() || !major.bytes().all(|b| b.is_ascii_digit()) {
+        return false;
+    }
+    match major.parse::<u16>() {
+        Ok(value) if (1..=99).contains(&value) => {}
+        _ => return false,
+    }
+
+    // Remaining segments (there is at least one because of the '.' check) must
+    // each be a non-empty run of ASCII digits.
+    segments.all(|segment| !segment.is_empty() && segment.bytes().all(|b| b.is_ascii_digit()))
 }
 
 fn persist_runtime_config_override(config: &RuntimeConfig) -> Result<(), String> {
@@ -1319,11 +1377,6 @@ pub fn get_ruby_package(id: &str) -> Option<GenericPackage> {
         .find(|p| p.id == id)
 }
 
-/// Reload the runtime configuration (call after modifying the config file)
-pub fn reload_runtime_config() {
-    replace_runtime_config(load_runtime_config_from_file());
-}
-
 /// Get the runtime configuration
 pub fn get_config() -> Option<RuntimeConfig> {
     let cache = RUNTIME_CONFIG.get_or_init(|| RwLock::new(load_runtime_config_from_file()));
@@ -1346,4 +1399,60 @@ pub fn selected_caddy_version() -> String {
 /// Get default packages from the embedded runtime-config.json fallback.
 fn get_default_packages() -> PackagesConfig {
     runtime_config_to_packages(&embedded_default_runtime_config())
+}
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn version_after_marker_accepts_plausible() {
+        assert_eq!(
+            version_after_marker("downloads of PHP 8.4.3 now", "downloads of PHP "),
+            Some("8.4.3".to_string())
+        );
+    }
+
+    #[test]
+    fn version_after_marker_rejects_implausible() {
+        // A lone "0" after the marker (no dot) must not be accepted.
+        assert_eq!(version_after_marker("release 0 build", "release "), None);
+
+        // A bare year "2024" (no dot) must not be accepted.
+        assert_eq!(
+            version_after_marker("copyright 2024 vendor", "copyright "),
+            None
+        );
+
+        // Marker present but followed by non-version garbage.
+        assert_eq!(
+            version_after_marker("version: none here", "version: "),
+            None
+        );
+    }
+
+    #[test]
+    fn is_plausible_version_basic_cases() {
+        // Valid versions.
+        assert!(is_plausible_version("8.4.3"));
+        assert!(is_plausible_version("17.10"));
+        assert!(is_plausible_version("1.0"));
+
+        // No dot.
+        assert!(!is_plausible_version("2024"));
+        assert!(!is_plausible_version("8"));
+
+        // Zero / out-of-range major.
+        assert!(!is_plausible_version("0.1"));
+        assert!(!is_plausible_version("100.1"));
+
+        // Empty segment.
+        assert!(!is_plausible_version("8..3"));
+        assert!(!is_plausible_version("8."));
+
+        // Too long.
+        assert!(!is_plausible_version("1.2345678901234"));
+
+        // Non-digit segment.
+        assert!(!is_plausible_version("8.4a"));
+    }
 }

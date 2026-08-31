@@ -11,10 +11,10 @@
 //! - **HTTPS Tunnel**: `start_https_tunnel`, `stop_https_tunnel`, `get_https_tunnel_status`
 //! - **Settings**: `get_settings`, `save_settings`, `validate_settings`
 //! - **Port Checking**: `check_ports`
-//! - **Runtime Management**: `check_runtime_installed`, `download_runtime`, `download_runtime_with_packages`, `download_runtime_with_skip`
-//! - **Installation**: `reset_installation`, `get_runtime_dir`, `get_install_dir`, `get_app_paths`
+//! - **Runtime Management**: `check_runtime_installed`, `download_runtime_with_packages`, `download_runtime_with_skip`
+//! - **Installation**: `reset_installation`, `get_runtime_dir`, `get_app_paths`
 //! - **System Metrics**: `get_system_metrics`
-//! - **Package Management**: `get_available_packages_cmd`, `get_package_selection`, `update_package_selection`
+//! - **Package Management**: `get_available_packages_cmd`, `get_selected_package_ids`, `update_package_selection`
 //! - **PHP Version Management**: `get_installed_php_versions`, `switch_php_version`, `download_php_version`
 //! - **Version Info**: `get_installed_versions`, `check_existing_components`
 //! - **Dependencies**: `check_system_dependencies`
@@ -374,6 +374,21 @@ fn marker_version(path: &Path) -> Option<String> {
         .find_map(|line| line.strip_prefix("version=").map(str::to_string))
 }
 
+/// Acquire the process manager lock and run `f` with a mutable reference to it. (M-04)
+///
+/// Centralizes lock acquisition and the lock-error message so the service/status
+/// commands don't each repeat the same boilerplate.
+fn with_manager<T>(
+    state: &State<'_, AppState>,
+    f: impl FnOnce(&mut crate::process::manager::ProcessManager) -> T,
+) -> Result<T, String> {
+    let mut manager = state
+        .process_manager
+        .lock()
+        .map_err(|e| format!("Failed to acquire process manager lock: {}", e))?;
+    Ok(f(&mut manager))
+}
+
 /// Start a service
 ///
 /// # Arguments
@@ -390,18 +405,13 @@ pub async fn start_service(
     service: ServiceType,
     state: State<'_, AppState>,
 ) -> Result<ServiceMap, String> {
-    let mut manager = state
-        .process_manager
-        .lock()
-        .map_err(|e| format!("Failed to acquire process manager lock: {}", e))?;
-
-    // Start the service
-    let result = manager.start(service);
-
-    // Update health and return statuses regardless of start result
-    // This ensures the frontend sees the error state
-    manager.update_health();
-    let statuses = manager.get_all_statuses();
+    // Update health and return statuses regardless of start result so the
+    // frontend can see the error state.
+    let (result, statuses) = with_manager(&state, |m| {
+        let result = m.start(service);
+        m.update_health();
+        (result, m.get_all_statuses())
+    })?;
 
     // Return error after getting statuses so frontend can see the error state
     result?;
@@ -424,17 +434,13 @@ pub async fn stop_service(
     service: ServiceType,
     state: State<'_, AppState>,
 ) -> Result<ServiceMap, String> {
-    let mut manager = state
-        .process_manager
-        .lock()
-        .map_err(|e| format!("Failed to acquire process manager lock: {}", e))?;
-
-    // Stop the service
-    manager.stop(service)?;
-
-    // Update health and return statuses
-    manager.update_health();
-    Ok(manager.get_all_statuses())
+    // Stop the service; on stop error the `?` short-circuits before statuses
+    // are returned (preserving the original early-return-on-error behavior).
+    with_manager(&state, |m| {
+        m.stop(service)?;
+        m.update_health();
+        Ok(m.get_all_statuses())
+    })?
 }
 
 /// Restart a service
@@ -453,17 +459,12 @@ pub async fn restart_service(
     service: ServiceType,
     state: State<'_, AppState>,
 ) -> Result<ServiceMap, String> {
-    let mut manager = state
-        .process_manager
-        .lock()
-        .map_err(|e| format!("Failed to acquire process manager lock: {}", e))?;
-
-    // Restart the service
-    let result = manager.restart(service);
-
-    // Update health and return statuses regardless of restart result
-    manager.update_health();
-    let statuses = manager.get_all_statuses();
+    // Update health and return statuses regardless of restart result.
+    let (result, statuses) = with_manager(&state, |m| {
+        let result = m.restart(service);
+        m.update_health();
+        (result, m.get_all_statuses())
+    })?;
 
     // Return error after getting statuses so frontend can see the error state
     result?;
@@ -472,41 +473,32 @@ pub async fn restart_service(
 
 #[tauri::command]
 pub async fn start_all_services(state: State<'_, AppState>) -> Result<ServiceMap, String> {
-    let mut manager = state
-        .process_manager
-        .lock()
-        .map_err(|e| format!("Failed to acquire process manager lock: {}", e))?;
-
-    let result = manager.start_all();
-    manager.update_health();
-    let statuses = manager.get_all_statuses();
+    let (result, statuses) = with_manager(&state, |m| {
+        let result = m.start_all();
+        m.update_health();
+        (result, m.get_all_statuses())
+    })?;
     result?;
     Ok(statuses)
 }
 
 #[tauri::command]
 pub async fn stop_all_services(state: State<'_, AppState>) -> Result<ServiceMap, String> {
-    let mut manager = state
-        .process_manager
-        .lock()
-        .map_err(|e| format!("Failed to acquire process manager lock: {}", e))?;
-
-    let _ = crate::tunnel::stop_https_tunnel();
-    manager.stop_stack()?;
-    manager.update_health();
-    Ok(manager.get_all_statuses())
+    with_manager(&state, |m| {
+        let _ = crate::tunnel::stop_https_tunnel();
+        m.stop_stack()?;
+        m.update_health();
+        Ok(m.get_all_statuses())
+    })?
 }
 
 #[tauri::command]
 pub async fn restart_all_services(state: State<'_, AppState>) -> Result<ServiceMap, String> {
-    let mut manager = state
-        .process_manager
-        .lock()
-        .map_err(|e| format!("Failed to acquire process manager lock: {}", e))?;
-
-    let result = manager.restart_all();
-    manager.update_health();
-    let statuses = manager.get_all_statuses();
+    let (result, statuses) = with_manager(&state, |m| {
+        let result = m.restart_all();
+        m.update_health();
+        (result, m.get_all_statuses())
+    })?;
     result?;
     Ok(statuses)
 }
@@ -514,14 +506,11 @@ pub async fn restart_all_services(state: State<'_, AppState>) -> Result<ServiceM
 /// Get the status of all services
 #[tauri::command]
 pub async fn get_all_statuses(state: State<'_, AppState>) -> Result<ServiceMap, String> {
-    let mut manager = state
-        .process_manager
-        .lock()
-        .map_err(|e| format!("Failed to acquire process manager lock: {}", e))?;
-
     // Update health before returning statuses
-    manager.update_health();
-    Ok(manager.get_all_statuses())
+    with_manager(&state, |m| {
+        m.update_health();
+        m.get_all_statuses()
+    })
 }
 
 /// Start a free public HTTPS URL for the local CHAMP web server.
@@ -830,12 +819,6 @@ pub async fn get_runtime_dir() -> Result<String, String> {
         .map(|p| p.to_string_lossy().to_string())
 }
 
-/// Get the installation directory (where the exe is located)
-#[tauri::command]
-pub async fn get_install_dir() -> Result<String, String> {
-    get_app_data_paths().map(|paths| paths.base_dir.to_string_lossy().to_string())
-}
-
 #[tauri::command]
 pub async fn get_app_paths() -> Result<AppPathsDto, String> {
     let paths = get_app_data_paths()?;
@@ -878,6 +861,7 @@ fn create_project_template_in_dir(
         return Err("Project path must stay inside the projects directory".to_string());
     }
 
+    let created_dir = !project_dir.exists();
     if project_dir.exists() {
         let mut entries = fs::read_dir(&project_dir)
             .map_err(|e| format!("Failed to inspect existing project directory: {}", e))?;
@@ -895,16 +879,28 @@ fn create_project_template_in_dir(
     let files = project_template_files(template, &name);
     for (relative_path, content) in files {
         let file_path = project_dir.join(relative_path);
-        if let Some(parent) = file_path.parent() {
-            fs::create_dir_all(parent)
-                .map_err(|e| format!("Failed to create project subdirectory: {}", e))?;
+        let write_result = (|| {
+            if let Some(parent) = file_path.parent() {
+                fs::create_dir_all(parent)
+                    .map_err(|e| format!("Failed to create project subdirectory: {}", e))?;
+            }
+            OpenOptions::new()
+                .write(true)
+                .create_new(true)
+                .open(&file_path)
+                .and_then(|mut file| file.write_all(content.as_bytes()))
+                .map_err(|e| format!("Failed to write {}: {}", file_path.display(), e))
+        })();
+
+        if let Err(err) = write_result {
+            // If we created the project directory in this call, remove the partial
+            // scaffold so a retry doesn't fail with "already exists and is not empty".
+            // Never remove a pre-existing (empty) directory we did not create.
+            if created_dir {
+                let _ = fs::remove_dir_all(&project_dir);
+            }
+            return Err(err);
         }
-        OpenOptions::new()
-            .write(true)
-            .create_new(true)
-            .open(&file_path)
-            .and_then(|mut file| file.write_all(content.as_bytes()))
-            .map_err(|e| format!("Failed to write {}: {}", file_path.display(), e))?;
     }
 
     let entry_file = project_entry_file(template);
@@ -934,7 +930,46 @@ fn validate_project_name(project_name: &str) -> Result<String, String> {
         );
     }
 
+    // Windows silently strips a trailing dot or space, which leads to confusing
+    // mismatches between the requested name and the folder that ends up on disk.
+    // Check the original input (not the trimmed name) so trailing whitespace the
+    // caller supplied is rejected rather than silently swallowed by the trim above.
+    if project_name.ends_with('.')
+        || project_name.ends_with(' ')
+        || name.ends_with('.')
+        || name.ends_with(' ')
+    {
+        return Err("Project name cannot end with a space or period".to_string());
+    }
+
+    // Reject Windows reserved device names (case-insensitive), with or without an
+    // extension. These are invalid folder names on Windows, and a project created
+    // on macOS/Linux may later be opened on Windows, so validate everywhere.
+    let stem = name.split('.').next().unwrap_or(name);
+    if is_windows_reserved_name(stem) {
+        return Err(format!(
+            "Project name '{}' is a reserved Windows device name",
+            name
+        ));
+    }
+
     Ok(name.to_string())
+}
+
+/// Returns true if `stem` matches a Windows reserved device name
+/// (CON, PRN, AUX, NUL, COM1..COM9, LPT1..LPT9), case-insensitively.
+fn is_windows_reserved_name(stem: &str) -> bool {
+    let upper = stem.to_ascii_uppercase();
+    if matches!(upper.as_str(), "CON" | "PRN" | "AUX" | "NUL") {
+        return true;
+    }
+    if let Some(digit) = upper
+        .strip_prefix("COM")
+        .or_else(|| upper.strip_prefix("LPT"))
+    {
+        return matches!(digit, "1" | "2" | "3" | "4" | "5" | "6" | "7" | "8" | "9");
+    }
+    false
 }
 
 fn project_template_id(template: ProjectTemplate) -> &'static str {
@@ -1112,30 +1147,22 @@ pub async fn get_system_metrics() -> Result<SystemMetricsDto, String> {
 /// Get the download directory path (where ZIP files are stored)
 #[tauri::command]
 pub async fn get_download_dir() -> Result<String, String> {
-    let temp_dir = std::env::temp_dir().join("campp-download");
+    let temp_dir = std::env::temp_dir().join("champ-download");
     Ok(temp_dir.to_string_lossy().to_string())
 }
 
-/// Download and install runtime binaries
-#[tauri::command]
-pub async fn download_runtime(app: tauri::AppHandle) -> Result<String, String> {
-    let downloader = RuntimeDownloader::new();
-    let app_clone = app.clone();
-
-    // Emit progress updates via Tauri events
-    downloader
-        .download_all(Box::new(move |progress| {
-            let _ = app_clone.emit("download-progress", &progress);
-
-            // Store latest progress
-            if let Ok(mut p) = DOWNLOAD_PROGRESS.lock() {
-                *p = Some(progress);
-            }
-        }))
-        .await?;
-
-    Ok("Runtime binaries installed successfully".to_string())
-}
+/// S-01 interim: the checksum verifier in `downloader.rs` is fail-closed — a
+/// component/platform with no configured SHA-256 is refused. Today only phpMyAdmin
+/// has a checksum in `runtime-config.json`, so enforcing fail-closed unconditionally
+/// would break first-run installation of PHP/MySQL/PostgreSQL/Caddy/Node/etc.
+/// Until real per-platform checksums are populated (must be computed against genuine
+/// upstream artifacts, ideally in CI), we opt in to installing unverified binaries.
+/// A configured checksum that MISMATCHES still hard-fails regardless of this flag.
+///
+/// TODO(retire S-01): set this to `false` once `runtime-config.json` carries SHA-256
+/// for every package/platform, and surface a user-facing "install unverified?" prompt
+/// for any remaining gaps. Tracked in CODE_HEALTH_BACKLOG.md (S-01).
+const ALLOW_UNVERIFIED_RUNTIME_DOWNLOADS: bool = true;
 
 /// Stop all running services (for cleanup on app exit)
 #[tauri::command]
@@ -1174,7 +1201,8 @@ pub async fn download_runtime_with_packages(
     package_selection: PackageSelection,
     app: tauri::AppHandle,
 ) -> Result<String, String> {
-    let downloader = RuntimeDownloader::with_packages(package_selection);
+    let downloader = RuntimeDownloader::with_packages(package_selection)
+        .allow_unverified_checksums(ALLOW_UNVERIFIED_RUNTIME_DOWNLOADS);
     let app_clone = app.clone();
 
     // Emit progress updates via Tauri events
@@ -1190,13 +1218,6 @@ pub async fn download_runtime_with_packages(
         .await?;
 
     Ok("Runtime binaries installed successfully".to_string())
-}
-
-/// Get the current package selection from settings
-#[tauri::command]
-pub async fn get_package_selection() -> Result<PackageSelection, String> {
-    let settings = AppSettings::load();
-    Ok(settings.package_selection)
 }
 
 /// Update package selection in settings (without downloading)
@@ -1323,9 +1344,10 @@ pub async fn download_php_version(php_id: String, app: tauri::AppHandle) -> Resu
 
     let mut settings = AppSettings::load();
     settings.package_selection.php = php_id;
-    settings.save()?;
+    let selection_for_download = settings.package_selection.clone();
 
-    let downloader = RuntimeDownloader::with_packages(settings.package_selection);
+    let downloader = RuntimeDownloader::with_packages(selection_for_download)
+        .allow_unverified_checksums(ALLOW_UNVERIFIED_RUNTIME_DOWNLOADS);
     let app_clone = app.clone();
     let skip_list = ["caddy", "mysql", "postgresql", "adminer", "phpmyadmin"];
 
@@ -1341,6 +1363,10 @@ pub async fn download_php_version(php_id: String, app: tauri::AppHandle) -> Resu
         )
         .await?;
 
+    // Persist the selection only after the download succeeds. Otherwise a failed
+    // download would leave settings pointing at a PHP version that isn't installed.
+    settings.save()?;
+
     Ok("PHP version installed successfully".to_string())
 }
 
@@ -1348,13 +1374,6 @@ pub async fn download_php_version(php_id: String, app: tauri::AppHandle) -> Resu
 #[tauri::command]
 pub async fn get_selected_package_ids() -> Result<PackageSelection, String> {
     Ok(crate::runtime::packages::get_selected_package_ids())
-}
-
-/// Reload the runtime configuration from runtime-config.json
-#[tauri::command]
-pub async fn reload_runtime_config() -> Result<String, String> {
-    crate::runtime::packages::reload_runtime_config();
-    Ok("Runtime configuration reloaded successfully".to_string())
 }
 
 /// Get the installed runtime versions
@@ -1417,7 +1436,8 @@ pub async fn download_runtime_with_skip(
     skip_list: Vec<String>,
     app: tauri::AppHandle,
 ) -> Result<String, String> {
-    let downloader = RuntimeDownloader::with_packages(package_selection);
+    let downloader = RuntimeDownloader::with_packages(package_selection)
+        .allow_unverified_checksums(ALLOW_UNVERIFIED_RUNTIME_DOWNLOADS);
     let app_clone = app.clone();
 
     // Convert Vec<String> to Vec<&str> for the skip_list
@@ -1456,6 +1476,22 @@ mod tests {
         assert!(validate_project_name("..").is_err());
         assert!(validate_project_name("../outside").is_err());
         assert!(validate_project_name("nested\\outside").is_err());
+    }
+
+    #[test]
+    fn validate_project_name_rejects_windows_reserved() {
+        assert!(validate_project_name("CON").is_err());
+        assert!(validate_project_name("com1").is_err());
+        assert!(validate_project_name("LPT9").is_err());
+        assert!(validate_project_name("nul.txt").is_err());
+        // A normal name that merely contains a reserved substring is fine.
+        assert!(validate_project_name("con-tainer").is_ok());
+    }
+
+    #[test]
+    fn validate_project_name_rejects_trailing_dot_or_space() {
+        assert!(validate_project_name("foo.").is_err());
+        assert!(validate_project_name("bar ").is_err());
     }
 
     #[test]

@@ -4,10 +4,12 @@ import { CheckCircle2, FolderOpen, X } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import {
   AppSettings,
+  DEFAULT_PORTS,
   DownloadProgress,
   InstalledPhpVersion,
   PackagesConfig,
   PackageSelection,
+  ServiceType,
   EMPTY_PACKAGE_SELECTION,
   GenericPackage,
   hasInstallablePackageForPlatform,
@@ -54,10 +56,10 @@ export function SettingsPanel({ onClose, onSettingsChanged, ...props }: Settings
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [onClose]);
   const [settings, setSettings] = useState<AppSettings>({
-    web_port: 8080,
-    php_port: 9000,
-    mysql_port: 3306,
-    postgresql_port: 5432,
+    web_port: DEFAULT_PORTS[ServiceType.Caddy],
+    php_port: DEFAULT_PORTS[ServiceType.PhpFpm],
+    mysql_port: DEFAULT_PORTS[ServiceType.MySQL],
+    postgresql_port: DEFAULT_PORTS[ServiceType.PostgreSQL],
     project_root: "",
     auto_start_services: false,
     package_selection: defaultPackageSelection,
@@ -197,6 +199,20 @@ export function SettingsPanel({ onClose, onSettingsChanged, ...props }: Settings
     setMessage(null);
 
     try {
+      // Validate before saving so duplicate/invalid ports are blocked up front
+      // instead of silently persisting and later surfacing as fallback-port behavior.
+      try {
+        await invoke<string[]>("validate_settings", { settings });
+      } catch (validationErrors) {
+        const list = Array.isArray(validationErrors)
+          ? validationErrors.join("; ")
+          : String(validationErrors);
+        setError(`${t.failedToSaveSettings}: ${list}`);
+        setSaving(false);
+        setSaveProgress(null);
+        return;
+      }
+
       await invoke("save_settings", { settings });
       setMessage(t.settingsSaved);
       onSettingsChanged?.();

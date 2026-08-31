@@ -27,14 +27,20 @@ import { useTranslation } from "../stores/languageStore";
 import { AudioManager } from "../utils/audioManager";
 import {
   AppSettings,
-  HttpsTunnelStatus,
-  SERVICE_DISPLAY_NAMES,
-  ServiceMap,
-  ServiceState,
+  DEFAULT_PORTS,
   ServiceType,
-  getStackServiceTypes,
   isAdminerSelected as isAdminerSelection,
 } from "../types/services";
+import { useServices } from "../hooks/useServices";
+import { useHttpsTunnel } from "../hooks/useHttpsTunnel";
+import { useToast } from "../hooks/useToast";
+import {
+  AppPaths,
+  SERVICE_COMMAND_COPY,
+  SOURCE_REPO_URL,
+  ServiceCommand,
+} from "./dashboard/types";
+import { GitHubIcon } from "./dashboard/GitHubIcon";
 import { HelpModal } from "./HelpModal";
 import { LanguageSelector } from "./LanguageSelector";
 import { ServiceCard } from "./ServiceCard";
@@ -42,18 +48,6 @@ import { SettingsPanel } from "./SettingsPanel";
 import { StatusBar } from "./StatusBar";
 import { TemplateSelector, ProjectScaffoldResult } from "./TemplateSelector";
 
-interface AppPaths {
-  base_dir: string;
-  portable: boolean;
-  runtime_dir: string;
-  config_dir: string;
-  mysql_data_dir: string;
-  postgresql_data_dir: string;
-  logs_dir: string;
-  projects_dir: string;
-}
-
-const SOURCE_REPO_URL = "https://github.com/thirawat27/CHAMP";
 const DASHBOARD_SERVICE_TYPES = [
   ServiceType.Caddy,
   ServiceType.PhpFpm,
@@ -61,187 +55,17 @@ const DASHBOARD_SERVICE_TYPES = [
   ServiceType.PostgreSQL,
 ] as const;
 
-const DEFAULT_TUNNEL_STATUS: HttpsTunnelStatus = {
-  running: false,
-  url: null,
-  ready: false,
-  local_url: "",
-  error: null,
-  log_path: null,
-  pid: null,
-};
-
-type NoticeTone = "info" | "success" | "error";
-type NoticeAction = "start" | "restart" | "stop";
-
-interface DashboardNotice {
-  tone: NoticeTone;
-  action?: NoticeAction;
-  title: string;
-  message: string;
-}
-
-const STACK_COMMAND_COPY = {
-  start_all_services: {
-    pendingTitleKey: "stackStartingTitle",
-    pendingMessageKey: "stackStartingMessage",
-    successTitleKey: "stackStartedTitle",
-    successMessageKey: "stackStartedMessage",
-    buttonLabelKey: "starting",
-    action: "start",
-  },
-  restart_all_services: {
-    pendingTitleKey: "stackRestartingTitle",
-    pendingMessageKey: "stackRestartingMessage",
-    successTitleKey: "stackRestartedTitle",
-    successMessageKey: "stackRestartedMessage",
-    buttonLabelKey: "restarting",
-    action: "restart",
-  },
-  stop_all_services: {
-    pendingTitleKey: "stackStoppingTitle",
-    pendingMessageKey: "stackStoppingMessage",
-    successTitleKey: "stackStoppedTitle",
-    successMessageKey: "stackStoppedMessage",
-    buttonLabelKey: "stopping",
-    action: "stop",
-  },
-} as const;
-
-const SERVICE_COMMAND_COPY = {
-  start_service: {
-    pendingTitleKey: "serviceStartingTitle",
-    pendingMessageKey: "serviceStartingMessage",
-    successTitleKey: "serviceStarted",
-    buttonLabelKey: "starting",
-    action: "start",
-  },
-  restart_service: {
-    pendingTitleKey: "serviceRestartingTitle",
-    pendingMessageKey: "serviceRestartingMessage",
-    successTitleKey: "serviceRestarted",
-    buttonLabelKey: "restarting",
-    action: "restart",
-  },
-  stop_service: {
-    pendingTitleKey: "serviceStoppingTitle",
-    pendingMessageKey: "serviceStoppingMessage",
-    successTitleKey: "serviceStopped",
-    buttonLabelKey: "stopping",
-    action: "stop",
-  },
-} as const;
-
-function GitHubIcon({ size = 16 }: { size?: number }) {
-  return (
-    <svg
-      aria-hidden="true"
-      width={size}
-      height={size}
-      viewBox="0 0 24 24"
-      fill="currentColor"
-      focusable="false"
-    >
-      <path d="M12 .5C5.65.5.5 5.65.5 12c0 5.08 3.29 9.39 7.86 10.91.58.1.79-.25.79-.56v-2.14c-3.2.7-3.87-1.36-3.87-1.36-.52-1.33-1.28-1.68-1.28-1.68-1.05-.72.08-.7.08-.7 1.16.08 1.77 1.19 1.77 1.19 1.03 1.76 2.7 1.25 3.36.96.1-.75.4-1.25.73-1.54-2.55-.29-5.23-1.28-5.23-5.68 0-1.25.45-2.28 1.19-3.08-.12-.29-.52-1.46.11-3.04 0 0 .97-.31 3.17 1.18A11.1 11.1 0 0 1 12 6.07c.98 0 1.95.13 2.87.39 2.2-1.49 3.17-1.18 3.17-1.18.63 1.58.23 2.75.11 3.04.74.8 1.19 1.83 1.19 3.08 0 4.41-2.69 5.38-5.25 5.67.42.36.78 1.06.78 2.14v3.14c0 .31.21.67.79.56A11.51 11.51 0 0 0 23.5 12C23.5 5.65 18.35.5 12 .5Z" />
-    </svg>
-  );
-}
-
-function normalizeTunnelStatus(value: unknown): HttpsTunnelStatus {
-  if (
-    value &&
-    typeof value === "object" &&
-    typeof (value as HttpsTunnelStatus).running === "boolean"
-  ) {
-    return {
-      ...DEFAULT_TUNNEL_STATUS,
-      ...(value as HttpsTunnelStatus),
-      ready: Boolean((value as HttpsTunnelStatus).ready),
-    };
-  }
-
-  return DEFAULT_TUNNEL_STATUS;
-}
-
 export function Dashboard() {
   const { t } = useTranslation();
-  const [services, setServices] = useState<Partial<ServiceMap>>({});
   const [showSettings, setShowSettings] = useState(false);
   const [showHelp, setShowHelp] = useState(false);
   const [appPaths, setAppPaths] = useState<AppPaths | null>(null);
   const [settings, setSettings] = useState<AppSettings | null>(null);
   const [installedVersions, setInstalledVersions] = useState<Record<string, string>>({});
-  const [busy, setBusy] = useState<string | null>(null);
-  const [tunnelBusy, setTunnelBusy] = useState<"start" | "stop" | null>(null);
-  const [tunnelStatus, setTunnelStatus] = useState<HttpsTunnelStatus>(DEFAULT_TUNNEL_STATUS);
-  const [notice, setNotice] = useState<DashboardNotice | null>(null);
   const [showProjectCreator, setShowProjectCreator] = useState(false);
   const [showQuickActionsMenu, setShowQuickActionsMenu] = useState(false);
-  const statusRefreshInFlight = useRef(false);
 
-  // Initialize audio context on first user interaction
-  useEffect(() => {
-    const initAudio = () => {
-      AudioManager.initialize();
-    };
-    window.addEventListener("click", initAudio, { once: true });
-    return () => window.removeEventListener("click", initAudio);
-  }, []);
-
-  const caddyPort = services[ServiceType.Caddy]?.port || 8080;
-  const webServerUrl = `http://localhost:${caddyPort}`;
-  const packageSelection = settings?.package_selection ?? null;
-  const isAdminerSelected = isAdminerSelection(packageSelection);
-  const databaseToolName = isAdminerSelected ? "Adminer" : "phpMyAdmin";
-  const databaseToolUrl = `${webServerUrl}/${isAdminerSelected ? "adminer" : "phpmyadmin"}`;
-  const stackServiceTypes = useMemo(
-    () => getStackServiceTypes(packageSelection),
-    [packageSelection]
-  );
-  const runningCount = stackServiceTypes.filter(
-    (serviceType) => services[serviceType]?.state === ServiceState.Running
-  ).length;
-  const totalCount = stackServiceTypes.length;
-  const isCaddyRunning = services[ServiceType.Caddy]?.state === ServiceState.Running;
-  const allRunning = runningCount === totalCount;
-  const busyStackCommand = busy?.startsWith("stack:")
-    ? (busy.slice("stack:".length) as keyof typeof STACK_COMMAND_COPY)
-    : null;
-  const expectedPorts = useMemo(
-    () => ({
-      [ServiceType.Caddy]: settings?.web_port ?? 8080,
-      [ServiceType.PhpFpm]: settings?.php_port ?? 9000,
-      [ServiceType.MySQL]: settings?.mysql_port ?? 3306,
-      [ServiceType.PostgreSQL]: settings?.postgresql_port ?? 5432,
-    }),
-    [settings]
-  );
-
-  const refreshStatuses = useCallback(async () => {
-    if (statusRefreshInFlight.current) return;
-    statusRefreshInFlight.current = true;
-    try {
-      const [statuses, tunnel] = await Promise.all([
-        invoke<ServiceMap>("get_all_statuses"),
-        invoke<HttpsTunnelStatus>("get_https_tunnel_status"),
-      ]);
-      setServices(statuses);
-      setTunnelStatus(normalizeTunnelStatus(tunnel));
-    } catch (error) {
-      console.error("Failed to refresh dashboard status:", error);
-    } finally {
-      statusRefreshInFlight.current = false;
-    }
-  }, []);
-
-  const refreshTunnelStatus = useCallback(async () => {
-    try {
-      const status = await invoke<HttpsTunnelStatus>("get_https_tunnel_status");
-      setTunnelStatus(normalizeTunnelStatus(status));
-    } catch (error) {
-      console.error("Failed to get HTTPS tunnel status:", error);
-    }
-  }, []);
+  const { notice, notify, dismiss } = useToast();
 
   const refreshMetadata = useCallback(async () => {
     try {
@@ -258,123 +82,74 @@ export function Dashboard() {
     }
   }, []);
 
+  // The services and tunnel hooks reference each other's refresh callbacks.
+  // A ref breaks the initialization cycle: the tunnel hook reads the latest
+  // services refresh without depending on the services hook being built first.
+  const refreshStatusesRef = useRef<() => Promise<void>>(() => Promise.resolve());
+  const refreshStatusesStable = useCallback(() => refreshStatusesRef.current(), []);
+
+  const tunnel = useHttpsTunnel({
+    t,
+    notify,
+    refreshStatuses: refreshStatusesStable,
+    refreshMetadata,
+  });
+
+  const services = useServices({
+    t,
+    settings,
+    notify,
+    refreshTunnel: tunnel.refreshTunnelStatus,
+    resetTunnel: tunnel.resetTunnel,
+  });
+
   useEffect(() => {
-    refreshStatuses();
-    refreshMetadata();
-    const interval = window.setInterval(() => {
-      if (document.visibilityState === "visible") {
-        refreshStatuses();
-      }
-    }, 3500);
-    return () => window.clearInterval(interval);
-  }, [refreshMetadata, refreshStatuses]);
+    refreshStatusesRef.current = services.refreshStatuses;
+  }, [services.refreshStatuses]);
 
-  // Helper functions
-  const markStackTransition = useCallback(
-    (command: "start_all_services" | "stop_all_services" | "restart_all_services") => {
-      const transitionState =
-        command === "stop_all_services" ? ServiceState.Stopping : ServiceState.Starting;
+  const {
+    services: serviceMap,
+    busy,
+    busyStackCommand,
+    runningCount,
+    totalCount,
+    allRunning,
+    isCaddyRunning,
+    packageSelection,
+    refreshStatuses,
+    runStackCommand,
+    runServiceCommand,
+  } = services;
 
-      setServices((current) => {
-        const next = { ...current };
-        for (const serviceType of stackServiceTypes) {
-          const service = next[serviceType];
-          if (!service) continue;
-          next[serviceType] = {
-            ...service,
-            state: transitionState,
-            error_message: undefined,
-          };
-        }
-        return next;
-      });
-    },
-    [stackServiceTypes]
-  );
+  const {
+    tunnelStatus,
+    tunnelBusy,
+    tunnelReady,
+    tunnelHasPendingUrl,
+    startHttpsTunnel,
+    stopHttpsTunnel,
+    copyHttpsTunnelUrl,
+  } = tunnel;
 
-  const markServiceTransition = (
-    command: "start_service" | "stop_service" | "restart_service",
-    service: ServiceType
-  ) => {
-    const transitionState =
-      command === "stop_service" ? ServiceState.Stopping : ServiceState.Starting;
-
-    setServices((current) => {
-      const selected = current[service];
-      if (!selected) return current;
-      return {
-        ...current,
-        [service]: {
-          ...selected,
-          state: transitionState,
-          error_message: undefined,
-        },
-      };
-    });
-  };
-
-  const fallbackPortMessage = useMemo(() => {
-    return (statuses: ServiceMap, fallbackMessage: string) => {
-      const changedPorts = [
-        ServiceType.Caddy,
-        ServiceType.PhpFpm,
-        ServiceType.MySQL,
-        ServiceType.PostgreSQL,
-      ]
-        .map((serviceType) => {
-          const service = statuses[serviceType];
-          const expectedPort = expectedPorts[serviceType];
-          if (!service || service.port === expectedPort) return null;
-          return `${SERVICE_DISPLAY_NAMES[serviceType]} ${service.port}`;
-        })
-        .filter((value): value is string => Boolean(value));
-
-      if (changedPorts.length === 0) {
-        return fallbackMessage;
-      }
-
-      return t.fallbackPortsUsed.replace("{ports}", changedPorts.join(", "));
+  // Initialize audio context on first user interaction
+  useEffect(() => {
+    const initAudio = () => {
+      AudioManager.initialize();
     };
-  }, [expectedPorts, t]);
+    window.addEventListener("click", initAudio, { once: true });
+    return () => window.removeEventListener("click", initAudio);
+  }, []);
 
-  const runStackCommand = useCallback(
-    async (command: "start_all_services" | "stop_all_services" | "restart_all_services") => {
-      const copy = STACK_COMMAND_COPY[command];
-      setBusy(`stack:${command}`);
-      setNotice({
-        tone: "info",
-        action: copy.action,
-        title: t[copy.pendingTitleKey],
-        message: t[copy.pendingMessageKey],
-      });
-      markStackTransition(command);
-      try {
-        const statuses = await invoke<ServiceMap>(command);
-        setServices(statuses);
-        if (command === "stop_all_services") {
-          setTunnelStatus(DEFAULT_TUNNEL_STATUS);
-        }
-        AudioManager.playNotification("success", copy.action);
-        setNotice({
-          tone: "success",
-          action: copy.action,
-          title: t[copy.successTitleKey],
-          message: fallbackPortMessage(statuses, t[copy.successMessageKey]),
-        });
-      } catch (error) {
-        AudioManager.playNotification("error");
-        setNotice({
-          tone: "error",
-          title: t.commandFailed,
-          message: String(error),
-        });
-        await refreshStatuses();
-      } finally {
-        setBusy(null);
-      }
-    },
-    [refreshStatuses, fallbackPortMessage, markStackTransition, t]
-  );
+  useEffect(() => {
+    refreshMetadata();
+  }, [refreshMetadata]);
+
+  const caddyPort =
+    serviceMap[ServiceType.Caddy]?.port || DEFAULT_PORTS[ServiceType.Caddy];
+  const webServerUrl = `http://localhost:${caddyPort}`;
+  const isAdminerSelected = isAdminerSelection(packageSelection);
+  const databaseToolName = isAdminerSelected ? "Adminer" : "phpMyAdmin";
+  const databaseToolUrl = `${webServerUrl}/${isAdminerSelected ? "adminer" : "phpmyadmin"}`;
 
   const openFolder = useCallback(
     async (path?: string) => {
@@ -382,14 +157,14 @@ export function Dashboard() {
       try {
         await invoke("open_folder", { path });
       } catch (error) {
-        setNotice({
+        notify({
           tone: "error",
           title: t.openFolderFailed,
           message: String(error),
         });
       }
     },
-    [t]
+    [notify, t]
   );
 
   const openTerminal = useCallback(
@@ -397,97 +172,22 @@ export function Dashboard() {
       try {
         await invoke("open_project_terminal", { path: path || null });
       } catch (error) {
-        setNotice({
+        notify({
           tone: "error",
           title: t.openTerminalFailed,
           message: String(error),
         });
       }
     },
-    [t]
+    [notify, t]
   );
-
-  const startHttpsTunnel = useCallback(async () => {
-    setTunnelBusy("start");
-    setNotice({
-      tone: "info",
-      action: "start",
-      title: t.httpsTunnelStarting,
-      message: t.httpsTunnelDescription,
-    });
-
-    try {
-      const status = normalizeTunnelStatus(await invoke<HttpsTunnelStatus>("start_https_tunnel"));
-      setTunnelStatus(status);
-      await Promise.all([refreshStatuses(), refreshMetadata()]);
-      AudioManager.playNotification("success", "start");
-      setNotice({
-        tone: "success",
-        action: "start",
-        title: t.httpsTunnelStarted,
-        message: status.ready && status.url ? status.url : t.httpsTunnelValidating,
-      });
-    } catch (error) {
-      AudioManager.playNotification("error");
-      setNotice({
-        tone: "error",
-        title: t.httpsTunnelError,
-        message: String(error),
-      });
-      await refreshTunnelStatus();
-    } finally {
-      setTunnelBusy(null);
-    }
-  }, [refreshMetadata, refreshStatuses, refreshTunnelStatus, t]);
-
-  const stopHttpsTunnel = useCallback(async () => {
-    setTunnelBusy("stop");
-    try {
-      const status = normalizeTunnelStatus(await invoke<HttpsTunnelStatus>("stop_https_tunnel"));
-      setTunnelStatus(status);
-      AudioManager.playNotification("success", "stop");
-      setNotice({
-        tone: "success",
-        action: "stop",
-        title: t.httpsTunnelStopped,
-        message: t.httpsTunnelDevOnly,
-      });
-    } catch (error) {
-      AudioManager.playNotification("error");
-      setNotice({
-        tone: "error",
-        title: t.httpsTunnelError,
-        message: String(error),
-      });
-    } finally {
-      setTunnelBusy(null);
-    }
-  }, [t]);
-
-  const copyHttpsTunnelUrl = useCallback(async () => {
-    if (!tunnelStatus.url) return;
-    try {
-      await navigator.clipboard.writeText(tunnelStatus.url);
-      setNotice({
-        tone: "success",
-        title: t.copiedToClipboard,
-        message: tunnelStatus.url,
-      });
-    } catch (error) {
-      setNotice({
-        tone: "error",
-        title: t.copyFailed,
-        message: String(error),
-      });
-    }
-  }, [t, tunnelStatus.url]);
 
   // Keyboard shortcuts
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       // Esc to dismiss toast (works in any keyboard layout)
       if (e.code === "Escape" && notice) {
-        setNotice(null);
+        dismiss();
       }
       // ? to show help (Shift + Slash)
       if (e.key === "?" && !showSettings && !showHelp) {
@@ -545,6 +245,7 @@ export function Dashboard() {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [
     notice,
+    dismiss,
     busy,
     runStackCommand,
     allRunning,
@@ -558,16 +259,6 @@ export function Dashboard() {
     openFolder,
     openTerminal,
   ]);
-
-  useEffect(() => {
-    if (!notice || notice.tone === "info") return undefined;
-
-    const timeout = window.setTimeout(() => {
-      setNotice(null);
-    }, 4200);
-
-    return () => window.clearTimeout(timeout);
-  }, [notice]);
 
   useEffect(() => {
     if (!showProjectCreator) return undefined;
@@ -600,45 +291,8 @@ export function Dashboard() {
     };
   }, [showQuickActionsMenu]);
 
-  const runServiceCommand = async (
-    command: "start_service" | "stop_service" | "restart_service",
-    service: ServiceType
-  ) => {
-    const copy = SERVICE_COMMAND_COPY[command];
-    const displayName = SERVICE_DISPLAY_NAMES[service];
-    setBusy(`${command}:${service}`);
-    setNotice({
-      tone: "info",
-      action: copy.action,
-      title: `${t[copy.pendingTitleKey]}: ${displayName}`,
-      message: t[copy.pendingMessageKey],
-    });
-    markServiceTransition(command, service);
-    try {
-      const statuses = await invoke<ServiceMap>(command, { service });
-      setServices(statuses);
-      AudioManager.playNotification("success", copy.action);
-      setNotice({
-        tone: "success",
-        action: copy.action,
-        title: `${t[copy.successTitleKey]}: ${displayName}`,
-        message: fallbackPortMessage(statuses, t.dashboardRefreshingStatus),
-      });
-    } catch (error) {
-      AudioManager.playNotification("error");
-      setNotice({
-        tone: "error",
-        title: `${t.commandFailed}: ${displayName}`,
-        message: String(error),
-      });
-      await refreshStatuses();
-    } finally {
-      setBusy(null);
-    }
-  };
-
   const handleProjectCreated = async (result: ProjectScaffoldResult) => {
-    setNotice({
+    notify({
       tone: "success",
       title: t.projectCreated,
       message: `${result.name} -> ${result.path}`,
@@ -648,7 +302,7 @@ export function Dashboard() {
   };
 
   const handleProjectError = (error: string) => {
-    setNotice({
+    notify({
       tone: "error",
       title: t.projectCreateFailed,
       message: error,
@@ -668,8 +322,6 @@ export function Dashboard() {
       (entry): entry is [string, string] => typeof entry[1] === "string" && entry[1].length > 0
     );
   }, [databaseToolName, installedVersions]);
-  const tunnelReady = Boolean(tunnelStatus.running && tunnelStatus.ready && tunnelStatus.url);
-  const tunnelHasPendingUrl = Boolean(tunnelStatus.running && tunnelStatus.url && !tunnelReady);
 
   return (
     <div className="app-shell" data-testid="dashboard">
@@ -789,7 +441,7 @@ export function Dashboard() {
             className="notice-close"
             onClick={() => {
               AudioManager.playClick();
-              setNotice(null);
+              dismiss();
             }}
             aria-label={t.close}
             onMouseEnter={() => AudioManager.playHover()}
@@ -1020,10 +672,10 @@ export function Dashboard() {
 
         <section className="service-grid-responsive">
           {DASHBOARD_SERVICE_TYPES.map((serviceType) => {
-            const service = services[serviceType];
+            const service = serviceMap[serviceType];
             if (!service) return null;
             const busyServiceCommand = busy?.endsWith(serviceType)
-              ? (busy.split(":")[0] as keyof typeof SERVICE_COMMAND_COPY)
+              ? (busy.split(":")[0] as ServiceCommand)
               : null;
             return (
               <ServiceCard
@@ -1048,7 +700,7 @@ export function Dashboard() {
       </main>
 
       <StatusBar
-        services={services}
+        services={serviceMap}
         appPaths={appPaths || undefined}
         packageSelection={packageSelection}
         data-testid="status-bar"

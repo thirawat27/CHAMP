@@ -1,5 +1,6 @@
 use crate::runtime::locator::get_app_data_paths;
 use serde::Serialize;
+use sha2::{Digest, Sha256};
 use std::fs::{self, File, OpenOptions};
 use std::io::{BufRead, BufReader, Write};
 use std::path::{Path, PathBuf};
@@ -11,6 +12,12 @@ use std::time::{Duration, SystemTime};
 const CREATE_NO_WINDOW: u32 = 0x08000000;
 
 const CLOUDFLARED_COMPONENT: &str = "cloudflared";
+const CLOUDFLARED_VERSION: &str = "2026.7.0";
+/// TODO(retire S-02): set to `false` and populate CloudflaredDownload.sha256 for
+/// cloudflared 2026.7.0 on every platform (compute against genuine upstream
+/// artifacts, ideally in CI). A configured checksum that MISMATCHES must always
+/// hard-fail regardless of this flag. Tracked in CODE_HEALTH_BACKLOG.md (S-02).
+const ALLOW_UNVERIFIED_CLOUDFLARED: bool = true;
 const TUNNEL_LOG_NAME: &str = "https-tunnel.log";
 const PUBLIC_URL_WAIT_ATTEMPTS: usize = 120;
 const PUBLIC_URL_WAIT_DELAY: Duration = Duration::from_millis(250);
@@ -271,7 +278,7 @@ async fn ensure_cloudflared_installed(runtime_dir: &Path) -> Result<PathBuf, Str
         .user_agent("CHAMP HTTPS tunnel installer")
         .build()
         .map_err(|e| format!("Failed to create HTTP client: {}", e))?
-        .get(download.url)
+        .get(download.url.as_str())
         .send()
         .await
         .map_err(|e| format!("Failed to download cloudflared: {}", e))?
@@ -280,6 +287,33 @@ async fn ensure_cloudflared_installed(runtime_dir: &Path) -> Result<PathBuf, Str
         .bytes()
         .await
         .map_err(|e| format!("Failed to read cloudflared download: {}", e))?;
+
+    // Checksum verification is fail-closed (S-02): a configured SHA-256 that
+    // mismatches always hard-fails. When none is configured, the install is
+    // refused unless ALLOW_UNVERIFIED_CLOUDFLARED is explicitly set.
+    match download.sha256 {
+        Some(expected) => {
+            let actual = hex::encode(Sha256::digest(&bytes));
+            if actual.to_lowercase() != expected.to_lowercase() {
+                return Err(format!(
+                    "Checksum verification failed for cloudflared {}.\nExpected: {}\nActual: {}\n\nThe downloaded file may be corrupted or tampered with.",
+                    CLOUDFLARED_VERSION, expected, actual
+                ));
+            }
+            eprintln!("Checksum verified for cloudflared {CLOUDFLARED_VERSION}: {actual}");
+        }
+        None if ALLOW_UNVERIFIED_CLOUDFLARED => {
+            eprintln!(
+                "WARNING: no checksum configured for cloudflared {CLOUDFLARED_VERSION} — installing UNVERIFIED."
+            );
+        }
+        None => {
+            return Err(format!(
+                "No SHA-256 checksum is configured for cloudflared {CLOUDFLARED_VERSION}. \
+                 Installation was refused because the downloaded binary cannot be verified.",
+            ));
+        }
+    }
 
     fs::write(&temp, bytes).map_err(|e| format!("Failed to save cloudflared: {}", e))?;
     if download.archive_tgz {
@@ -296,7 +330,10 @@ async fn ensure_cloudflared_installed(runtime_dir: &Path) -> Result<PathBuf, Str
     make_executable(&target)?;
     fs::write(
         runtime_dir.join("cloudflared_installed.txt"),
-        format!("version=latest\ninstalled_at={:?}\n", SystemTime::now()),
+        format!(
+            "version={CLOUDFLARED_VERSION}\ninstalled_at={:?}\n",
+            SystemTime::now()
+        ),
     )
     .map_err(|e| format!("Failed to write cloudflared marker: {}", e))?;
 
@@ -329,42 +366,51 @@ fn system_cloudflared() -> Option<PathBuf> {
 }
 
 struct CloudflaredDownload {
-    url: &'static str,
+    url: String,
     temp_file_name: &'static str,
     archive_tgz: bool,
+    /// Expected SHA-256 of the downloaded artifact for this platform.
+    /// `None` until genuine cloudflared 2026.7.0 checksums are computed (S-02).
+    sha256: Option<&'static str>,
 }
 
 fn cloudflared_download() -> Result<CloudflaredDownload, String> {
     match (std::env::consts::OS, std::env::consts::ARCH) {
         ("windows", "x86_64") => Ok(CloudflaredDownload {
-            url: "https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-windows-amd64.exe",
+            url: format!("https://github.com/cloudflare/cloudflared/releases/download/{CLOUDFLARED_VERSION}/cloudflared-windows-amd64.exe"),
             temp_file_name: "cloudflared-download.exe",
             archive_tgz: false,
+            sha256: None,
         }),
         ("windows", "aarch64") => Ok(CloudflaredDownload {
-            url: "https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-windows-arm64.exe",
+            url: format!("https://github.com/cloudflare/cloudflared/releases/download/{CLOUDFLARED_VERSION}/cloudflared-windows-arm64.exe"),
             temp_file_name: "cloudflared-download.exe",
             archive_tgz: false,
+            sha256: None,
         }),
         ("linux", "x86_64") => Ok(CloudflaredDownload {
-            url: "https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64",
+            url: format!("https://github.com/cloudflare/cloudflared/releases/download/{CLOUDFLARED_VERSION}/cloudflared-linux-amd64"),
             temp_file_name: "cloudflared-download",
             archive_tgz: false,
+            sha256: None,
         }),
         ("linux", "aarch64") => Ok(CloudflaredDownload {
-            url: "https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-arm64",
+            url: format!("https://github.com/cloudflare/cloudflared/releases/download/{CLOUDFLARED_VERSION}/cloudflared-linux-arm64"),
             temp_file_name: "cloudflared-download",
             archive_tgz: false,
+            sha256: None,
         }),
         ("macos", "x86_64") => Ok(CloudflaredDownload {
-            url: "https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-darwin-amd64.tgz",
+            url: format!("https://github.com/cloudflare/cloudflared/releases/download/{CLOUDFLARED_VERSION}/cloudflared-darwin-amd64.tgz"),
             temp_file_name: "cloudflared-download.tgz",
             archive_tgz: true,
+            sha256: None,
         }),
         ("macos", "aarch64") => Ok(CloudflaredDownload {
-            url: "https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-darwin-arm64.tgz",
+            url: format!("https://github.com/cloudflare/cloudflared/releases/download/{CLOUDFLARED_VERSION}/cloudflared-darwin-arm64.tgz"),
             temp_file_name: "cloudflared-download.tgz",
             archive_tgz: true,
+            sha256: None,
         }),
         (os, arch) => Err(format!(
             "Automatic HTTPS tunnel runtime is not available for {os}/{arch}"

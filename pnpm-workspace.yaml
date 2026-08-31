@@ -1,2 +1,11 @@
 minimumReleaseAgeExclude:
   - lucide-react@1.38.0
+
+# S-08: pin brace-expansion to patch DoS advisory GHSA-3jxr-9vmj-r5cp.
+# Both the 1.x and 5.x majors present in the dev tree are affected (advisory
+# covers brace-expansion through 5.0.6). Patched floors: 1.x -> 1.1.16,
+# 5.x -> 5.0.7. Per-major overrides avoid downgrading the 5.x consumer
+# (minimatch@10 via eslint/@typescript-eslint) to 1.x.
+overrides:
+  brace-expansion@1: ^1.1.16
+  brace-expansion@5: '>=5.0.7'

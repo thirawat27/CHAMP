@@ -5,6 +5,7 @@
  */
 
 import { create } from "zustand";
+import { persist, createJSONStorage } from "zustand/middleware";
 import { invoke } from "@tauri-apps/api/core";
 import { Language, getTranslation, Translations } from "../i18n/translations";
 
@@ -27,98 +28,71 @@ interface LanguageState {
   translate: (key: keyof Translations) => string;
 }
 
-// Load saved language from localStorage
-const getSavedLanguage = (): Language => {
-  try {
-    const saved = localStorage.getItem("language-storage");
-    if (saved) {
-      const parsed = JSON.parse(saved);
-      return parsed.state?.language || "en";
-    }
-  } catch {
-    // Ignore localStorage errors
-  }
-  return "en";
-};
-
-const initialLanguage = getSavedLanguage();
+const DEFAULT_LANGUAGE: Language = "en";
 const isTauriRuntime = () => "__TAURI_INTERNALS__" in window;
 
 /**
- * Language store for managing i18n
+ * Language store for managing i18n.
+ *
+ * Persistence is handled by zustand's `persist` middleware, which writes to
+ * localStorage under the key "language-storage" using the shape
+ * `{ state: { language, soundEnabled }, version: n }`. Only `language` and
+ * `soundEnabled` are persisted (via `partialize`); `t` is derived from the
+ * restored `language` on rehydrate.
  */
-export const useLanguageStore = create<LanguageState>()((set, get) => ({
-  language: initialLanguage,
-  soundEnabled: (() => {
-    try {
-      const saved = localStorage.getItem("language-storage");
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        return parsed.state?.soundEnabled ?? true;
-      }
-    } catch {
-      // Ignore localStorage errors
-    }
-    return true;
-  })(),
-  t: getTranslation(initialLanguage),
+export const useLanguageStore = create<LanguageState>()(
+  persist(
+    (set, get) => ({
+      language: DEFAULT_LANGUAGE,
+      soundEnabled: true,
+      t: getTranslation(DEFAULT_LANGUAGE),
 
-  setLanguage: (lang: Language) => {
-    set({
-      language: lang,
-      t: getTranslation(lang),
-    });
-    // Save to localStorage
-    try {
-      const current = JSON.parse(localStorage.getItem("language-storage") || "{}");
-      current.state = { ...current.state, language: lang };
-      localStorage.setItem("language-storage", JSON.stringify(current));
-    } catch {
-      // Ignore localStorage errors
-    }
-    // Save to backend settings
-    if (isTauriRuntime()) {
-      invoke("save_language_setting", { language: lang }).catch(console.error);
-    }
-  },
+      setLanguage: (lang: Language) => {
+        set({
+          language: lang,
+          t: getTranslation(lang),
+        });
+        // Save to backend settings (persist handles localStorage)
+        if (isTauriRuntime()) {
+          invoke("save_language_setting", { language: lang }).catch(console.error);
+        }
+      },
 
-  toggleSound: () => {
-    const newState = !get().soundEnabled;
-    set({ soundEnabled: newState });
-    // Save to localStorage
-    try {
-      const current = JSON.parse(localStorage.getItem("language-storage") || "{}");
-      current.state = { ...current.state, soundEnabled: newState };
-      localStorage.setItem("language-storage", JSON.stringify(current));
-    } catch {
-      // Ignore localStorage errors
-    }
-    // Save to backend settings
-    if (isTauriRuntime()) {
-      invoke("save_sound_setting", { enabled: newState }).catch(console.error);
-    }
-  },
+      toggleSound: () => {
+        const newState = !get().soundEnabled;
+        set({ soundEnabled: newState });
+        // Save to backend settings (persist handles localStorage)
+        if (isTauriRuntime()) {
+          invoke("save_sound_setting", { enabled: newState }).catch(console.error);
+        }
+      },
 
-  setSoundEnabled: (enabled: boolean) => {
-    set({ soundEnabled: enabled });
-    // Save to localStorage
-    try {
-      const current = JSON.parse(localStorage.getItem("language-storage") || "{}");
-      current.state = { ...current.state, soundEnabled: enabled };
-      localStorage.setItem("language-storage", JSON.stringify(current));
-    } catch {
-      // Ignore localStorage errors
-    }
-    // Save to backend settings
-    if (isTauriRuntime()) {
-      invoke("save_sound_setting", { enabled }).catch(console.error);
-    }
-  },
+      setSoundEnabled: (enabled: boolean) => {
+        set({ soundEnabled: enabled });
+        // Save to backend settings (persist handles localStorage)
+        if (isTauriRuntime()) {
+          invoke("save_sound_setting", { enabled }).catch(console.error);
+        }
+      },
 
-  translate: (key: keyof Translations) => {
-    return get().t[key];
-  },
-}));
+      translate: (key: keyof Translations) => {
+        return get().t[key];
+      },
+    }),
+    {
+      name: "language-storage",
+      storage: createJSONStorage(() => localStorage),
+      // Persist only language + soundEnabled (not `t` or the action functions).
+      partialize: (s) => ({ language: s.language, soundEnabled: s.soundEnabled }),
+      // Ensure translations match the restored language after rehydration.
+      onRehydrateStorage: () => (state) => {
+        if (state) {
+          state.t = getTranslation(state.language);
+        }
+      },
+    }
+  )
+);
 
 /**
  * Hook to get current translations
@@ -139,11 +113,11 @@ export async function initializeLanguage(): Promise<void> {
   try {
     const settings = await invoke<{ language: Language; sound_enabled: boolean }>("get_language_settings");
     const store = useLanguageStore.getState();
-    
+
     if (settings.language && settings.language !== store.language) {
       store.setLanguage(settings.language);
     }
-    
+
     if (settings.sound_enabled !== undefined && settings.sound_enabled !== store.soundEnabled) {
       store.setSoundEnabled(settings.sound_enabled);
     }

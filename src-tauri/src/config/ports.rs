@@ -2,28 +2,17 @@
 use std::net::{TcpListener, TcpStream};
 use std::time::Duration;
 
-/// Find an available port starting from the preferred port
-#[cfg(test)]
-pub fn find_available_port(preferred: u16) -> u16 {
-    if is_port_available(preferred) {
-        return preferred;
-    }
-
-    // Try alternative ports
-    for port in (preferred + 1)..65535 {
-        if is_port_available(port) {
-            return port;
-        }
-    }
-
-    preferred // Fallback
-}
-
 /// Check if a port is available (not in use by any service)
 ///
 /// This uses two checks:
 /// 1. Try to connect - if successful, something is listening
 /// 2. Try to bind - if successful, nothing is using it
+///
+/// This is the richer "is anyone using this port?" check, intended for
+/// user-facing validation (settings, `check_ports`). It is intentionally
+/// distinct from `process::manager::port_can_bind`, which is a cheaper
+/// bind-only check used in tight service start/stop loops where the question
+/// is strictly "can I bind right now?" (a connect check would be wrong there).
 pub fn is_port_available(port: u16) -> bool {
     let addr = format!("127.0.0.1:{}", port);
 
@@ -39,6 +28,22 @@ pub fn is_port_available(port: u16) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Find an available port starting from the preferred port (test helper).
+    fn find_available_port(preferred: u16) -> u16 {
+        if is_port_available(preferred) {
+            return preferred;
+        }
+
+        // Try alternative ports
+        for port in (preferred + 1)..65535 {
+            if is_port_available(port) {
+                return port;
+            }
+        }
+
+        preferred // Fallback
+    }
 
     #[test]
     fn test_is_port_available_for_unused_port() {

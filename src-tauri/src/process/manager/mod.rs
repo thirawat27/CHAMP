@@ -7,11 +7,23 @@ use std::io::Write;
 use std::net::{TcpListener, TcpStream};
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, ExitStatus, Stdio};
+use std::sync::{Mutex, OnceLock, PoisonError};
 use std::thread;
+use std::time::{Duration, Instant};
 
-// Windows-specific: Constant to hide console window
-#[cfg(target_os = "windows")]
-const CREATE_NO_WINDOW: u32 = 0x08000000;
+mod caddyfile;
+mod db_tool;
+mod htaccess;
+mod php_config;
+mod platform;
+mod ports;
+
+use caddyfile::*;
+use db_tool::*;
+use htaccess::*;
+use php_config::*;
+use platform::*;
+use ports::*;
 
 const ALL_SERVICES: [ServiceType; 4] = [
     ServiceType::Caddy,
@@ -34,19 +46,6 @@ fn stack_start_services(database_tool_id: &str) -> [ServiceType; 3] {
         active_database_service(database_tool_id),
         ServiceType::Caddy,
     ]
-}
-
-/// Configure command to hide console window on Windows
-#[cfg(target_os = "windows")]
-fn configure_no_window(mut command: Command) -> Command {
-    use std::os::windows::process::CommandExt;
-    command.creation_flags(CREATE_NO_WINDOW);
-    command
-}
-
-#[cfg(not(target_os = "windows"))]
-fn configure_no_window(command: Command) -> Command {
-    command
 }
 
 /// Open a log file with retry logic for Windows file locking
@@ -377,8 +376,9 @@ impl ProcessManager {
                 let _ = child.kill();
             }
 
-            // Wait for the process to exit (with timeout for safety)
-            let _ = child.wait();
+            // Wait up to ~5s for the process to exit after the kill signal above.
+            // If it is still alive at the deadline, send another kill and reap once more.
+            wait_child_with_timeout(child, std::time::Duration::from_secs(5));
         }
 
         if let Some(pid) = service_process.external_pid.take() {
@@ -519,7 +519,7 @@ impl ProcessManager {
 
     /// Update process health (check if processes are still running)
     pub fn update_health(&mut self) {
-        for (_service_type, service_process) in self.services.iter_mut() {
+        for service_process in self.services.values_mut() {
             if let Some(ref mut child) = service_process.child {
                 match child.try_wait() {
                     Ok(Some(status)) => {
@@ -651,7 +651,9 @@ fn start_caddy(
         .arg("--config")
         .arg(&caddyfile_path)
         .current_dir(&paths.config_dir)
-        .stdout(Stdio::from(log_file.try_clone().unwrap()))
+        .stdout(Stdio::from(log_file.try_clone().map_err(|e| {
+            format!("Failed to duplicate Caddy log handle: {}", e)
+        })?))
         .stderr(Stdio::from(log_file))
         .spawn()
         .map_err(|e| format!("Failed to start Caddy: {}", e))?;
@@ -683,14 +685,9 @@ fn start_php_fpm(
         .unwrap_or(false);
 
     let child = if is_fpm {
-        // Generate php-fpm.conf if it doesn't exist
+        // php-fpm.conf depends on the runtime port, so always regenerate it. (M-05)
         let fpm_conf_path = paths.config_dir.join("php-fpm.conf");
-        if !fpm_conf_path.exists() {
-            generate_php_fpm_conf(&fpm_conf_path, paths, service_process.port)?;
-        } else {
-            // Regenerate with current port
-            generate_php_fpm_conf(&fpm_conf_path, paths, service_process.port)?;
-        }
+        generate_php_fpm_conf(&fpm_conf_path, paths, service_process.port)?;
 
         // PHP-FPM requires -F to run in foreground and -y for config
         let mut cmd = configure_no_window(Command::new(&paths.php_cgi));
@@ -701,7 +698,9 @@ fn start_php_fpm(
             .arg("-c")
             .arg(&paths.php_ini)
             .current_dir(&paths.config_dir)
-            .stdout(Stdio::from(log_file.try_clone().unwrap()))
+            .stdout(Stdio::from(log_file.try_clone().map_err(|e| {
+                format!("Failed to duplicate PHP-FPM log handle: {}", e)
+            })?))
             .stderr(Stdio::from(log_file));
         cmd.spawn()
             .map_err(|e| format!("Failed to start PHP-FPM: {}", e))?
@@ -714,7 +713,9 @@ fn start_php_fpm(
             .arg("-c")
             .arg(&paths.php_ini)
             .current_dir(&paths.config_dir)
-            .stdout(Stdio::from(log_file.try_clone().unwrap()))
+            .stdout(Stdio::from(log_file.try_clone().map_err(|e| {
+                format!("Failed to duplicate PHP-CGI log handle: {}", e)
+            })?))
             .stderr(Stdio::from(log_file));
         cmd.spawn()
             .map_err(|e| format!("Failed to start PHP-CGI: {}", e))?
@@ -830,7 +831,9 @@ fn start_mysql(service_process: &mut ServiceProcess, paths: &RuntimePaths) -> Re
     }
 
     let mut child = cmd
-        .stdout(Stdio::from(log_file.try_clone().unwrap()))
+        .stdout(Stdio::from(log_file.try_clone().map_err(|e| {
+            format!("Failed to duplicate MySQL log handle: {}", e)
+        })?))
         .stderr(Stdio::from(log_file))
         .spawn()
         .map_err(|e| {
@@ -960,7 +963,9 @@ fn start_postgresql(
         .arg(service_process.port.to_string())
         .arg("-h")
         .arg("127.0.0.1")
-        .stdout(Stdio::from(log_file.try_clone().unwrap()))
+        .stdout(Stdio::from(log_file.try_clone().map_err(|e| {
+            format!("Failed to duplicate PostgreSQL log handle: {}", e)
+        })?))
         .stderr(Stdio::from(log_file));
 
     let child = cmd.spawn().map_err(|e| {
@@ -1000,10 +1005,18 @@ fn initialize_postgresql_data_dir(paths: &RuntimePaths) -> Result<(), String> {
         .arg(&paths.postgresql_data_dir)
         .arg("-U")
         .arg("postgres")
+        // S-07: `trust` auth is acceptable here because CHAMP is a local-only
+        // development tool. PostgreSQL is bound to 127.0.0.1 (see the `-h`
+        // argument in start_postgresql), so it is not reachable from the
+        // network, and trust auth avoids forcing users to manage a password
+        // for throwaway local databases. Any concern about exposure via the
+        // HTTPS Preview / tunnel feature is tracked separately as S-03.
         .arg("--auth=trust")
         .arg("-E")
         .arg("UTF8")
-        .stdout(Stdio::from(init_log_file.try_clone().unwrap()))
+        .stdout(Stdio::from(init_log_file.try_clone().map_err(|e| {
+            format!("Failed to duplicate PostgreSQL init log handle: {}", e)
+        })?))
         .stderr(Stdio::from(init_log_file));
 
     let status = cmd
@@ -1095,331 +1108,15 @@ fn read_mysql_pid_file(data_dir: &Path) -> Option<u32> {
             continue;
         }
 
-        let content = fs::read_to_string(path).ok()?;
+        let Ok(content) = fs::read_to_string(&path) else {
+            continue;
+        };
         if let Ok(pid) = content.trim().parse::<u32>() {
             return Some(pid);
         }
     }
 
     None
-}
-
-fn tcp_port_accepts(port: u16) -> bool {
-    TcpStream::connect_timeout(
-        &std::net::SocketAddr::from(([127, 0, 0, 1], port)),
-        std::time::Duration::from_millis(300),
-    )
-    .is_ok()
-}
-
-fn port_can_bind(port: u16) -> bool {
-    TcpListener::bind(("127.0.0.1", port)).is_ok()
-}
-
-fn select_available_port(
-    service_type: ServiceType,
-    preferred_port: u16,
-    reserved_ports: &[u16],
-) -> Result<u16, String> {
-    find_available_port_excluding(service_type, preferred_port, reserved_ports).ok_or_else(|| {
-        format!(
-            "No available fallback port found for {} near {}.",
-            service_type.display_name(),
-            preferred_port
-        )
-    })
-}
-
-fn select_caddy_port(
-    preferred_port: u16,
-    caddy_executable: &Path,
-    reserved_ports: &[u16],
-) -> Result<u16, String> {
-    if !reserved_ports.contains(&preferred_port) && port_can_bind(preferred_port) {
-        return Ok(preferred_port);
-    }
-
-    let stopped = stop_runtime_processes_by_executable(caddy_executable, "Caddy")?;
-    if stopped > 0 {
-        let _ = wait_for_port_release(preferred_port, std::time::Duration::from_secs(5));
-        if !reserved_ports.contains(&preferred_port) && port_can_bind(preferred_port) {
-            return Ok(preferred_port);
-        }
-    }
-
-    select_available_port(ServiceType::Caddy, preferred_port, reserved_ports)
-}
-
-fn find_available_port_excluding(
-    service_type: ServiceType,
-    preferred_port: u16,
-    reserved_ports: &[u16],
-) -> Option<u16> {
-    if preferred_port > 0
-        && !reserved_ports.contains(&preferred_port)
-        && port_can_bind(preferred_port)
-    {
-        return Some(preferred_port);
-    }
-
-    let first_fallback = first_fallback_port(service_type, preferred_port);
-    for port in first_fallback..=preferred_port.saturating_add(100).max(first_fallback) {
-        if port > 0 && !reserved_ports.contains(&port) && port_can_bind(port) {
-            return Some(port);
-        }
-    }
-
-    (49152..=65535).find(|&port| !reserved_ports.contains(&port) && port_can_bind(port))
-}
-
-fn first_fallback_port(service_type: ServiceType, preferred_port: u16) -> u16 {
-    if service_type == ServiceType::MySQL && preferred_port == crate::config::DEFAULT_PORTS.mysql {
-        preferred_port.saturating_add(2)
-    } else {
-        preferred_port.saturating_add(1)
-    }
-}
-
-fn wait_for_port_release(port: u16, timeout: std::time::Duration) -> bool {
-    let start = std::time::Instant::now();
-    while start.elapsed() < timeout {
-        if port_can_bind(port) {
-            return true;
-        }
-        thread::sleep(std::time::Duration::from_millis(150));
-    }
-    false
-}
-
-fn stop_runtime_processes_by_executable(
-    executable: &Path,
-    service_label: &str,
-) -> Result<usize, String> {
-    let pids = find_process_ids_by_executable(executable)?;
-    let mut stopped = 0;
-    for pid in pids {
-        if terminate_process_by_pid(pid).is_ok() {
-            stopped += 1;
-        }
-    }
-    if stopped > 0 {
-        thread::sleep(std::time::Duration::from_millis(250));
-    }
-    eprintln!(
-        "Stopped {} stale {} process(es) for {}",
-        stopped,
-        service_label,
-        executable.display()
-    );
-    Ok(stopped)
-}
-
-#[cfg(target_os = "windows")]
-fn find_process_ids_by_executable(executable: &Path) -> Result<Vec<u32>, String> {
-    // Derive the process name (e.g. "caddy.exe") from the path so this function
-    // works for any runtime binary, not just Caddy.
-    let proc_name = executable
-        .file_name()
-        .and_then(|n| n.to_str())
-        .unwrap_or("caddy.exe")
-        .replace('\'', "''");
-
-    let full_path = executable
-        .canonicalize()
-        .unwrap_or_else(|_| executable.to_path_buf())
-        .to_string_lossy()
-        .replace('\'', "''");
-
-    let script = format!(
-        "$target = '{}'; \
-         Get-CimInstance Win32_Process -Filter \"Name = '{}'\" | \
-         Where-Object {{ $_.ExecutablePath -and ([System.IO.Path]::GetFullPath($_.ExecutablePath) -ieq $target) }} | \
-         ForEach-Object {{ $_.ProcessId }}",
-        full_path, proc_name
-    );
-
-    let mut cmd = configure_no_window(Command::new("powershell"));
-    let output = cmd
-        .args(["-NoProfile", "-NonInteractive", "-Command", &script])
-        .output()
-        .map_err(|e| format!("Failed to inspect {} processes: {}", proc_name, e))?;
-
-    if !output.status.success() {
-        return Err(format!(
-            "Failed to inspect {} processes: {}",
-            proc_name,
-            String::from_utf8_lossy(&output.stderr).trim()
-        ));
-    }
-
-    Ok(String::from_utf8_lossy(&output.stdout)
-        .lines()
-        .filter_map(|line| line.trim().parse::<u32>().ok())
-        .collect())
-}
-
-/// Unix implementation: uses `pgrep -f <path>` to find processes whose
-/// command line contains the exact executable path, then verifies each
-/// candidate by resolving its `/proc/<pid>/exe` symlink (Linux) or via
-/// `lsof` (macOS) so we never accidentally kill a system binary with the
-/// same name.
-#[cfg(not(target_os = "windows"))]
-fn find_process_ids_by_executable(executable: &Path) -> Result<Vec<u32>, String> {
-    // Resolve to a canonical absolute path so the comparison is reliable
-    // even if the caller passed a relative path.
-    let canonical = executable
-        .canonicalize()
-        .unwrap_or_else(|_| executable.to_path_buf());
-    let canonical_str = canonical.to_string_lossy();
-
-    // `pgrep -f` searches the full command line, giving us candidate PIDs
-    // that *mention* our executable path.  We then verify each one below.
-    let output = Command::new("pgrep")
-        .arg("-f")
-        .arg(canonical_str.as_ref())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::null())
-        .output();
-
-    let output = match output {
-        Ok(o) => o,
-        Err(_) => {
-            // pgrep is not available (rare, but handle gracefully)
-            return Ok(Vec::new());
-        }
-    };
-
-    // pgrep exits with code 1 when no matches found – that is not an error.
-    if !output.status.success() && output.stdout.is_empty() {
-        return Ok(Vec::new());
-    }
-
-    let candidate_pids: Vec<u32> = String::from_utf8_lossy(&output.stdout)
-        .lines()
-        .filter_map(|line| line.trim().parse::<u32>().ok())
-        .collect();
-
-    // Secondary verification: make sure the resolved executable of each
-    // PID is exactly our binary (guards against false positives from
-    // processes that just have our path as an argument).
-    let verified: Vec<u32> = candidate_pids
-        .into_iter()
-        .filter(|&pid| {
-            // Skip our own process
-            if pid == std::process::id() {
-                return false;
-            }
-
-            #[cfg(target_os = "linux")]
-            {
-                // On Linux, /proc/<pid>/exe is a symlink to the real binary.
-                let proc_exe = format!("/proc/{}/exe", pid);
-                match std::fs::read_link(&proc_exe) {
-                    Ok(resolved) => resolved == canonical,
-                    Err(_) => false,
-                }
-            }
-
-            #[cfg(target_os = "macos")]
-            {
-                // On macOS there is no /proc; use `lsof -p <pid>` and look
-                // for a "txt" (text/executable) entry that matches our path.
-                let lsof_out = Command::new("lsof")
-                    .args(["-p", &pid.to_string()])
-                    .stdout(Stdio::piped())
-                    .stderr(Stdio::null())
-                    .output();
-
-                match lsof_out {
-                    Ok(o) => {
-                        let text = String::from_utf8_lossy(&o.stdout);
-                        text.lines().any(|line| {
-                            let cols: Vec<&str> = line
-                                .splitn(10, char::is_whitespace)
-                                .filter(|s| !s.is_empty())
-                                .collect();
-                            // lsof columns: COMMAND PID USER FD TYPE DEVICE SIZE/OFF NODE NAME
-                            // FD == "txt" identifies the executable
-                            cols.get(3).copied() == Some("txt")
-                                && cols
-                                    .last()
-                                    .map(|name| *name == canonical_str.as_ref())
-                                    .unwrap_or(false)
-                        })
-                    }
-                    Err(_) => {
-                        // lsof not available: accept the pgrep match as-is
-                        true
-                    }
-                }
-            }
-
-            // Fallback for any other Unix-like OS
-            #[cfg(not(any(target_os = "linux", target_os = "macos")))]
-            {
-                true
-            }
-        })
-        .collect();
-
-    Ok(verified)
-}
-
-#[cfg(target_os = "windows")]
-fn process_exists(pid: u32) -> bool {
-    let mut cmd = configure_no_window(Command::new("tasklist"));
-    cmd.args(["/FI", &format!("PID eq {}", pid), "/FO", "CSV", "/NH"])
-        .output()
-        .map(|output| {
-            let stdout = String::from_utf8_lossy(&output.stdout);
-            stdout.contains(&format!("\"{}\"", pid))
-        })
-        .unwrap_or(false)
-}
-
-#[cfg(not(target_os = "windows"))]
-fn process_exists(pid: u32) -> bool {
-    Command::new("kill")
-        .args(["-0", &pid.to_string()])
-        .stdout(Stdio::null())
-        .stderr(Stdio::null())
-        .status()
-        .map(|status| status.success())
-        .unwrap_or(false)
-}
-
-#[cfg(target_os = "windows")]
-fn terminate_process_by_pid(pid: u32) -> Result<(), String> {
-    let mut cmd = configure_no_window(Command::new("taskkill"));
-    cmd.args(["/PID", &pid.to_string(), "/T", "/F"])
-        .stdout(Stdio::null())
-        .stderr(Stdio::null())
-        .status()
-        .map_err(|e| format!("Failed to stop process pid {}: {}", pid, e))
-        .and_then(|status| {
-            if status.success() {
-                Ok(())
-            } else {
-                Err(format!("taskkill failed for process pid {}", pid))
-            }
-        })
-}
-
-#[cfg(not(target_os = "windows"))]
-fn terminate_process_by_pid(pid: u32) -> Result<(), String> {
-    Command::new("kill")
-        .arg(pid.to_string())
-        .stdout(Stdio::null())
-        .stderr(Stdio::null())
-        .status()
-        .map_err(|e| format!("Failed to stop process pid {}: {}", pid, e))
-        .and_then(|status| {
-            if status.success() {
-                Ok(())
-            } else {
-                Err(format!("kill failed for process pid {}", pid))
-            }
-        })
 }
 
 fn append_log_line(log_path: &Path, message: &str) {
@@ -1539,256 +1236,6 @@ fn verify_mysql_data_integrity(paths: &RuntimePaths) -> Result<(), String> {
     }
 
     Ok(())
-}
-
-// ---------------------------------------------------------------------------
-// Caddy stale-process helpers (mirrors the MySQL pattern)
-// ---------------------------------------------------------------------------
-
-/// Find all Caddy processes currently running from our runtime executable
-fn find_all_caddy_processes(caddy_executable: &Path) -> Result<Vec<u32>, String> {
-    find_process_ids_by_executable(caddy_executable)
-}
-
-/// Cleanup duplicate / stale Caddy processes before starting.
-/// Prevents "port already in use" errors when a previous Caddy instance
-/// was left running after CHAMP crashed or was force-quit.
-fn cleanup_duplicate_caddy_processes(paths: &RuntimePaths, port: u16) -> Result<(), String> {
-    let log_path = paths.logs_dir.join("caddy.log");
-
-    let caddy_pids = find_all_caddy_processes(&paths.caddy)?;
-
-    if caddy_pids.is_empty() {
-        return Ok(());
-    }
-
-    if caddy_pids.len() > 1 {
-        append_log_line(
-            &log_path,
-            &format!(
-                "WARNING: Found {} Caddy processes running. Cleaning up duplicates...",
-                caddy_pids.len()
-            ),
-        );
-    } else {
-        append_log_line(
-            &log_path,
-            &format!(
-                "Found a stale Caddy process (pid {}). Stopping it before re-launch...",
-                caddy_pids[0]
-            ),
-        );
-    }
-
-    let mut stopped = 0;
-    for pid in &caddy_pids {
-        if terminate_process_by_pid(*pid).is_ok() {
-            stopped += 1;
-            append_log_line(
-                &log_path,
-                &format!("Stopped stale Caddy process (pid {})", pid),
-            );
-        }
-    }
-
-    if stopped > 0 {
-        append_log_line(
-            &log_path,
-            &format!("Cleaned up {} stale Caddy process(es)", stopped),
-        );
-        thread::sleep(std::time::Duration::from_millis(500));
-        let _ = wait_for_port_release(port, std::time::Duration::from_secs(5));
-    }
-
-    Ok(())
-}
-
-/// Force stop all Caddy processes (used when stopping the service).
-/// Ensures no Caddy processes are left running even if the child handle
-/// was already lost (e.g. after a crash).
-fn force_stop_all_caddy_processes(caddy_executable: &Path) -> Result<usize, String> {
-    let pids = find_all_caddy_processes(caddy_executable)?;
-
-    if pids.is_empty() {
-        return Ok(0);
-    }
-
-    eprintln!("Force stopping {} Caddy process(es)...", pids.len());
-
-    let mut stopped = 0;
-    for pid in pids {
-        if terminate_process_by_pid(pid).is_ok() {
-            stopped += 1;
-            eprintln!("Stopped Caddy process (pid {})", pid);
-        }
-    }
-
-    if stopped > 0 {
-        thread::sleep(std::time::Duration::from_millis(500));
-    }
-
-    Ok(stopped)
-}
-
-// ---------------------------------------------------------------------------
-
-/// Cleanup duplicate MySQL processes automatically
-/// This prevents the "exit code 1" error caused by multiple MySQL instances
-fn cleanup_duplicate_mysql_processes(paths: &RuntimePaths, port: u16) -> Result<(), String> {
-    let log_path = paths.logs_dir.join("mysql.log");
-
-    // ค้นหา MySQL processes ทั้งหมดที่กำลังทำงาน
-    let mysql_pids = find_all_mysql_processes(&paths.mysql)?;
-
-    if mysql_pids.is_empty() {
-        return Ok(());
-    }
-
-    // ถ้ามีมากกว่า 1 process แสดงว่ามีซ้ำซ้อน
-    if mysql_pids.len() > 1 {
-        append_log_line(
-            &log_path,
-            &format!(
-                "WARNING: Found {} MySQL processes running. Cleaning up duplicates...",
-                mysql_pids.len()
-            ),
-        );
-
-        // หยุดทุก process
-        let mut stopped = 0;
-        for pid in &mysql_pids {
-            if terminate_process_by_pid(*pid).is_ok() {
-                stopped += 1;
-                append_log_line(
-                    &log_path,
-                    &format!("Stopped duplicate MySQL process (pid {})", pid),
-                );
-            }
-        }
-
-        if stopped > 0 {
-            append_log_line(
-                &log_path,
-                &format!("Cleaned up {} duplicate MySQL process(es)", stopped),
-            );
-
-            // รอให้ processes หยุดและ port ว่าง
-            thread::sleep(std::time::Duration::from_secs(2));
-            let _ = wait_for_port_release(port, std::time::Duration::from_secs(5));
-        }
-    } else if mysql_pids.len() == 1 {
-        // มี 1 process แต่อาจจะไม่ใช่ของเรา หรือ port ไม่ตรง
-        let pid = mysql_pids[0];
-
-        // ตรวจสอบว่า process นี้ใช้ port ที่เราต้องการหรือไม่
-        if !tcp_port_accepts(port) {
-            // Process มีอยู่แต่ไม่ได้ใช้ port ของเรา - อาจจะ crashed หรือ starting
-            if !process_exists(pid) {
-                append_log_line(
-                    &log_path,
-                    &format!("Found stale MySQL PID {} (process not running)", pid),
-                );
-            }
-        }
-    }
-
-    Ok(())
-}
-
-/// Find all MySQL/MariaDB processes currently running
-fn find_all_mysql_processes(mysql_executable: &Path) -> Result<Vec<u32>, String> {
-    #[cfg(target_os = "windows")]
-    {
-        // บน Windows ใช้ tasklist เพื่อหา mysqld.exe หรือ mariadbd.exe
-        let process_name = mysql_executable
-            .file_name()
-            .and_then(|n| n.to_str())
-            .unwrap_or("mysqld.exe");
-
-        let output = Command::new("tasklist")
-            .args([
-                "/FI",
-                &format!("IMAGENAME eq {}", process_name),
-                "/FO",
-                "CSV",
-                "/NH",
-            ])
-            .output()
-            .map_err(|e| format!("Failed to list MySQL processes: {}", e))?;
-
-        if !output.status.success() {
-            return Ok(Vec::new());
-        }
-
-        let stdout = String::from_utf8_lossy(&output.stdout);
-        let pids: Vec<u32> = stdout
-            .lines()
-            .filter_map(|line| {
-                // CSV format: "mysqld.exe","1234","Console","1","12,345 K"
-                let parts: Vec<&str> = line.split(',').collect();
-                if parts.len() >= 2 {
-                    parts[1].trim_matches('"').parse::<u32>().ok()
-                } else {
-                    None
-                }
-            })
-            .collect();
-
-        Ok(pids)
-    }
-
-    #[cfg(not(target_os = "windows"))]
-    {
-        // บน Unix-like systems ใช้ pgrep
-        let process_name = mysql_executable
-            .file_name()
-            .and_then(|n| n.to_str())
-            .unwrap_or("mysqld");
-
-        let output = Command::new("pgrep")
-            .arg(process_name)
-            .output()
-            .map_err(|e| format!("Failed to list MySQL processes: {}", e))?;
-
-        if !output.status.success() {
-            return Ok(Vec::new());
-        }
-
-        let stdout = String::from_utf8_lossy(&output.stdout);
-        let pids: Vec<u32> = stdout
-            .lines()
-            .filter_map(|line| line.trim().parse::<u32>().ok())
-            .collect();
-
-        Ok(pids)
-    }
-}
-
-/// Force stop all MySQL processes (used when stopping service)
-/// This ensures no MySQL processes are left running
-fn force_stop_all_mysql_processes(mysql_executable: &Path) -> Result<usize, String> {
-    let pids = find_all_mysql_processes(mysql_executable)?;
-
-    if pids.is_empty() {
-        return Ok(0);
-    }
-
-    eprintln!("Force stopping {} MySQL process(es)...", pids.len());
-
-    let mut stopped = 0;
-    for pid in pids {
-        if terminate_process_by_pid(pid).is_ok() {
-            stopped += 1;
-            eprintln!("Stopped MySQL process (pid {})", pid);
-        }
-    }
-
-    // รอให้ processes หยุดจริงๆ
-    if stopped > 0 {
-        thread::sleep(std::time::Duration::from_secs(2));
-    }
-
-    Ok(stopped)
 }
 
 /// Initialize MySQL/MariaDB data directory
@@ -1920,7 +1367,9 @@ fn initialize_mysql_data_dir(paths: &RuntimePaths) -> Result<(), String> {
                     mariadbd_dir.parent().unwrap().display()
                 ))
                 .arg("--user=") // Empty string = current user
-                .stdout(Stdio::from(init_log_file.try_clone().unwrap()))
+                .stdout(Stdio::from(init_log_file.try_clone().map_err(|e| {
+                    format!("Failed to duplicate MariaDB init log handle: {}", e)
+                })?))
                 .stderr(Stdio::from(init_log_file));
 
             let mut child = cmd
@@ -2003,7 +1452,9 @@ fn initialize_mysqld_data_dir(
         .arg("--datadir")
         .arg(data_dir_str)
         .arg("--console")
-        .stdout(Stdio::from(init_log_file.try_clone().unwrap()))
+        .stdout(Stdio::from(init_log_file.try_clone().map_err(|e| {
+            format!("Failed to duplicate MySQL init log handle: {}", e)
+        })?))
         .stderr(Stdio::from(init_log_file))
         .spawn()
         .map_err(|e| format!("Failed to start MySQL initialization: {}", e))?;
@@ -2056,1084 +1507,6 @@ fn initialize_mysqld_data_dir(
     Ok(())
 }
 
-#[derive(Debug, Clone, Default)]
-struct HtaccessCompatibilityRule {
-    request_prefix: String,
-    project_prefix: String,
-    extensionless_php: bool,
-    front_controller: Option<String>,
-    error_404: Option<String>,
-    directory_indexes: Vec<String>,
-    deny_all: bool,
-    disable_indexes: bool,
-}
-
-fn discover_htaccess_rules(projects_dir: &Path) -> Vec<HtaccessCompatibilityRule> {
-    let mut files = Vec::new();
-    collect_htaccess_files(projects_dir, &mut files);
-    files.sort();
-
-    let mut rules: Vec<HtaccessCompatibilityRule> = files
-        .iter()
-        .filter_map(|path| parse_htaccess_file(projects_dir, path))
-        .collect();
-
-    rules.sort_by(|a, b| {
-        b.request_prefix
-            .len()
-            .cmp(&a.request_prefix.len())
-            .then_with(|| a.request_prefix.cmp(&b.request_prefix))
-    });
-    rules
-}
-
-fn collect_htaccess_files(dir: &Path, files: &mut Vec<PathBuf>) {
-    let Ok(entries) = fs::read_dir(dir) else {
-        return;
-    };
-
-    for entry in entries.flatten() {
-        let path = entry.path();
-        if path.is_dir() {
-            collect_htaccess_files(&path, files);
-        } else if entry
-            .file_name()
-            .to_string_lossy()
-            .eq_ignore_ascii_case(".htaccess")
-        {
-            files.push(path);
-        }
-    }
-}
-
-fn parse_htaccess_file(projects_dir: &Path, path: &Path) -> Option<HtaccessCompatibilityRule> {
-    let htaccess_dir = path.parent()?;
-    let relative_dir = htaccess_dir.strip_prefix(projects_dir).ok()?;
-    let request_prefix = request_prefix_from_relative_path(relative_dir);
-    let project_prefix = project_prefix_from_relative_path(relative_dir);
-    let content = fs::read_to_string(path).ok()?;
-
-    let mut rule = HtaccessCompatibilityRule {
-        request_prefix,
-        project_prefix,
-        ..Default::default()
-    };
-
-    for raw_line in content.lines() {
-        let line = strip_htaccess_comment(raw_line);
-        if line.is_empty() {
-            continue;
-        }
-
-        let lower = line.to_ascii_lowercase();
-        if lower.contains("deny from all") || lower.contains("require all denied") {
-            rule.deny_all = true;
-            continue;
-        }
-
-        if lower.starts_with("options") && lower.contains("-indexes") {
-            rule.disable_indexes = true;
-            continue;
-        }
-
-        if lower.starts_with("errordocument") {
-            if let Some(target) = parse_error_document_404(&line) {
-                rule.error_404 = Some(resolve_htaccess_target(
-                    &target,
-                    &rule.request_prefix,
-                    &rule.project_prefix,
-                ));
-            }
-            continue;
-        }
-
-        if lower.starts_with("directoryindex") {
-            rule.directory_indexes
-                .extend(parse_php_directory_indexes(&line));
-            continue;
-        }
-
-        if lower.starts_with("rewriterule") {
-            if let Some(replacement) = rewrite_rule_replacement(&line) {
-                let replacement_lower = replacement.to_ascii_lowercase();
-                if is_front_controller_rewrite(&replacement_lower) {
-                    rule.front_controller = Some(resolve_htaccess_target(
-                        &replacement,
-                        &rule.request_prefix,
-                        &rule.project_prefix,
-                    ));
-                } else if is_extensionless_php_rewrite(&replacement_lower) {
-                    rule.extensionless_php = true;
-                }
-            }
-        }
-    }
-
-    if rule.extensionless_php
-        || rule.front_controller.is_some()
-        || rule.error_404.is_some()
-        || !rule.directory_indexes.is_empty()
-        || rule.deny_all
-        || rule.disable_indexes
-    {
-        Some(rule)
-    } else {
-        None
-    }
-}
-
-fn strip_htaccess_comment(line: &str) -> String {
-    line.split_once('#')
-        .map(|(before, _)| before)
-        .unwrap_or(line)
-        .trim()
-        .to_string()
-}
-
-fn request_prefix_from_relative_path(relative_dir: &Path) -> String {
-    let parts: Vec<String> = relative_dir
-        .components()
-        .map(|component| component.as_os_str().to_string_lossy().replace('\\', "/"))
-        .filter(|part| !part.is_empty())
-        .collect();
-
-    if parts.is_empty() {
-        "/".to_string()
-    } else {
-        format!("/{}", parts.join("/"))
-    }
-}
-
-fn project_prefix_from_relative_path(relative_dir: &Path) -> String {
-    relative_dir
-        .components()
-        .next()
-        .map(|component| {
-            format!(
-                "/{}",
-                component.as_os_str().to_string_lossy().replace('\\', "/")
-            )
-        })
-        .unwrap_or_else(|| "/".to_string())
-}
-
-fn rewrite_rule_replacement(line: &str) -> Option<String> {
-    line.split_whitespace()
-        .nth(2)
-        .map(|value| value.trim_matches(['"', '\'']).to_string())
-        .filter(|value| !value.is_empty())
-}
-
-fn is_extensionless_php_rewrite(replacement: &str) -> bool {
-    replacement.contains("$1.php")
-        || replacement.contains("${1}.php")
-        || replacement.ends_with(".php")
-}
-
-fn is_front_controller_rewrite(replacement: &str) -> bool {
-    let replacement = replacement.trim_start_matches('/');
-    replacement == "index.php"
-        || replacement.starts_with("index.php?")
-        || replacement.ends_with("/index.php")
-        || replacement.contains("/index.php?")
-}
-
-fn parse_error_document_404(line: &str) -> Option<String> {
-    let mut parts = line.split_whitespace();
-    let directive = parts.next()?;
-    if !directive.eq_ignore_ascii_case("errordocument") {
-        return None;
-    }
-
-    let status = parts.next()?;
-    if status != "404" {
-        return None;
-    }
-
-    let mut target = parts.collect::<Vec<&str>>().join(" ");
-    if target.starts_with("/ ") {
-        target = format!("/{}", target.trim_start_matches("/ ").trim_start());
-    }
-
-    target = target.trim_matches(['"', '\'']).trim().to_string();
-    if target.is_empty() || target.starts_with("http://") || target.starts_with("https://") {
-        None
-    } else {
-        Some(target)
-    }
-}
-
-fn parse_php_directory_indexes(line: &str) -> Vec<String> {
-    line.split_whitespace()
-        .skip(1)
-        .map(|value| value.trim_matches(['"', '\'']).replace('\\', "/"))
-        .filter(|value| value.to_ascii_lowercase().ends_with(".php"))
-        .collect()
-}
-
-fn resolve_htaccess_target(target: &str, request_prefix: &str, project_prefix: &str) -> String {
-    let normalized = target.replace('\\', "/");
-    if normalized.starts_with('/') {
-        let trimmed_project_prefix = trim_slash(project_prefix);
-        if project_prefix == "/"
-            || normalized == trimmed_project_prefix
-            || normalized.starts_with(&format!("{}/", trimmed_project_prefix))
-        {
-            normalized
-        } else {
-            join_url_path(project_prefix, normalized.trim_start_matches('/'))
-        }
-    } else {
-        join_url_path(request_prefix, &normalized)
-    }
-}
-
-fn trim_slash(value: &str) -> &str {
-    value.trim_end_matches('/')
-}
-
-fn join_url_path(prefix: &str, suffix: &str) -> String {
-    let suffix = suffix.trim_start_matches('/');
-    if prefix == "/" {
-        format!("/{}", suffix)
-    } else if suffix.is_empty() {
-        prefix.to_string()
-    } else {
-        format!("{}/{}", prefix.trim_end_matches('/'), suffix)
-    }
-}
-
-fn caddy_path_matcher_line(prefix: &str) -> Option<String> {
-    if prefix == "/" {
-        None
-    } else {
-        Some(format!(
-            "        path {} {}\n",
-            caddy_token(prefix),
-            caddy_token(&format!("{}/*", prefix.trim_end_matches('/')))
-        ))
-    }
-}
-
-fn caddy_token(value: &str) -> String {
-    if value.chars().any(char::is_whitespace) {
-        format!("\"{}\"", value.replace('\\', "\\\\").replace('"', "\\\""))
-    } else {
-        value.to_string()
-    }
-}
-
-fn caddy_matcher_name(prefix: &str, index: usize, suffix: &str) -> String {
-    let mut sanitized = String::new();
-    for character in prefix.chars() {
-        if character.is_ascii_alphanumeric() {
-            sanitized.push(character);
-        } else if !sanitized.ends_with('_') {
-            sanitized.push('_');
-        }
-    }
-    let sanitized = sanitized.trim_matches('_');
-    if sanitized.is_empty() {
-        format!("htaccess{}_{}", suffix, index)
-    } else {
-        format!("htaccess{}_{}_{}", suffix, index, sanitized)
-    }
-}
-
-fn append_htaccess_route_rules(
-    content: &mut String,
-    rules: &[HtaccessCompatibilityRule],
-    php_port: u16,
-) {
-    if rules.is_empty() {
-        return;
-    }
-
-    content.push_str("    # Apache .htaccess compatibility: project-specific rewrites\n");
-    for (index, rule) in rules.iter().enumerate() {
-        if rule.deny_all {
-            let matcher = caddy_matcher_name(&rule.request_prefix, index, "Deny");
-            content.push_str(&format!("    @{} {{\n", matcher));
-            if let Some(path_line) = caddy_path_matcher_line(&rule.request_prefix) {
-                content.push_str(&path_line);
-            }
-            content.push_str("    }\n");
-            content.push_str(&format!("    respond @{} 403\n", matcher));
-            content.push('\n');
-        }
-
-        if rule.extensionless_php {
-            let matcher = caddy_matcher_name(&rule.request_prefix, index, "ExtPhp");
-            content.push_str(&format!("    @{} {{\n", matcher));
-            if let Some(path_line) = caddy_path_matcher_line(&rule.request_prefix) {
-                content.push_str(&path_line);
-            }
-            content.push_str("        not path */ *.php\n");
-            content.push_str("        file {\n");
-            content.push_str("            try_files {path}.php\n");
-            content.push_str("        }\n");
-            content.push_str("    }\n");
-            content.push_str(&format!("    handle @{} {{\n", matcher));
-            content.push_str("        rewrite * {file_match.relative}\n");
-            content.push_str(&format!("        php_fastcgi 127.0.0.1:{}\n", php_port));
-            content.push_str("    }\n");
-            content.push('\n');
-        }
-
-        if !rule.directory_indexes.is_empty() {
-            let matcher = caddy_matcher_name(&rule.request_prefix, index, "Index");
-            content.push_str(&format!("    @{} {{\n", matcher));
-            if rule.request_prefix == "/" {
-                content.push_str("        path */\n");
-            } else {
-                let prefix = rule.request_prefix.trim_end_matches('/');
-                content.push_str(&format!(
-                    "        path {} {}\n",
-                    caddy_token(&format!("{}/", prefix)),
-                    caddy_token(&format!("{}/*/", prefix))
-                ));
-            }
-            content.push_str("        file {\n");
-            content.push_str("            try_files");
-            for index_file in &rule.directory_indexes {
-                content.push_str(&format!(" {{path}}/{}", index_file));
-                content.push_str(&format!(" {{path}}{}", index_file));
-            }
-            content.push('\n');
-            content.push_str("        }\n");
-            content.push_str("    }\n");
-            content.push_str(&format!("    handle @{} {{\n", matcher));
-            content.push_str("        rewrite * {file_match.relative}\n");
-            content.push_str(&format!("        php_fastcgi 127.0.0.1:{}\n", php_port));
-            content.push_str("    }\n");
-            content.push('\n');
-        }
-
-        if let Some(front_controller) = &rule.front_controller {
-            let matcher = caddy_matcher_name(&rule.request_prefix, index, "Front");
-            content.push_str(&format!("    @{} {{\n", matcher));
-            if let Some(path_line) = caddy_path_matcher_line(&rule.request_prefix) {
-                content.push_str(&path_line);
-            }
-            content.push_str("        not path */ *.php\n");
-            content.push_str("        not file {\n");
-            content.push_str("            try_files {path} {path}/\n");
-            content.push_str("        }\n");
-            content.push_str("    }\n");
-            content.push_str(&format!("    handle @{} {{\n", matcher));
-            content.push_str(&format!(
-                "        rewrite * {}\n",
-                caddy_token(front_controller)
-            ));
-            content.push_str(&format!("        php_fastcgi 127.0.0.1:{}\n", php_port));
-            content.push_str("    }\n");
-            content.push('\n');
-        }
-    }
-}
-
-fn append_htaccess_error_rules(
-    content: &mut String,
-    rules: &[HtaccessCompatibilityRule],
-    php_port: u16,
-) {
-    let error_rules: Vec<&HtaccessCompatibilityRule> = rules
-        .iter()
-        .filter(|rule| rule.error_404.is_some())
-        .collect();
-    if error_rules.is_empty() {
-        return;
-    }
-
-    content.push_str("    # Apache .htaccess compatibility: ErrorDocument mappings\n");
-    content.push_str("    handle_errors {\n");
-    for (index, rule) in error_rules.iter().enumerate() {
-        let matcher = caddy_matcher_name(&rule.request_prefix, index, "Error404");
-        content.push_str(&format!("        @{} {{\n", matcher));
-        content.push_str("            expression {err.status_code} == 404\n");
-        if let Some(path_line) = caddy_path_matcher_line(&rule.request_prefix) {
-            content.push_str(&path_line.replace("        path", "            path"));
-        }
-        content.push_str("        }\n");
-        content.push_str(&format!("        handle @{} {{\n", matcher));
-        let error_404 = rule.error_404.as_ref().expect("filtered error_404 rule");
-        content.push_str(&format!(
-            "            rewrite * {}\n",
-            caddy_token(error_404)
-        ));
-        if error_404.to_ascii_lowercase().ends_with(".php") {
-            content.push_str(&format!("            php_fastcgi 127.0.0.1:{}\n", php_port));
-        } else {
-            content.push_str("            file_server\n");
-        }
-        content.push_str("        }\n");
-    }
-    content.push_str("        respond \"{err.status_code} {err.status_text}\" {err.status_code}\n");
-    content.push_str("    }\n");
-    content.push('\n');
-}
-
-fn append_htaccess_no_browse_rules(content: &mut String, rules: &[HtaccessCompatibilityRule]) {
-    let no_browse_rules: Vec<&HtaccessCompatibilityRule> =
-        rules.iter().filter(|rule| rule.disable_indexes).collect();
-    if no_browse_rules.is_empty() {
-        return;
-    }
-
-    content.push_str("    # Apache .htaccess compatibility: Options -Indexes\n");
-    for (index, rule) in no_browse_rules.iter().enumerate() {
-        let matcher = caddy_matcher_name(&rule.request_prefix, index, "NoBrowse");
-        content.push_str(&format!("    @{} {{\n", matcher));
-        if rule.request_prefix == "/" {
-            content.push_str("        path */\n");
-        } else {
-            let prefix = rule.request_prefix.trim_end_matches('/');
-            content.push_str(&format!(
-                "        path {} {} {}\n",
-                caddy_token(prefix),
-                caddy_token(&format!("{}/", prefix)),
-                caddy_token(&format!("{}/*/", prefix))
-            ));
-        }
-        content.push_str("    }\n");
-        content.push_str(&format!("    respond @{} 403\n", matcher));
-        content.push('\n');
-    }
-}
-
-/// Generate a basic Caddyfile
-fn generate_caddyfile(
-    path: &PathBuf,
-    paths: &RuntimePaths,
-    port: u16,
-    php_port: u16,
-) -> Result<(), String> {
-    // Convert paths to use forward slashes for Caddyfile (cross-platform compatibility)
-    let projects = paths
-        .projects_dir
-        .to_str()
-        .ok_or("Invalid project path")?
-        .replace('\\', "/");
-    let log_file = paths
-        .logs_dir
-        .join("caddy-access.log")
-        .to_str()
-        .ok_or("Invalid log path")?
-        .replace('\\', "/");
-    let adminer = paths
-        .adminer
-        .to_str()
-        .ok_or("Invalid Adminer path")?
-        .replace('\\', "/");
-    let htaccess_rules = discover_htaccess_rules(&paths.projects_dir);
-
-    // Build the Caddyfile content
-    let mut content = String::new();
-    content.push_str("{\n");
-    content.push_str("    admin off\n");
-    content.push_str("}\n\n");
-    content.push_str(&format!(":{} {{\n", port));
-    content.push_str("    # Database tools - must come before project root directives\n");
-    content.push_str("    redir /adminer /adminer/\n");
-    content.push_str("    redir /phpmyadmin /phpmyadmin/\n");
-    content.push('\n');
-    content.push_str("    handle_path /adminer/* {\n");
-    content.push_str(&format!("        root * \"{}\"\n", adminer));
-    content.push_str(&format!("        php_fastcgi 127.0.0.1:{}\n", php_port));
-    content.push_str("        file_server\n");
-    content.push_str("    }\n");
-    content.push('\n');
-    content.push_str("    handle_path /phpmyadmin/* {\n");
-    content.push_str(&format!("        root * \"{}\"\n", adminer));
-    content.push_str(&format!("        php_fastcgi 127.0.0.1:{}\n", php_port));
-    content.push_str("        file_server\n");
-    content.push_str("    }\n");
-    content.push('\n');
-    content.push_str("    # Root directory for serving files (default project root)\n");
-    content.push_str(&format!("    root * \"{}\"\n", projects));
-    content.push('\n');
-    content.push_str("    # Apache .htaccess compatibility: never serve control files\n");
-    content.push_str("    @apacheControlFiles {\n");
-    content.push_str("        path .htaccess .htpasswd */.htaccess */.htpasswd\n");
-    content.push_str("    }\n");
-    content.push_str("    respond @apacheControlFiles 404\n");
-    content.push('\n');
-    append_htaccess_route_rules(&mut content, &htaccess_rules, php_port);
-    content.push_str("    # Apache .htaccess compatibility: extensionless PHP rewrites\n");
-    content.push_str("    @phpExtensionless {\n");
-    content.push_str("        not path */\n");
-    content.push_str("        not path *.php\n");
-    content.push_str("        file {\n");
-    content.push_str("            try_files {path}.php\n");
-    content.push_str("        }\n");
-    content.push_str("    }\n");
-    content.push_str("    handle @phpExtensionless {\n");
-    content.push_str("        rewrite * {file_match.relative}\n");
-    content.push_str(&format!("        php_fastcgi 127.0.0.1:{}\n", php_port));
-    content.push_str("    }\n");
-    content.push('\n');
-    content.push_str("    # Execute PHP files only when the target script exists\n");
-    content.push_str("    @phpFile {\n");
-    content.push_str("        path *.php\n");
-    content.push_str("        file {path}\n");
-    content.push_str("    }\n");
-    content.push_str("    handle @phpFile {\n");
-    content.push_str(&format!("        php_fastcgi 127.0.0.1:{}\n", php_port));
-    content.push_str("    }\n");
-    content.push('\n');
-    content.push_str("    # Execute directory indexes only when index.php exists\n");
-    content.push_str("    @phpIndex {\n");
-    content.push_str("        file {\n");
-    content.push_str("            try_files {path}/index.php {path}index.php\n");
-    content.push_str("        }\n");
-    content.push_str("    }\n");
-    content.push_str("    handle @phpIndex {\n");
-    content.push_str("        rewrite * {file_match.relative}\n");
-    content.push_str(&format!("        php_fastcgi 127.0.0.1:{}\n", php_port));
-    content.push_str("    }\n");
-    content.push('\n');
-    append_htaccess_no_browse_rules(&mut content, &htaccess_rules);
-    content.push_str("    # File server for project files\n");
-    content.push_str("    file_server browse\n");
-    content.push('\n');
-    append_htaccess_error_rules(&mut content, &htaccess_rules, php_port);
-    content.push_str("    # Logging\n");
-    content.push_str("    log {\n");
-    content.push_str(&format!("        output file \"{}\"\n", log_file));
-    content.push_str("        format json\n");
-    content.push_str("    }\n");
-    content.push('\n');
-    content.push_str("    # Encode responses\n");
-    content.push_str("    encode gzip\n");
-    content.push('\n');
-    content.push_str("    # Security headers\n");
-    content.push_str("    header {\n");
-    content.push_str("        X-Content-Type-Options nosniff\n");
-    content.push_str("        X-Frame-Options SAMEORIGIN\n");
-    content.push_str("        Referrer-Policy no-referrer\n");
-    content.push_str("    }\n");
-    content.push_str("}\n");
-
-    let mut file = File::create(path).map_err(|e| format!("Failed to create Caddyfile: {}", e))?;
-    file.write_all(content.as_bytes())
-        .map_err(|e| format!("Failed to write Caddyfile: {}", e))?;
-
-    Ok(())
-}
-
-/// Generate a basic php.ini
-fn generate_php_ini(
-    path: &PathBuf,
-    paths: &RuntimePaths,
-    web_port: u16,
-    mysql_port: u16,
-    postgresql_port: u16,
-) -> Result<(), String> {
-    // Get the PHP directory (parent of php_cgi binary) to find the ext folder
-    let php_dir = paths
-        .php_cgi
-        .parent()
-        .ok_or("Cannot determine PHP directory")?;
-
-    // On Windows, extensions are in the ext/ subdirectory relative to PHP binary
-    // Use absolute path with forward slashes (PHP accepts forward slashes on Windows)
-    let ext_dir = php_dir.join("ext");
-    let ext_dir_str = ext_dir.to_string_lossy().replace('\\', "/");
-
-    // Get error log and session paths
-    let error_log = paths
-        .logs_dir
-        .join("php-errors.log")
-        .to_string_lossy()
-        .replace('\\', "/");
-    let session_dir = paths.logs_dir.join("php-sessions");
-    fs::create_dir_all(&session_dir).map_err(|e| {
-        format!(
-            "Failed to create PHP session directory {}: {}",
-            session_dir.display(),
-            e
-        )
-    })?;
-    let session_path = session_dir.to_string_lossy().replace('\\', "/");
-
-    let extension_lines = php_ini_extension_lines(&ext_dir);
-    let env_file = generate_php_env_file(paths, web_port, mysql_port, postgresql_port)?;
-    let env_file_path = env_file.to_string_lossy().replace('\\', "/");
-
-    let php_ini_content = format!(
-        r#"; CHAMP PHP Configuration
-; Basic PHP settings for development
-
-[PHP]
-; Error reporting - tuned for local development
-error_reporting = E_ALL & ~E_DEPRECATED & ~E_WARNING
-display_errors = On
-display_startup_errors = Off
-log_errors = On
-error_log = "{}"
-
-; Maximum execution time
-max_execution_time = 300
-max_input_time = 300
-
-; Memory limit
-memory_limit = 256M
-
-; POST data limit
-post_max_size = 100M
-upload_max_filesize = 100M
-max_input_vars = 5000
-
-; Date timezone
-date.timezone = UTC
-
-; Extensions - use absolute path for reliability
-; Note: PDO, zlib, and session are built-in to bundled PHP builds.
-extension_dir = "{}"
-{}
-
-; CHAMP database defaults for projects that do not specify a MySQL port.
-auto_prepend_file = "{}"
-mysqli.default_host = 127.0.0.1
-mysqli.default_port = {}
-pgsql.default_host = 127.0.0.1
-pgsql.default_port = {}
-
-; Session settings - use absolute path for Windows compatibility
-session.save_path = "{}"
-session.cookie_httponly = 1
-session.use_strict_mode = 1
-session.use_cookies = 1
-session.use_trans_sid = 0
-
-; File uploads
-upload_tmp_dir = "{}"
-
-; CGI settings
-cgi.force_redirect = 0
-cgi.fix_pathinfo = 1
-
-; Security settings
-expose_php = Off
-
-; OPcache/JIT is disabled for FastCGI runtime stability.
-opcache.enable=0
-opcache.enable_cli=0
-opcache.jit=off
-opcache.jit_buffer_size=0
-
-; Realpath cache for better file path resolution (doubled)
-realpath_cache_size=8192K
-realpath_cache_ttl=300
-"#,
-        error_log,
-        ext_dir_str,
-        extension_lines,
-        env_file_path,
-        mysql_port,
-        postgresql_port,
-        session_path,
-        session_path
-    );
-
-    let mut file = File::create(path).map_err(|e| format!("Failed to create php.ini: {}", e))?;
-    file.write_all(php_ini_content.as_bytes())
-        .map_err(|e| format!("Failed to write php.ini: {}", e))?;
-
-    Ok(())
-}
-
-fn generate_php_env_file(
-    paths: &RuntimePaths,
-    web_port: u16,
-    mysql_port: u16,
-    postgresql_port: u16,
-) -> Result<PathBuf, String> {
-    let env_file = paths.config_dir.join("champ-env.php");
-    let content = format!(
-        r#"<?php
-// Generated by CHAMP. This file is loaded before project PHP scripts.
-$champMysqlHost = '127.0.0.1';
-$champMysqlPort = '{}';
-$champPostgresHost = '127.0.0.1';
-$champPostgresPort = '{}';
-$champWebPort = '{}';
-
-putenv('CHAMP_MYSQL_HOST=' . $champMysqlHost);
-putenv('CHAMP_MYSQL_PORT=' . $champMysqlPort);
-putenv('CHAMP_MYSQL_USER=root');
-putenv('CHAMP_MYSQL_PASSWORD=');
-putenv('CHAMP_POSTGRES_HOST=' . $champPostgresHost);
-putenv('CHAMP_POSTGRES_PORT=' . $champPostgresPort);
-putenv('CHAMP_POSTGRES_USER=postgres');
-putenv('CHAMP_POSTGRES_PASSWORD=');
-putenv('CHAMP_WEB_PORT=' . $champWebPort);
-putenv('MYSQL_TCP_PORT=' . $champMysqlPort);
-putenv('PGHOST=' . $champPostgresHost);
-putenv('PGPORT=' . $champPostgresPort);
-putenv('PGUSER=postgres');
-putenv('PGPASSWORD=');
-
-$_SERVER['CHAMP_MYSQL_HOST'] = $champMysqlHost;
-$_SERVER['CHAMP_MYSQL_PORT'] = $champMysqlPort;
-$_SERVER['CHAMP_MYSQL_USER'] = 'root';
-$_SERVER['CHAMP_MYSQL_PASSWORD'] = '';
-$_SERVER['CHAMP_POSTGRES_HOST'] = $champPostgresHost;
-$_SERVER['CHAMP_POSTGRES_PORT'] = $champPostgresPort;
-$_SERVER['CHAMP_POSTGRES_USER'] = 'postgres';
-$_SERVER['CHAMP_POSTGRES_PASSWORD'] = '';
-$_SERVER['CHAMP_WEB_PORT'] = $champWebPort;
-
-defined('CHAMP_MYSQL_HOST') || define('CHAMP_MYSQL_HOST', $champMysqlHost);
-defined('CHAMP_MYSQL_PORT') || define('CHAMP_MYSQL_PORT', (int) $champMysqlPort);
-defined('CHAMP_MYSQL_USER') || define('CHAMP_MYSQL_USER', 'root');
-defined('CHAMP_MYSQL_PASSWORD') || define('CHAMP_MYSQL_PASSWORD', '');
-defined('CHAMP_POSTGRES_HOST') || define('CHAMP_POSTGRES_HOST', $champPostgresHost);
-defined('CHAMP_POSTGRES_PORT') || define('CHAMP_POSTGRES_PORT', (int) $champPostgresPort);
-defined('CHAMP_POSTGRES_USER') || define('CHAMP_POSTGRES_USER', 'postgres');
-defined('CHAMP_POSTGRES_PASSWORD') || define('CHAMP_POSTGRES_PASSWORD', '');
-defined('CHAMP_WEB_PORT') || define('CHAMP_WEB_PORT', (int) $champWebPort);
-"#,
-        mysql_port, postgresql_port, web_port
-    );
-
-    fs::write(&env_file, content).map_err(|e| {
-        format!(
-            "Failed to write CHAMP PHP environment file {}: {}",
-            env_file.display(),
-            e
-        )
-    })?;
-
-    Ok(env_file)
-}
-
-fn apply_php_database_env(
-    command: &mut Command,
-    web_port: u16,
-    mysql_port: u16,
-    postgresql_port: u16,
-) {
-    let mysql_port = mysql_port.to_string();
-    let postgresql_port = postgresql_port.to_string();
-    command
-        .env("CHAMP_MYSQL_HOST", "127.0.0.1")
-        .env("CHAMP_MYSQL_PORT", &mysql_port)
-        .env("CHAMP_MYSQL_USER", "root")
-        .env("CHAMP_MYSQL_PASSWORD", "")
-        .env("CHAMP_POSTGRES_HOST", "127.0.0.1")
-        .env("CHAMP_POSTGRES_PORT", &postgresql_port)
-        .env("CHAMP_POSTGRES_USER", "postgres")
-        .env("CHAMP_POSTGRES_PASSWORD", "")
-        .env("CHAMP_WEB_PORT", web_port.to_string())
-        .env("MYSQL_TCP_PORT", mysql_port)
-        .env("PGHOST", "127.0.0.1")
-        .env("PGPORT", postgresql_port)
-        .env("PGUSER", "postgres")
-        .env("PGPASSWORD", "");
-}
-
-fn php_ini_extension_lines(ext_dir: &Path) -> String {
-    [
-        "curl",
-        "mbstring",
-        "mysqli",
-        "openssl",
-        "pdo_mysql",
-        "pgsql",
-        "pdo_pgsql",
-    ]
-    .iter()
-    .filter(|extension| php_extension_available(ext_dir, extension))
-    .map(|extension| format!("extension={}", extension))
-    .collect::<Vec<_>>()
-    .join("\n")
-}
-
-#[cfg(target_os = "windows")]
-fn php_extension_available(ext_dir: &Path, extension: &str) -> bool {
-    ext_dir.join(format!("php_{}.dll", extension)).exists()
-}
-
-#[cfg(not(target_os = "windows"))]
-fn php_extension_available(_ext_dir: &Path, _extension: &str) -> bool {
-    true
-}
-
-/// Generate php-fpm.conf for static-php builds
-fn generate_php_fpm_conf(
-    path: &PathBuf,
-    paths: &RuntimePaths,
-    php_port: u16,
-) -> Result<(), String> {
-    // Get current username from environment
-    let user = std::env::var("USER")
-        .or_else(|_| std::env::var("USERNAME"))
-        .unwrap_or_else(|_| "nobody".to_string());
-
-    let fpm_conf_content = format!(
-        r#"; CHAMP PHP-FPM Configuration
-; Optimized for local PHP development
-
-[global]
-error_log = {logs_dir}/php-fpm.log
-log_level = warning
-
-[www]
-user = {user}
-group = {user}
-listen = 127.0.0.1:{php_port}
-listen.owner = {user}
-listen.group = {user}
-listen.mode = 0660
-
-; Process manager - static for better performance (no spawning delays)
-pm = static
-pm.max_children = 10
-
-; Worker recycling to prevent memory leaks
-pm.max_requests = 1000
-
-; Request settings for local tools and projects
-request_terminate_timeout = 300
-php_admin_value[error_log] = {logs_dir}/php-fpm.log
-php_admin_flag[log_errors] = on
-php_value[session.save_path] = {logs_dir}/php-sessions
-
-; Performance tuning
-php_value[memory_limit] = 256M
-"#,
-        logs_dir = paths.logs_dir.display().to_string().replace('\\', "/"),
-        user = user,
-        php_port = php_port,
-    );
-
-    let mut file =
-        File::create(path).map_err(|e| format!("Failed to create php-fpm.conf: {}", e))?;
-    file.write_all(fpm_conf_content.as_bytes())
-        .map_err(|e| format!("Failed to write php-fpm.conf: {}", e))?;
-
-    Ok(())
-}
-
-fn ensure_database_tool(
-    paths: &RuntimePaths,
-    web_port: u16,
-    mysql_port: u16,
-    postgresql_port: u16,
-    database_tool_id: &str,
-) -> Result<(), String> {
-    if paths.adminer.exists() {
-        fs::remove_dir_all(&paths.adminer)
-            .map_err(|e| format!("Failed to reset database tool directory: {}", e))?;
-    }
-    fs::create_dir_all(&paths.adminer)
-        .map_err(|e| format!("Failed to create database tool directory: {}", e))?;
-
-    let index_path = paths.adminer.join("index.php");
-    if let Some(source) = find_database_tool_source(paths, database_tool_id) {
-        if source.is_file() {
-            fs::copy(&source, &index_path).map_err(|e| {
-                format!(
-                    "Failed to install database tool from {}: {}",
-                    source.display(),
-                    e
-                )
-            })?;
-        } else {
-            copy_dir_contents(&source, &paths.adminer)?;
-        }
-        if database_tool_id.starts_with("phpmyadmin") {
-            write_phpmyadmin_config(&paths.adminer, web_port, mysql_port)?;
-        }
-        return Ok(());
-    }
-
-    let tool_name = if database_tool_id.starts_with("adminer") {
-        "Adminer"
-    } else {
-        "phpMyAdmin"
-    };
-    let tool_path = if database_tool_id.starts_with("adminer") {
-        "/adminer"
-    } else {
-        "/phpmyadmin"
-    };
-    let default_connection = if database_tool_id.starts_with("adminer") {
-        format!(
-            "Default PostgreSQL connection: server <code>127.0.0.1:{}</code>, user <code>postgres</code>, empty password.",
-            postgresql_port
-        )
-    } else {
-        format!(
-            "Default MySQL connection: server <code>127.0.0.1:{}</code>, user <code>root</code>, empty password.",
-            mysql_port
-        )
-    };
-
-    let placeholder = format!(
-        r#"<?php
-http_response_code(503);
-header('Content-Type: text/html; charset=utf-8');
-?>
-<!doctype html>
-<html lang="en">
-<head>
-  <meta charset="utf-8">
-  <title>{tool_name} is not installed</title>
-  <style>
-    body {{ font-family: system-ui, -apple-system, Segoe UI, sans-serif; margin: 48px; line-height: 1.5; }}
-    code {{ background: #f3f4f6; padding: 2px 6px; border-radius: 4px; }}
-  </style>
-</head>
-<body>
-  <h1>{tool_name} is not installed</h1>
-  <p>Run the CHAMP runtime installer to install {tool_name}. After installation, open <code>{tool_path}</code> again.</p>
-  <p>{default_connection}</p>
-</body>
-</html>
-"#,
-        default_connection = default_connection,
-        tool_name = tool_name,
-        tool_path = tool_path
-    );
-
-    fs::write(&index_path, placeholder)
-        .map_err(|e| format!("Failed to create database tool placeholder: {}", e))?;
-
-    Ok(())
-}
-
-fn find_database_tool_source(paths: &RuntimePaths, database_tool_id: &str) -> Option<PathBuf> {
-    let mut roots = Vec::new();
-
-    if let Some(base_dir) = paths.config_dir.parent() {
-        roots.push(base_dir.join("runtime"));
-    }
-
-    if let Some(caddy_dir) = paths.caddy.parent() {
-        roots.push(caddy_dir.to_path_buf());
-        if let Some(parent) = caddy_dir.parent() {
-            roots.push(parent.to_path_buf());
-        }
-    }
-
-    for root in roots {
-        if !root.exists() {
-            continue;
-        }
-
-        let direct_candidates = if database_tool_id.starts_with("adminer") {
-            vec![
-                root.join("adminer").join("index.php"),
-                root.join("adminer.php"),
-            ]
-        } else {
-            vec![root.join("phpmyadmin")]
-        };
-
-        for candidate in direct_candidates {
-            if candidate.is_file() || candidate.join("index.php").exists() {
-                return Some(candidate);
-            }
-        }
-
-        if let Ok(entries) = fs::read_dir(&root) {
-            for entry in entries.flatten() {
-                let path = entry.path();
-                let name = path
-                    .file_name()
-                    .and_then(|value| value.to_str())
-                    .unwrap_or_default()
-                    .to_ascii_lowercase();
-
-                if database_tool_id.starts_with("adminer")
-                    && path.is_file()
-                    && name.starts_with("adminer")
-                    && name.ends_with(".php")
-                {
-                    return Some(path);
-                }
-
-                if database_tool_id.starts_with("phpmyadmin")
-                    && path.is_dir()
-                    && name.starts_with("phpmyadmin")
-                    && path.join("index.php").exists()
-                {
-                    return Some(path);
-                }
-            }
-        }
-    }
-
-    None
-}
-
-fn copy_dir_contents(source: &PathBuf, target: &PathBuf) -> Result<(), String> {
-    fs::create_dir_all(target).map_err(|e| {
-        format!(
-            "Failed to create database tool target {}: {}",
-            target.display(),
-            e
-        )
-    })?;
-
-    for entry in fs::read_dir(source).map_err(|e| {
-        format!(
-            "Failed to read database tool source {}: {}",
-            source.display(),
-            e
-        )
-    })? {
-        let entry = entry.map_err(|e| format!("Failed to read database tool entry: {}", e))?;
-        let source_path = entry.path();
-        let target_path = target.join(entry.file_name());
-
-        if source_path.is_dir() {
-            copy_dir_contents(&source_path, &target_path)?;
-        } else {
-            fs::copy(&source_path, &target_path).map_err(|e| {
-                format!(
-                    "Failed to copy database tool file {} to {}: {}",
-                    source_path.display(),
-                    target_path.display(),
-                    e
-                )
-            })?;
-        }
-    }
-
-    Ok(())
-}
-
-fn write_phpmyadmin_config(target: &Path, web_port: u16, mysql_port: u16) -> Result<(), String> {
-    let config = format!(
-        r#"<?php
-$cfg['blowfish_secret'] = 'CHAMP_LOCAL_DEV_BLOWFISH_1234567';
-$cfg['PmaAbsoluteUri'] = 'http://localhost:{}/phpmyadmin/';
-$i = 0;
-$i++;
-$cfg['Servers'][$i]['auth_type'] = 'cookie';
-$cfg['Servers'][$i]['host'] = '127.0.0.1';
-$cfg['Servers'][$i]['port'] = '{}';
-$cfg['Servers'][$i]['AllowNoPassword'] = true;
-$cfg['CheckConfigurationPermissions'] = false;
-$cfg['TempDir'] = __DIR__ . '/tmp';
-"#,
-        web_port, mysql_port
-    );
-
-    fs::create_dir_all(target.join("tmp")).map_err(|e| {
-        format!(
-            "Failed to create phpMyAdmin temp directory {}: {}",
-            target.join("tmp").display(),
-            e
-        )
-    })?;
-    fs::write(target.join("config.inc.php"), config)
-        .map_err(|e| format!("Failed to write phpMyAdmin config: {}", e))
-}
-
 impl Default for ProcessManager {
     fn default() -> Self {
         Self::new()
@@ -3158,6 +1531,34 @@ mod tests {
             .args(["-c", "exit 7"])
             .status()
             .expect("failed to create nonzero exit status")
+    }
+
+    // R-03: MySQL cleanup must match processes by *full path*, not by executable
+    // name. A binary named `mysqld[.exe]` living under a CHAMP runtime path that
+    // has nothing running from it must yield zero PIDs, even if the host has its
+    // own MySQL/MariaDB of the same name running elsewhere. This guards against
+    // force-killing a user's own database. The name-only `find_all_mysql_processes`
+    // helper was removed; MySQL now shares Caddy/PostgreSQL's path-verified finder.
+    #[test]
+    fn test_find_process_ids_by_executable_ignores_same_name_other_path() {
+        let temp = tempfile::tempdir().expect("failed to create temp dir");
+        let exe_name = if cfg!(windows) {
+            "mysqld.exe"
+        } else {
+            "mysqld"
+        };
+        // A path under a throwaway dir: nothing is ever launched from here, so
+        // regardless of any real mysqld running on the machine, the result is empty.
+        let fake_mysql = temp.path().join("runtime").join("mysql").join(exe_name);
+
+        let pids = find_process_ids_by_executable(&fake_mysql)
+            .expect("finder should succeed even when no matching process exists");
+
+        assert!(
+            pids.is_empty(),
+            "expected no PIDs for a same-named binary at an unused path, got {:?}",
+            pids
+        );
     }
 
     #[test]
