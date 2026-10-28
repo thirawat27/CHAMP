@@ -86,7 +86,15 @@ impl AppSettings {
 
         match fs::read_to_string(&path) {
             Ok(content) => match serde_json::from_str::<Self>(&content) {
-                Ok(settings) => settings,
+                Ok(mut settings) => {
+                    // A saved id like "adminer-5.4" goes stale when the catalog
+                    // moves to a newer release of the same tool.
+                    settings.package_selection.phpmyadmin =
+                        crate::runtime::packages::resolve_database_tool_id(
+                            &settings.package_selection.phpmyadmin,
+                        );
+                    settings
+                }
                 Err(e) => {
                     eprintln!("Failed to parse settings file: {}, using defaults", e);
                     Self::default()

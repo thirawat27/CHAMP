@@ -135,7 +135,7 @@ describe("Dashboard Component", () => {
     });
 
     it("shows PostgreSQL as the database card when it is the selected engine", async () => {
-      mockDatabaseSettings("adminer-5.4");
+      mockDatabaseSettings("adminer-6.2");
 
       render(<Dashboard />);
 

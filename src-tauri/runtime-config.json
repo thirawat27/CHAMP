@@ -327,14 +327,14 @@
           "url": "https://files.phpmyadmin.net/phpMyAdmin/5.2.3/phpMyAdmin-5.2.3-all-languages.zip"
         },
         {
-          "id": "adminer-5.4",
-          "version": "5.4.2",
+          "id": "adminer-6.2",
+          "version": "6.2.0",
           "selected": false,
-          "display_name": "Adminer 5.4.2",
+          "display_name": "Adminer 6.2.0",
           "eol": false,
           "lts": false,
           "checksum": null,
-          "url": "https://www.adminer.org/static/download/5.4.2/adminer-5.4.2.php"
+          "url": "https://www.adminer.org/static/download/6.2.0/adminer-6.2.0.php"
         }
       ]
     }

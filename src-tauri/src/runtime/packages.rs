@@ -476,31 +476,36 @@ pub async fn refresh_runtime_catalog() -> Result<PackagesConfig, String> {
         );
     }
 
+    // Anchor on the download link: the bare product name also matches the page
+    // title, and the next number after it was SVG path data ("6.5").
     if let Some(version) = fetch_version_from_text(
         &client,
         "https://www.phpmyadmin.net/downloads/",
-        "phpMyAdmin ",
+        PHPMYADMIN_VERSION_MARKER,
     )
     .await
     {
-        changed |= upsert_selected_single_url(
+        changed |= replace_database_tool(
             &mut config.binaries.phpmyadmin.versions,
+            "phpmyadmin",
             phpmyadmin_version(&version),
-            false,
         );
     }
 
+    // The version page is HTML with CSS in front of the number, so the marker
+    // must anchor on the download link; an empty marker picked "1.25" out of
+    // `font: 13px/1.25` and produced a dead download URL.
     if let Some(version) = fetch_version_from_text(
         &client,
         "https://www.adminer.org/version/?current=0&lang=en",
-        "",
+        ADMINER_VERSION_MARKER,
     )
     .await
     {
-        changed |= upsert_selected_single_url(
+        changed |= replace_database_tool(
             &mut config.binaries.phpmyadmin.versions,
+            "adminer",
             adminer_version(&version),
-            false,
         );
     }
 
@@ -684,37 +689,6 @@ fn selected_version(mut version: VersionInfo, selected: bool) -> VersionInfo {
     version
 }
 
-fn upsert_selected_single_url(
-    versions: &mut Vec<VersionInfoSingleUrl>,
-    next: VersionInfoSingleUrl,
-    select: bool,
-) -> bool {
-    let mut changed = false;
-    if select {
-        for version in versions.iter_mut() {
-            version.selected = false;
-        }
-    }
-
-    if let Some(existing) = versions.iter_mut().find(|version| version.id == next.id) {
-        if existing.version != next.version || existing.url != next.url {
-            changed = true;
-        }
-        *existing = VersionInfoSingleUrl {
-            selected: select || existing.selected,
-            ..next
-        };
-    } else {
-        versions.push(VersionInfoSingleUrl {
-            selected: select,
-            ..next
-        });
-        changed = true;
-    }
-
-    changed
-}
-
 fn version_major_minor(version: &str) -> String {
     let mut parts = version.split('.');
     match (parts.next(), parts.next()) {
@@ -807,6 +781,66 @@ fn phpmyadmin_version(version: &str) -> VersionInfoSingleUrl {
         checksum: None,
         url: format!("https://files.phpmyadmin.net/phpMyAdmin/{version}/phpMyAdmin-{version}-all-languages.zip"),
     }
+}
+
+/// Text right before the version number in phpMyAdmin's download links.
+const PHPMYADMIN_VERSION_MARKER: &str = "files.phpmyadmin.net/phpMyAdmin/";
+
+/// Text right before the version number on adminer.org's version page.
+const ADMINER_VERSION_MARKER: &str = "#download\" target=\"_blank\">";
+
+/// Keep exactly one release of a web database manager (`adminer` or
+/// `phpmyadmin`): it only ever offers the latest download, so older entries
+/// (and ones an earlier bad refresh wrote) point at dead URLs.
+fn replace_database_tool(
+    versions: &mut Vec<VersionInfoSingleUrl>,
+    family: &str,
+    next: VersionInfoSingleUrl,
+) -> bool {
+    let unchanged = {
+        let mut current = versions.iter().filter(|v| v.id.starts_with(family));
+        matches!(
+            (current.next(), current.next()),
+            (Some(only), None) if only.id == next.id && only.version == next.version && only.url == next.url
+        )
+    };
+    if unchanged {
+        return false;
+    }
+
+    let was_selected = versions
+        .iter()
+        .any(|version| version.id.starts_with(family) && version.selected);
+    versions.retain(|version| !version.id.starts_with(family));
+    versions.push(VersionInfoSingleUrl {
+        selected: was_selected,
+        ..next
+    });
+    true
+}
+
+/// Map a saved web-database-manager id onto the catalog.
+///
+/// The id carries the release (`adminer-5.4`), so it goes stale when the
+/// catalog moves on. The family (`adminer` / `phpmyadmin`) is what decides the
+/// database engine, so fall back to the same family's current entry.
+pub fn resolve_database_tool_id(id: &str) -> String {
+    resolve_tool_id_in(id, &get_available_packages().phpmyadmin)
+}
+
+fn resolve_tool_id_in(id: &str, tools: &[PhpMyAdminPackage]) -> String {
+    if tools.iter().any(|tool| tool.id == id) {
+        return id.to_string();
+    }
+    let family = if id.starts_with("adminer") {
+        "adminer"
+    } else {
+        "phpmyadmin"
+    };
+    tools
+        .iter()
+        .find(|tool| tool.id.starts_with(family))
+        .map_or_else(|| id.to_string(), |tool| tool.id.clone())
 }
 
 fn adminer_version(version: &str) -> VersionInfoSingleUrl {
@@ -1054,6 +1088,83 @@ mod tests {
             version_after_marker("version: none here", "version: "),
             None
         );
+    }
+
+    #[test]
+    fn adminer_version_ignores_digits_in_page_css() {
+        let page = "<style>body { font: 13px/1.25 Verdana; }</style>\
+                    <a href=\"../#download\" target=\"_blank\">6.2.0</a>";
+        assert_eq!(
+            version_after_marker(page, ADMINER_VERSION_MARKER),
+            Some("6.2.0".to_string())
+        );
+        // Page wording changed: no marker means no version, never a CSS number.
+        assert_eq!(
+            version_after_marker("<style>font: 13px/1.25</style>", ADMINER_VERSION_MARKER),
+            None
+        );
+    }
+
+    #[test]
+    fn phpmyadmin_version_ignores_svg_numbers() {
+        let page = "<title>Downloads · phpMyAdmin</title><path d=\"M11 6.5a.5.5\"/>\
+                    <a href=\"https://files.phpmyadmin.net/phpMyAdmin/5.2.3/phpMyAdmin-5.2.3.zip\">";
+        assert_eq!(
+            version_after_marker(page, PHPMYADMIN_VERSION_MARKER),
+            Some("5.2.3".to_string())
+        );
+    }
+
+    #[test]
+    fn replace_database_tool_keeps_a_single_current_release() {
+        let mut versions = vec![
+            phpmyadmin_version("5.2.3"),
+            adminer_version("5.4.2"),
+            adminer_version("1.25"),
+        ];
+
+        assert!(replace_database_tool(
+            &mut versions,
+            "adminer",
+            adminer_version("6.2.0")
+        ));
+        let adminers: Vec<_> = versions
+            .iter()
+            .filter(|v| v.id.starts_with("adminer"))
+            .collect();
+        assert_eq!(adminers.len(), 1);
+        assert_eq!(adminers[0].version, "6.2.0");
+        assert!(versions.iter().any(|v| v.id == "phpmyadmin-5.2"));
+
+        // Same release again is a no-op.
+        assert!(!replace_database_tool(
+            &mut versions,
+            "adminer",
+            adminer_version("6.2.0")
+        ));
+    }
+
+    #[test]
+    fn stale_database_tool_id_resolves_to_current_release() {
+        let tool = |id: &str| PhpMyAdminPackage {
+            id: id.to_string(),
+            version: String::new(),
+            display_name: String::new(),
+            url: String::new(),
+            eol: false,
+            lts: false,
+            recommended: false,
+        };
+        let catalog = [tool("phpmyadmin-5.2"), tool("adminer-6.2")];
+
+        assert_eq!(resolve_tool_id_in("adminer-5.4", &catalog), "adminer-6.2");
+        assert_eq!(resolve_tool_id_in("adminer-6.2", &catalog), "adminer-6.2");
+        assert_eq!(
+            resolve_tool_id_in("phpmyadmin-4.9", &catalog),
+            "phpmyadmin-5.2"
+        );
+        // No catalog match: the id is left alone.
+        assert_eq!(resolve_tool_id_in("adminer-5.4", &[]), "adminer-5.4");
     }
 
     #[test]

@@ -75,8 +75,8 @@ export const GUIDE_SECTIONS: GuideSection[] = [
             "Open CHAMP. The setup wizard appears; choose Get started."
           ),
           l(
-            "เลือกเวอร์ชัน PHP, เครื่องมือฐานข้อมูล (phpMyAdmin ใช้กับ MySQL, Adminer ใช้กับ PostgreSQL) และเวอร์ชันฐานข้อมูล ค่าเริ่มต้นคือเวอร์ชันล่าสุดเสมอ",
-            "Pick a PHP version, a database tool (phpMyAdmin uses MySQL, Adminer uses PostgreSQL), and a database version. The defaults are always the newest releases."
+            "เลือกเวอร์ชัน PHP, ฐานข้อมูล (MySQL หรือ PostgreSQL ทำหน้าที่เดียวกัน เลือกได้ตัวเดียว) และเวอร์ชันของมัน ตัวจัดการเว็บ (phpMyAdmin หรือ Adminer) จะตามมาเอง ค่าเริ่มต้นคือเวอร์ชันล่าสุดเสมอ",
+            "Pick a PHP version, a database (MySQL or PostgreSQL fill the same role; choose one), and its version. The web manager (phpMyAdmin or Adminer) follows automatically. The defaults are always the newest releases."
           ),
           l(
             "CHAMP ตรวจ library ที่ระบบต้องมี (สำคัญบน Linux) แล้วดาวน์โหลดทุกส่วนพร้อมกัน",
@@ -268,8 +268,8 @@ export const GUIDE_SECTIONS: GuideSection[] = [
       {
         kind: "p",
         text: l(
-          "เปลี่ยนเครื่องมือฐานข้อมูลใน Settings: phpMyAdmin ใช้คู่กับ MySQL และ Adminer ใช้คู่กับ PostgreSQL ถ้าตัวที่เลือกยังไม่ได้ติดตั้ง CHAMP จะดาวน์โหลดให้ตอนกดบันทึก",
-          "Switch the database tool in Settings: phpMyAdmin pairs with MySQL and Adminer with PostgreSQL. CHAMP downloads the selected one when you save if it is missing."
+          "สลับฐานข้อมูลได้จากการ์ดฐานข้อมูลบนหน้าหลัก (MySQL | PostgreSQL) หรือใน Settings ตัวจัดการเว็บจะเปลี่ยนตาม (MySQL ใช้ phpMyAdmin, PostgreSQL ใช้ Adminer) ถ้าตัวที่เลือกยังไม่ได้ติดตั้ง CHAMP จะดาวน์โหลดให้",
+          "Switch the database from the database card on the dashboard (MySQL | PostgreSQL) or in Settings. The web manager follows (phpMyAdmin for MySQL, Adminer for PostgreSQL). CHAMP downloads the selected one if it is missing."
         ),
       },
       {
