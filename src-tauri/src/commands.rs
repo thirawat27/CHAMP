@@ -994,50 +994,54 @@ pub async fn download_runtime_with_skip(
     Ok("Runtime binaries installed successfully".to_string())
 }
 
-/// Install the database engine that is not part of the selected stack.
+/// Choose which engine (`mysql` or `postgresql`) fills the stack's database role.
 ///
-/// Setup installs only the selected database, so the standby card on the
-/// dashboard offers this to add the other one later without switching tools.
+/// MySQL and PostgreSQL are interchangeable: the stack runs exactly one of
+/// them, and its web manager follows the engine (phpMyAdmin for MySQL, Adminer
+/// for PostgreSQL). The engine is installed on first use, and the stack is
+/// restarted onto it when it was running.
 #[tauri::command]
-pub async fn install_standby_database(app: AppHandle) -> Result<(), String> {
-    let settings = AppSettings::load();
-    let standby_tool_prefix = if settings.package_selection.phpmyadmin.starts_with("adminer") {
-        "phpmyadmin"
-    } else {
-        "adminer"
+pub async fn switch_database_engine(engine: String, app: AppHandle) -> Result<(), String> {
+    let tool_prefix = match engine.as_str() {
+        "mysql" => "phpmyadmin",
+        "postgresql" => "adminer",
+        other => return Err(format!("Unsupported database engine: {}", other)),
     };
-    let standby_tool_id = crate::runtime::packages::get_available_packages()
-        .phpmyadmin
-        .into_iter()
-        .find(|package| package.id.starts_with(standby_tool_prefix))
-        .map(|package| package.id)
-        .ok_or_else(|| format!("No {} package in the runtime catalog", standby_tool_prefix))?;
 
-    let mut selection = settings.package_selection;
-    selection.phpmyadmin = standby_tool_id.clone();
-    let downloader = RuntimeDownloader::with_packages(selection)
-        .allow_unverified_checksums(ALLOW_UNVERIFIED_RUNTIME_DOWNLOADS);
-    let runtime_dir = downloader.get_runtime_dir()?;
-    if is_selected_database_installed(&runtime_dir, &standby_tool_id) {
+    let mut settings = AppSettings::load();
+    if settings
+        .package_selection
+        .phpmyadmin
+        .starts_with(tool_prefix)
+    {
         return Ok(());
     }
 
-    // Only the database engine: the web stack and both database tools stay as they are.
-    downloader
-        .download_all_with_skip(
-            progress_emitter(&app),
-            &["caddy", "php", "adminer", "phpmyadmin"],
-        )
-        .await?;
+    settings.package_selection.phpmyadmin = crate::runtime::packages::get_available_packages()
+        .phpmyadmin
+        .into_iter()
+        .find(|package| package.id.starts_with(tool_prefix))
+        .map(|package| package.id)
+        .ok_or_else(|| format!("No {} package in the runtime catalog", tool_prefix))?;
 
-    if is_selected_database_installed(&runtime_dir, &standby_tool_id) {
+    ensure_selected_database_tool_installed(&settings, &app).await?;
+    settings.save()?;
+
+    run_with_manager(&app, move |manager| -> Result<(), String> {
+        let web_stack_was_running = manager.get_all_statuses().iter().any(|(ty, s)| {
+            matches!(ty, ServiceType::Caddy | ServiceType::PhpFpm)
+                && s.state == ServiceState::Running
+        });
+
+        // Stops the previous engine too, so only one database ever runs.
+        manager.stop_stack()?;
+        manager.update_ports(&settings);
+        if web_stack_was_running {
+            manager.start_all()?;
+        }
         Ok(())
-    } else {
-        Err(format!(
-            "The database was downloaded, but CHAMP could not find its files in {}",
-            runtime_dir.display()
-        ))
-    }
+    })
+    .await?
 }
 
 /// Check system dependencies (libraries required by runtime binaries)

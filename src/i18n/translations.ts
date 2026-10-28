@@ -87,12 +87,11 @@ export interface Translations {
   requestPath: string;
   browser: string;
   shortcuts: string;
-  notInStack: string;
-  notInstalled: string;
-  standbyNotInstalled: string;
-  installingDatabase: string;
-  databaseInstalled: string;
-  failedToInstallDatabase: string;
+  databaseEngine: string;
+  databaseManagerAuto: string;
+  switchingDatabase: string;
+  databaseSwitched: string;
+  failedToSwitchDatabase: string;
   agentActivityTitle: string;
   agentActivityDone: string;
   updateAvailableTitle: string;
@@ -412,12 +411,11 @@ const th: Translations = {
   requestPath: "เส้นทาง request",
   browser: "เบราว์เซอร์",
   shortcuts: "ทางลัด",
-  notInStack: "ไม่ได้ใช้ใน stack ปัจจุบัน เปลี่ยนเครื่องมือฐานข้อมูลใน Settings เพื่อใช้ตัวนี้",
-  notInstalled: "ยังไม่ติดตั้ง",
-  standbyNotInstalled: "ยังไม่ได้ติดตั้งตอน setup กดติดตั้งเพื่อใช้งานควบคู่กับ stack ปัจจุบันได้",
-  installingDatabase: "กำลังติดตั้ง {name}",
-  databaseInstalled: "ติดตั้ง {name} เรียบร้อย",
-  failedToInstallDatabase: "ติดตั้ง {name} ไม่สำเร็จ",
+  databaseEngine: "ฐานข้อมูล",
+  databaseManagerAuto: "ตัวจัดการเว็บ {tool} จะเปลี่ยนตามฐานข้อมูลที่เลือกโดยอัตโนมัติ",
+  switchingDatabase: "กำลังเปลี่ยนไปใช้ {name}",
+  databaseSwitched: "ใช้ {name} เป็นฐานข้อมูลแล้ว",
+  failedToSwitchDatabase: "เปลี่ยนไปใช้ {name} ไม่สำเร็จ",
   agentActivityTitle: "AI agent สั่งงาน CHAMP",
   agentActivityDone: "{action}: {target}",
   updateAvailableTitle: "CHAMP v{version} พร้อมติดตั้ง",
@@ -747,12 +745,11 @@ const en: Translations = {
   requestPath: "Request path",
   browser: "Browser",
   shortcuts: "Shortcuts",
-  notInStack: "Not part of the current stack. Switch the database tool in Settings to use it.",
-  notInstalled: "Not installed",
-  standbyNotInstalled: "Skipped during setup. Install it to run alongside the current stack.",
-  installingDatabase: "Installing {name}",
-  databaseInstalled: "{name} installed",
-  failedToInstallDatabase: "Failed to install {name}",
+  databaseEngine: "Database",
+  databaseManagerAuto: "The web manager ({tool}) follows the selected database automatically.",
+  switchingDatabase: "Switching to {name}",
+  databaseSwitched: "{name} is now the database",
+  failedToSwitchDatabase: "Failed to switch to {name}",
   agentActivityTitle: "AI agent used CHAMP",
   agentActivityDone: "{action}: {target}",
   updateAvailableTitle: "CHAMP v{version} is available",

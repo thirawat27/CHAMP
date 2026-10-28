@@ -19,15 +19,19 @@ import {
 import { useCallback, useEffect, useState } from "react";
 import {
   AppSettings,
+  DATABASE_ENGINES,
+  DATABASE_ENGINE_NAMES,
   DEFAULT_PORTS,
+  DatabaseEngine,
   DownloadProgress,
   InstalledPhpVersion,
   PackagesConfig,
   PackageSelection,
   ServiceType,
   EMPTY_PACKAGE_SELECTION,
+  databaseToolIdForEngine,
+  getDatabaseEngine,
   hasPackageUrlForPlatform,
-  isAdminerSelected,
 } from "../types/services";
 import { formatModelSize, useLogDoctorModel } from "../hooks/useLogDoctorModel";
 import { useLanguageStore, useTranslation } from "../stores/languageStore";
@@ -243,7 +247,10 @@ export function SettingsPanel({ onClose, onSettingsChanged, ...props }: Settings
     }));
   };
 
-  const updateSelectedDatabaseTool = (toolId: string) => {
+  // The engine is the choice; its web manager follows automatically.
+  const updateSelectedDatabaseEngine = (engine: DatabaseEngine) => {
+    const toolId = databaseToolIdForEngine(engine, packages?.phpmyadmin ?? []);
+    if (!toolId) return;
     setSettings((current) => ({
       ...current,
       package_selection: {
@@ -293,9 +300,10 @@ export function SettingsPanel({ onClose, onSettingsChanged, ...props }: Settings
   const availablePhpIds = new Set(availablePhpPackages.map((pkg) => pkg.id));
   const visiblePhpVersions = phpVersions.filter((php) => availablePhpIds.has(php.id));
   const selectedPhp = phpVersions.find((php) => php.id === selectedPhpId);
-  const selectedDatabaseToolId =
-    settings.package_selection?.phpmyadmin ?? defaultPackageSelection.phpmyadmin;
-  const activeDatabaseName = isAdminerSelected(settings.package_selection) ? "PostgreSQL" : "MySQL";
+  const selectedDatabaseEngine = getDatabaseEngine(
+    settings.package_selection ?? defaultPackageSelection
+  );
+  const activeDatabaseName = DATABASE_ENGINE_NAMES[selectedDatabaseEngine];
   const doctorModelStatus = doctorModel.status;
   const doctorModelDownloading = doctorModel.progress !== null;
 
@@ -514,23 +522,29 @@ export function SettingsPanel({ onClose, onSettingsChanged, ...props }: Settings
 
               <div className="settings-section">
                 <h3>
-                  <Database size={16} /> {t.databaseToolSelect}
+                  <Database size={16} /> {t.databaseEngine}
                 </h3>
                 <label className="project-row">
-                  <span>{t.webDatabaseManager}</span>
+                  <span>{t.databaseEngine}</span>
                   <select
                     className="input"
-                    value={selectedDatabaseToolId}
-                    onChange={(event) => updateSelectedDatabaseTool(event.target.value)}
+                    value={selectedDatabaseEngine}
+                    onChange={(event) =>
+                      updateSelectedDatabaseEngine(event.target.value as DatabaseEngine)
+                    }
                   >
-                    {(packages?.phpmyadmin ?? []).map((pkg) => (
-                      <option key={pkg.id} value={pkg.id}>
-                        {pkg.display_name}
+                    {DATABASE_ENGINES.map((engine) => (
+                      <option key={engine} value={engine}>
+                        {DATABASE_ENGINE_NAMES[engine]}
                       </option>
                     ))}
                   </select>
                   <small>
-                    {t.databaseUsedWhenStartingStack.replace("{name}", activeDatabaseName)}
+                    {t.databaseUsedWhenStartingStack.replace("{name}", activeDatabaseName)}{" "}
+                    {t.databaseManagerAuto.replace(
+                      "{tool}",
+                      selectedDatabaseEngine === "postgresql" ? "Adminer" : "phpMyAdmin"
+                    )}
                   </small>
                 </label>
               </div>

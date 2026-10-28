@@ -83,10 +83,11 @@ describe("Dashboard Component", () => {
       expect(screen.getByTestId("service-card-caddy")).toBeInTheDocument();
       expect(screen.getByTestId("service-card-php-fpm")).toBeInTheDocument();
       expect(screen.getByTestId("service-card-mysql")).toBeInTheDocument();
-      expect(screen.getByTestId("service-card-postgresql")).toBeInTheDocument();
+      // MySQL and PostgreSQL fill one database role, so only one card shows.
+      expect(screen.queryByTestId("service-card-postgresql")).not.toBeInTheDocument();
     });
 
-    it("offers to install the standby database when setup skipped it", async () => {
+    const mockDatabaseSettings = (phpmyadmin: string) => {
       vi.mocked(invoke).mockImplementation(async (cmd: string) => {
         switch (cmd) {
           case "get_all_statuses":
@@ -95,26 +96,51 @@ describe("Dashboard Component", () => {
             return mockAppPaths;
           case "get_installed_versions":
             return { mysql: "9.7.4", phpmyadmin: "5.2.3" };
+          case "get_settings":
+            return {
+              web_port: 8080,
+              php_port: 9000,
+              mysql_port: 3306,
+              postgresql_port: 5432,
+              auto_start_services: false,
+              auto_check_updates: false,
+              package_selection: {
+                php: "php-8.5",
+                mysql: "mysql-9.7",
+                postgresql: "postgresql-18",
+                phpmyadmin,
+              },
+            };
           case "get_system_metrics":
             return mockSystemMetrics;
           default:
             return {};
         }
       });
+    };
+
+    it("switches the database engine from the database card", async () => {
+      mockDatabaseSettings("phpmyadmin-5.2");
 
       render(<Dashboard />);
 
-      await waitFor(() => {
-        expect(screen.getByTestId("service-card-mysql")).toBeInTheDocument();
-      });
-      const installButton = await screen.findByTestId("install-button-postgresql");
-      expect(screen.queryByTestId("start-button-postgresql")).not.toBeInTheDocument();
+      const postgres = await screen.findByTestId("engine-option-postgresql");
+      expect(screen.getByTestId("engine-option-mysql")).toBeDisabled();
 
-      fireEvent.click(installButton);
+      fireEvent.click(postgres);
 
       await waitFor(() => {
-        expect(invoke).toHaveBeenCalledWith("install_standby_database");
+        expect(invoke).toHaveBeenCalledWith("switch_database_engine", { engine: "postgresql" });
       });
+    });
+
+    it("shows PostgreSQL as the database card when it is the selected engine", async () => {
+      mockDatabaseSettings("adminer-5.4");
+
+      render(<Dashboard />);
+
+      expect(await screen.findByTestId("service-card-postgresql")).toBeInTheDocument();
+      expect(screen.queryByTestId("service-card-mysql")).not.toBeInTheDocument();
     });
 
     it("should fetch service statuses on mount", async () => {
@@ -481,7 +507,6 @@ describe("Dashboard Component", () => {
         expect(screen.getByTestId("service-state-caddy")).toHaveTextContent("Running");
         expect(screen.getByTestId("service-state-php-fpm")).toHaveTextContent("Running");
         expect(screen.getByTestId("service-state-mysql")).toHaveTextContent("Running");
-        expect(screen.getByTestId("service-state-postgresql")).toHaveTextContent("Running");
       });
     });
   });

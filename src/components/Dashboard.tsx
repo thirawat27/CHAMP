@@ -41,12 +41,15 @@ import {
   AgentActivity,
   AppSettings,
   DEFAULT_PORTS,
+  DATABASE_ENGINE_NAMES,
+  DATABASE_ENGINE_SERVICES,
+  DatabaseEngine,
   DownloadProgress,
   InstalledPhpVersion,
   SERVICE_DISPLAY_NAMES,
   ServiceState,
   ServiceType,
-  isAdminerSelected as isAdminerSelection,
+  getDatabaseEngine,
 } from "../types/services";
 import { useServices } from "../hooks/useServices";
 import { useHttpsTunnel } from "../hooks/useHttpsTunnel";
@@ -57,7 +60,7 @@ import { GuideModal } from "./GuideModal";
 import { HelpModal } from "./HelpModal";
 import { LanguageSelector } from "./LanguageSelector";
 import { LogDoctorModal } from "./LogDoctorModal";
-import { ServiceCard } from "./ServiceCard";
+import { EngineSwitch, ServiceCard } from "./ServiceCard";
 import { SettingsPanel } from "./SettingsPanel";
 import { StatusBar } from "./StatusBar";
 
@@ -96,7 +99,8 @@ export function Dashboard() {
   const [doctorService, setDoctorService] = useState<ServiceType | null>(null);
   const [phpUpdate, setPhpUpdate] = useState<InstalledPhpVersion | null>(null);
   const [phpUpdating, setPhpUpdating] = useState(false);
-  const [standbyInstallPercent, setStandbyInstallPercent] = useState<number | null>(null);
+  const [switchingEngine, setSwitchingEngine] = useState<DatabaseEngine | null>(null);
+  const [switchPercent, setSwitchPercent] = useState(0);
 
   const { notice, notify, dismiss } = useToast();
   const updatePhase = useUpdateStore((state) => state.phase);
@@ -216,27 +220,30 @@ export function Dashboard() {
     }
   };
 
-  const installStandbyDatabase = async (serviceType: ServiceType) => {
-    const name = SERVICE_DISPLAY_NAMES[serviceType];
-    setStandbyInstallPercent(0);
+  // MySQL and PostgreSQL fill one database role; switching installs the chosen
+  // engine on first use and moves the stack onto it.
+  const switchDatabaseEngine = async (engine: DatabaseEngine) => {
+    const name = DATABASE_ENGINE_NAMES[engine];
+    setSwitchingEngine(engine);
+    setSwitchPercent(0);
     const unlisten = listenIfTauri<DownloadProgress>("download-progress", (event) => {
-      setStandbyInstallPercent(event.payload.percent);
+      setSwitchPercent(event.payload.percent);
     });
-    notify({ tone: "info", title: t.installingDatabase.replace("{name}", name), message: "" });
+    notify({ tone: "info", title: t.switchingDatabase.replace("{name}", name), message: "" });
     try {
-      await invoke("install_standby_database");
-      notify({ tone: "success", title: t.databaseInstalled.replace("{name}", name), message: "" });
-      refreshMetadata();
-      refreshStatuses();
+      await invoke("switch_database_engine", { engine });
+      notify({ tone: "success", title: t.databaseSwitched.replace("{name}", name), message: "" });
     } catch (error) {
       notify({
         tone: "error",
-        title: t.failedToInstallDatabase.replace("{name}", name),
+        title: t.failedToSwitchDatabase.replace("{name}", name),
         message: String(error),
       });
     } finally {
       unlisten.then((dispose) => dispose());
-      setStandbyInstallPercent(null);
+      setSwitchingEngine(null);
+      refreshMetadata();
+      refreshStatuses();
     }
   };
 
@@ -270,7 +277,8 @@ export function Dashboard() {
 
   const caddyPort = serviceMap[ServiceType.Caddy]?.port || DEFAULT_PORTS[ServiceType.Caddy];
   const webServerUrl = `http://localhost:${caddyPort}`;
-  const isAdminerSelected = isAdminerSelection(packageSelection);
+  const databaseEngine = getDatabaseEngine(packageSelection);
+  const isAdminerSelected = databaseEngine === "postgresql";
   const databaseToolName = isAdminerSelected ? "Adminer" : "phpMyAdmin";
   const databaseToolUrl = `${webServerUrl}/${isAdminerSelected ? "adminer" : "phpmyadmin"}`;
 
@@ -467,11 +475,16 @@ export function Dashboard() {
   }));
   const stackState = allRunning ? "running" : runningCount > 0 ? "partial" : "stopped";
   const stackStateLabel = allRunning ? t.running : runningCount > 0 ? t.active : t.stopped;
-  const standbyDatabase = isAdminerSelected ? ServiceType.MySQL : ServiceType.PostgreSQL;
-  // Setup installs only the selected database; until the standby one is
-  // installed its card offers an install instead of a start.
-  const standbyInstalled = Boolean(installedVersions[standbyDatabase]);
-  const orderedServices = [...stackServiceTypes, standbyDatabase];
+  const engineSwitch: EngineSwitch = {
+    value: databaseEngine,
+    installed: {
+      mysql: Boolean(installedVersions.mysql),
+      postgresql: Boolean(installedVersions.postgresql),
+    },
+    switching: switchingEngine,
+    percent: switchPercent,
+    onChange: switchDatabaseEngine,
+  };
   const updateInstalling = updatePhase === "installing";
 
   return (
@@ -723,26 +736,22 @@ export function Dashboard() {
 
         <div className="workspace-grid">
           <section className="service-grid" aria-label={t.services}>
-            {orderedServices.map((serviceType) => {
+            {stackServiceTypes.map((serviceType) => {
               const service = serviceMap[serviceType];
               if (!service) return null;
+              const isDatabase = serviceType === DATABASE_ENGINE_SERVICES[databaseEngine];
               const busyServiceCommand = busy?.endsWith(serviceType)
                 ? (busy.split(":")[0] as ServiceCommand)
                 : null;
               return (
                 <ServiceCard
-                  key={serviceType}
+                  // One card for the database role, whichever engine fills it.
+                  key={isDatabase ? "database" : serviceType}
                   serviceType={serviceType}
                   state={service.state}
                   port={service.port}
                   error={service.error_message}
-                  standby={serviceType === standbyDatabase}
-                  onInstall={
-                    serviceType === standbyDatabase && !standbyInstalled
-                      ? () => installStandbyDatabase(serviceType)
-                      : undefined
-                  }
-                  installPercent={serviceType === standbyDatabase ? standbyInstallPercent : null}
+                  engineSwitch={isDatabase ? engineSwitch : undefined}
                   busy={Boolean(busyServiceCommand)}
                   busyLabel={
                     busyServiceCommand

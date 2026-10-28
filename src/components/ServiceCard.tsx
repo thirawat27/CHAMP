@@ -20,7 +20,10 @@ import {
 import { useTranslation } from "../stores/languageStore";
 import { AudioManager } from "../utils/audioManager";
 import {
+  DATABASE_ENGINES,
+  DATABASE_ENGINE_NAMES,
   DEFAULT_PORTS,
+  DatabaseEngine,
   SERVICE_DESCRIPTIONS,
   SERVICE_DISPLAY_NAMES,
   ServiceState,
@@ -34,6 +37,18 @@ const SERVICE_ICONS = {
   [ServiceType.PostgreSQL]: Database,
 };
 
+/** Lets the database card choose which engine fills the database role. */
+export interface EngineSwitch {
+  value: DatabaseEngine;
+  /** Whether each engine's runtime is already on disk */
+  installed: Record<DatabaseEngine, boolean>;
+  /** Engine being switched to, while the switch (and any download) runs */
+  switching: DatabaseEngine | null;
+  /** Download progress (0-100) of the engine being switched to */
+  percent: number;
+  onChange: (engine: DatabaseEngine) => void;
+}
+
 interface ServiceCardProps {
   serviceType: ServiceType;
   state: ServiceState;
@@ -43,12 +58,8 @@ interface ServiceCardProps {
   busy?: boolean;
   /** Label to show when busy (e.g., "Starting...", "Stopping...") */
   busyLabel?: string;
-  /** True for the database that is not part of the selected stack */
-  standby?: boolean;
-  /** Install the runtime first; replaces the start control while set */
-  onInstall?: () => void;
-  /** Download progress (0-100) while onInstall is running */
-  installPercent?: number | null;
+  /** Present on the database card only */
+  engineSwitch?: EngineSwitch;
   onStart: () => void;
   onStop: () => void;
   onRestart: () => void;
@@ -74,9 +85,7 @@ export function ServiceCard({
   error,
   busy = false,
   busyLabel,
-  standby = false,
-  onInstall,
-  installPercent = null,
+  engineSwitch,
   onStart,
   onStop,
   onRestart,
@@ -87,12 +96,14 @@ export function ServiceCard({
   const address = serviceAddress(serviceType, port);
   const Icon = SERVICE_ICONS[serviceType];
   const isRunning = state === ServiceState.Running;
+  const switching = engineSwitch?.switching ?? null;
   const isTransitioning =
-    busy || state === ServiceState.Starting || state === ServiceState.Stopping;
+    busy ||
+    switching !== null ||
+    state === ServiceState.Starting ||
+    state === ServiceState.Stopping;
   const isError = state === ServiceState.Error;
   const actionLabel = busyLabel || (state === ServiceState.Stopping ? t.stopping : t.starting);
-  const needsInstall = Boolean(onInstall) && !isRunning;
-  const installing = installPercent !== null;
 
   const stateLabels: Record<ServiceState, string> = {
     [ServiceState.Stopped]: t.stopped,
@@ -104,7 +115,7 @@ export function ServiceCard({
 
   return (
     <article
-      className={`service-card state-${state}${standby ? " is-standby" : ""}`}
+      className={`service-card state-${state}`}
       data-testid={`service-card-${serviceType}`}
       {...props}
     >
@@ -118,9 +129,41 @@ export function ServiceCard({
           <p>{SERVICE_DESCRIPTIONS[serviceType]}</p>
         </div>
         <span className={`status-pill ${state}`} data-testid={`service-state-${serviceType}`}>
-          {needsInstall ? t.notInstalled : stateLabels[state]}
+          {stateLabels[state]}
         </span>
       </header>
+
+      {engineSwitch && (
+        <div className="engine-switch" role="radiogroup" aria-label={t.databaseEngine}>
+          {DATABASE_ENGINES.map((engine) => {
+            const selected = engineSwitch.value === engine;
+            const pending = switching === engine;
+            return (
+              <button
+                key={engine}
+                type="button"
+                role="radio"
+                aria-checked={selected}
+                className={`engine-option${selected ? " selected" : ""}${pending ? " pending" : ""}`}
+                disabled={selected || switching !== null}
+                data-testid={`engine-option-${engine}`}
+                onClick={() => {
+                  AudioManager.playClick();
+                  engineSwitch.onChange(engine);
+                }}
+              >
+                {pending ? (
+                  <LoaderCircle size={13} className="spin-icon" />
+                ) : !selected && !engineSwitch.installed[engine] ? (
+                  <Download size={13} />
+                ) : null}
+                {DATABASE_ENGINE_NAMES[engine]}
+                {pending && engineSwitch.percent > 0 ? ` ${engineSwitch.percent}%` : ""}
+              </button>
+            );
+          })}
+        </div>
+      )}
 
       <div className="service-readout">
         <span className="readout-label">{t.port}</span>
@@ -145,10 +188,6 @@ export function ServiceCard({
         )}
       </div>
 
-      {standby && !isRunning && (
-        <p className="service-standby">{needsInstall ? t.standbyNotInstalled : t.notInStack}</p>
-      )}
-
       {isError && error && (
         <div className="service-error" title={error}>
           {error.length > 180 ? `${error.substring(0, 180)}…` : error}
@@ -170,25 +209,7 @@ export function ServiceCard({
             {t.diagnose}
           </button>
         )}
-        {needsInstall ? (
-          <button
-            type="button"
-            onClick={() => {
-              AudioManager.playClick();
-              onInstall?.();
-            }}
-            disabled={installing}
-            className="btn-start"
-            data-testid={`install-button-${serviceType}`}
-          >
-            {installing ? (
-              <LoaderCircle size={15} className="spin-icon" />
-            ) : (
-              <Download size={15} />
-            )}
-            {installing ? `${installPercent}%` : t.install}
-          </button>
-        ) : !isRunning ? (
+        {!isRunning ? (
           <button
             type="button"
             onClick={() => {

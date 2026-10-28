@@ -682,13 +682,59 @@ button:disabled {
   border-color: color-mix(in srgb, var(--color-error) 45%, var(--border-color));
 }
 
-.service-card.is-standby:not(.state-running) {
-  opacity: 0.62;
-  box-shadow: none;
+/* Engine picker on the database card: MySQL and PostgreSQL are one role. */
+.engine-switch {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px;
+  padding: 3px;
+  border-radius: var(--radius);
+  background: var(--bg-sunken);
 }
 
-.service-card.is-standby:hover {
+.engine-option {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 30px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: calc(var(--radius) - 3px);
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition:
+    background-color 0.2s var(--ease),
+    color 0.2s var(--ease),
+    box-shadow 0.2s var(--ease);
+}
+
+.engine-option:hover:not(:disabled) {
+  background: var(--bg-card-secondary);
+  color: var(--text-primary);
+}
+
+.engine-option.selected {
+  background: var(--color-primary);
+  color: var(--color-primary-ink);
+  box-shadow: 0 2px 8px color-mix(in srgb, var(--color-primary) 35%, transparent);
+  cursor: default;
+}
+
+.engine-option.selected:disabled {
   opacity: 1;
+}
+
+.engine-option.pending {
+  color: var(--color-primary);
+}
+
+.engine-option:disabled:not(.selected) {
+  cursor: progress;
+  opacity: 0.7;
 }
 
 .service-card-header {
@@ -790,11 +836,6 @@ button:disabled {
   text-decoration: underline;
   text-decoration-color: color-mix(in srgb, var(--color-accent) 40%, transparent);
   text-underline-offset: 3px;
-}
-
-.service-standby {
-  color: var(--text-secondary);
-  font-size: 12px;
 }
 
 .service-error {

@@ -5,10 +5,13 @@ import {
   PackageSelection,
   PhpPackage,
   MySQLPackage,
-  PhpMyAdminPackage,
+  DATABASE_ENGINES,
+  DATABASE_ENGINE_NAMES,
+  DatabaseEngine,
   EMPTY_PACKAGE_SELECTION,
+  databaseToolIdForEngine,
+  getDatabaseEngine,
   hasPackageUrlForPlatform,
-  isAdminerSelected,
 } from "../types/services";
 import { useTranslation } from "../stores/languageStore";
 
@@ -123,8 +126,10 @@ export function PackageSelector({ onSelectionChange, initialSelection }: Package
     setSelection({ ...selection, postgresql: value });
   };
 
-  const handleDatabaseToolChange = (value: string) => {
-    setSelection({ ...selection, phpmyadmin: value });
+  // The engine is the choice; its web manager follows automatically.
+  const handleDatabaseEngineChange = (engine: DatabaseEngine) => {
+    const toolId = databaseToolIdForEngine(engine, packages?.phpmyadmin ?? []);
+    if (toolId) setSelection({ ...selection, phpmyadmin: toolId });
   };
 
   if (loading) {
@@ -159,8 +164,9 @@ export function PackageSelector({ onSelectionChange, initialSelection }: Package
   const availablePostgreSQLPackages = packages.postgresql.filter((pkg) =>
     hasPackageUrlForPlatform(pkg, runtimePlatformKey)
   );
-  const adminerSelected = isAdminerSelected(selection);
-  const activeDatabaseName = adminerSelected ? "PostgreSQL" : "MySQL";
+  const databaseEngine = getDatabaseEngine(selection);
+  const adminerSelected = databaseEngine === "postgresql";
+  const activeDatabaseName = DATABASE_ENGINE_NAMES[databaseEngine];
   const activeDatabasePackages = adminerSelected
     ? availablePostgreSQLPackages
     : availableMysqlPackages;
@@ -194,15 +200,16 @@ export function PackageSelector({ onSelectionChange, initialSelection }: Package
         </select>
       </div>
 
-      {/* Database Tool Selector */}
+      {/* Database engine: MySQL and PostgreSQL fill the same role */}
       <div style={{ display: "flex", flexDirection: "column", gap: "0.25rem" }}>
         <label style={{ fontSize: "0.875rem", fontWeight: 500, color: "var(--text-primary)" }}>
-          {t.databaseTool}
+          {t.databaseEngine}
         </label>
         <select
-          value={selection.phpmyadmin}
-          onChange={(e) => handleDatabaseToolChange(e.target.value)}
+          value={databaseEngine}
+          onChange={(e) => handleDatabaseEngineChange(e.target.value as DatabaseEngine)}
           className="input"
+          data-testid="database-engine-select"
           style={{
             cursor: "pointer",
             padding: "0.375rem 0.5rem",
@@ -210,12 +217,15 @@ export function PackageSelector({ onSelectionChange, initialSelection }: Package
             width: "100%",
           }}
         >
-          {packages.phpmyadmin.map((pkg: PhpMyAdminPackage) => (
-            <option key={pkg.id} value={pkg.id}>
-              {pkg.display_name}
+          {DATABASE_ENGINES.map((engine) => (
+            <option key={engine} value={engine}>
+              {DATABASE_ENGINE_NAMES[engine]}
             </option>
           ))}
         </select>
+        <small style={{ color: "var(--text-secondary)" }}>
+          {t.databaseManagerAuto.replace("{tool}", adminerSelected ? "Adminer" : "phpMyAdmin")}
+        </small>
       </div>
 
       {/* Active Database Version Selector */}

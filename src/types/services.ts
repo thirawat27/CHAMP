@@ -130,6 +130,36 @@ export const isAdminerSelected = (
   selection?: Pick<PackageSelection, "phpmyadmin"> | null
 ): boolean => selection?.phpmyadmin?.startsWith("adminer") ?? false;
 
+/**
+ * MySQL and PostgreSQL fill the same "database" role of the stack; the user
+ * picks one. Its web manager follows the engine, so the engine is stored as
+ * that manager's package id (phpMyAdmin for MySQL, Adminer for PostgreSQL).
+ */
+export type DatabaseEngine = "mysql" | "postgresql";
+
+export const DATABASE_ENGINES: readonly DatabaseEngine[] = ["mysql", "postgresql"];
+
+export const DATABASE_ENGINE_NAMES: Record<DatabaseEngine, string> = {
+  mysql: "MySQL",
+  postgresql: "PostgreSQL",
+};
+
+export const DATABASE_ENGINE_SERVICES: Record<DatabaseEngine, ServiceType> = {
+  mysql: ServiceType.MySQL,
+  postgresql: ServiceType.PostgreSQL,
+};
+
+export const getDatabaseEngine = (
+  selection?: Pick<PackageSelection, "phpmyadmin"> | null
+): DatabaseEngine => (isAdminerSelected(selection) ? "postgresql" : "mysql");
+
+/** Package id of the web database manager that goes with an engine. */
+export const databaseToolIdForEngine = (
+  engine: DatabaseEngine,
+  tools: readonly Pick<PhpMyAdminPackage, "id">[]
+): string | undefined =>
+  tools.find((tool) => tool.id.startsWith(engine === "postgresql" ? "adminer" : "phpmyadmin"))?.id;
+
 export const getActiveDatabaseService = (
   selection?: Pick<PackageSelection, "phpmyadmin"> | null
 ): ServiceType => (isAdminerSelected(selection) ? ServiceType.PostgreSQL : ServiceType.MySQL);
