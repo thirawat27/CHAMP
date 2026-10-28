@@ -7,11 +7,17 @@ import {
   MySQLPackage,
   DATABASE_ENGINES,
   DATABASE_ENGINE_NAMES,
+  DATABASE_TOOLS,
+  DATABASE_TOOL_NAMES,
   DatabaseEngine,
+  DatabaseTool,
   EMPTY_PACKAGE_SELECTION,
-  databaseToolIdForEngine,
+  databaseToolSupportsEngine,
   getDatabaseEngine,
+  getDatabaseTool,
   hasPackageUrlForPlatform,
+  selectionWithEngine,
+  selectionWithTool,
 } from "../types/services";
 import { useTranslation } from "../stores/languageStore";
 
@@ -126,10 +132,14 @@ export function PackageSelector({ onSelectionChange, initialSelection }: Package
     setSelection({ ...selection, postgresql: value });
   };
 
-  // The engine is the choice; its web manager follows automatically.
+  // PostgreSQL moves a phpMyAdmin selection onto Adminer; otherwise the
+  // manager is kept.
   const handleDatabaseEngineChange = (engine: DatabaseEngine) => {
-    const toolId = databaseToolIdForEngine(engine, packages?.phpmyadmin ?? []);
-    if (toolId) setSelection({ ...selection, phpmyadmin: toolId });
+    setSelection(selectionWithEngine(selection, engine, packages?.phpmyadmin ?? []));
+  };
+
+  const handleDatabaseToolChange = (tool: DatabaseTool) => {
+    setSelection(selectionWithTool(selection, tool, packages?.phpmyadmin ?? []));
   };
 
   if (loading) {
@@ -165,13 +175,14 @@ export function PackageSelector({ onSelectionChange, initialSelection }: Package
     hasPackageUrlForPlatform(pkg, runtimePlatformKey)
   );
   const databaseEngine = getDatabaseEngine(selection);
-  const adminerSelected = databaseEngine === "postgresql";
+  const databaseTool = getDatabaseTool(selection);
+  const postgresqlSelected = databaseEngine === "postgresql";
   const activeDatabaseName = DATABASE_ENGINE_NAMES[databaseEngine];
-  const activeDatabasePackages = adminerSelected
+  const activeDatabasePackages = postgresqlSelected
     ? availablePostgreSQLPackages
     : availableMysqlPackages;
-  const activeDatabaseValue = adminerSelected ? selection.postgresql : selection.mysql;
-  const handleActiveDatabaseChange = adminerSelected ? handlePostgreSQLChange : handleMySQLChange;
+  const activeDatabaseValue = postgresqlSelected ? selection.postgresql : selection.mysql;
+  const handleActiveDatabaseChange = postgresqlSelected ? handlePostgreSQLChange : handleMySQLChange;
   const selectedPhpPackage = availablePhpPackages.find((pkg) => pkg.id === selection.php);
 
   return (
@@ -223,9 +234,34 @@ export function PackageSelector({ onSelectionChange, initialSelection }: Package
             </option>
           ))}
         </select>
-        <small style={{ color: "var(--text-secondary)" }}>
-          {t.databaseManagerAuto.replace("{tool}", adminerSelected ? "Adminer" : "phpMyAdmin")}
-        </small>
+      </div>
+
+      {/* Web database manager: phpMyAdmin is MySQL-only, Adminer serves both */}
+      <div style={{ display: "flex", flexDirection: "column", gap: "0.25rem" }}>
+        <label style={{ fontSize: "0.875rem", fontWeight: 500, color: "var(--text-primary)" }}>
+          {t.databaseManager}
+        </label>
+        <select
+          value={databaseTool}
+          onChange={(e) => handleDatabaseToolChange(e.target.value as DatabaseTool)}
+          className="input"
+          data-testid="database-tool-select"
+          style={{
+            cursor: "pointer",
+            padding: "0.375rem 0.5rem",
+            fontSize: "0.875rem",
+            width: "100%",
+          }}
+        >
+          {DATABASE_TOOLS.filter((tool) => databaseToolSupportsEngine(tool, databaseEngine)).map(
+            (tool) => (
+              <option key={tool} value={tool}>
+                {DATABASE_TOOL_NAMES[tool]}
+              </option>
+            )
+          )}
+        </select>
+        <small style={{ color: "var(--text-secondary)" }}>{t.databaseManagerNote}</small>
       </div>
 
       {/* Active Database Version Selector */}
@@ -258,7 +294,7 @@ export function PackageSelector({ onSelectionChange, initialSelection }: Package
           style={{ fontSize: "0.875rem", color: "var(--text-secondary)", margin: "0 0 0.375rem 0" }}
         >
           <strong>{t.wizardDefault}:</strong> {selectedPhpPackage?.display_name || "PHP"},{" "}
-          {activeDatabaseName}, {adminerSelected ? "Adminer" : "phpMyAdmin"}
+          {activeDatabaseName}, {postgresqlSelected ? "Adminer" : "phpMyAdmin"}
         </p>
         <p style={{ fontSize: "0.875rem", color: "var(--text-secondary)", margin: 0 }}>
           <strong>{t.wizardNote}:</strong> {t.wizardEolNote}

@@ -22,8 +22,12 @@ import { AudioManager } from "../utils/audioManager";
 import {
   DATABASE_ENGINES,
   DATABASE_ENGINE_NAMES,
+  DATABASE_TOOLS,
+  DATABASE_TOOL_NAMES,
   DEFAULT_PORTS,
   DatabaseEngine,
+  DatabaseTool,
+  databaseToolSupportsEngine,
   SERVICE_DESCRIPTIONS,
   SERVICE_DISPLAY_NAMES,
   ServiceState,
@@ -37,16 +41,74 @@ const SERVICE_ICONS = {
   [ServiceType.PostgreSQL]: Database,
 };
 
-/** Lets the database card choose which engine fills the database role. */
-export interface EngineSwitch {
-  value: DatabaseEngine;
-  /** Whether each engine's runtime is already on disk */
-  installed: Record<DatabaseEngine, boolean>;
-  /** Engine being switched to, while the switch (and any download) runs */
-  switching: DatabaseEngine | null;
-  /** Download progress (0-100) of the engine being switched to */
+/** A segmented choice on the database card that installs on first use. */
+interface Switch<T extends string> {
+  value: T;
+  /** Whether each option's runtime is already on disk */
+  installed: Record<T, boolean>;
+  /** Option being switched to, while the switch (and any download) runs */
+  switching: T | null;
+  /** Download progress (0-100) of the option being switched to */
   percent: number;
-  onChange: (engine: DatabaseEngine) => void;
+  onChange: (value: T) => void;
+}
+
+/** Lets the database card choose which engine fills the database role. */
+export type EngineSwitch = Switch<DatabaseEngine>;
+
+/** Lets the database card choose the web database manager. */
+export type ToolSwitch = Switch<DatabaseTool>;
+
+function OptionSwitch<T extends string>({
+  label,
+  options,
+  names,
+  testIdPrefix,
+  locked,
+  value,
+  installed,
+  switching,
+  percent,
+  onChange,
+}: Switch<T> & {
+  label: string;
+  options: readonly T[];
+  names: Record<T, string>;
+  testIdPrefix: string;
+  /** Any switch on the card is running */
+  locked: boolean;
+}) {
+  return (
+    <div className="engine-switch" role="radiogroup" aria-label={label}>
+      {options.map((option) => {
+        const selected = value === option;
+        const pending = switching === option;
+        return (
+          <button
+            key={option}
+            type="button"
+            role="radio"
+            aria-checked={selected}
+            className={`engine-option${selected ? " selected" : ""}${pending ? " pending" : ""}`}
+            disabled={selected || locked}
+            data-testid={`${testIdPrefix}-${option}`}
+            onClick={() => {
+              AudioManager.playClick();
+              onChange(option);
+            }}
+          >
+            {pending ? (
+              <LoaderCircle size={13} className="spin-icon" />
+            ) : !selected && !installed[option] ? (
+              <Download size={13} />
+            ) : null}
+            {names[option]}
+            {pending && percent > 0 ? ` ${percent}%` : ""}
+          </button>
+        );
+      })}
+    </div>
+  );
 }
 
 interface ServiceCardProps {
@@ -60,6 +122,8 @@ interface ServiceCardProps {
   busyLabel?: string;
   /** Present on the database card only */
   engineSwitch?: EngineSwitch;
+  /** Present on the database card only */
+  toolSwitch?: ToolSwitch;
   onStart: () => void;
   onStop: () => void;
   onRestart: () => void;
@@ -86,6 +150,7 @@ export function ServiceCard({
   busy = false,
   busyLabel,
   engineSwitch,
+  toolSwitch,
   onStart,
   onStop,
   onRestart,
@@ -97,9 +162,11 @@ export function ServiceCard({
   const Icon = SERVICE_ICONS[serviceType];
   const isRunning = state === ServiceState.Running;
   const switching = engineSwitch?.switching ?? null;
+  const toolSwitching = toolSwitch?.switching ?? null;
   const isTransitioning =
     busy ||
     switching !== null ||
+    toolSwitching !== null ||
     state === ServiceState.Starting ||
     state === ServiceState.Stopping;
   const isError = state === ServiceState.Error;
@@ -134,35 +201,27 @@ export function ServiceCard({
       </header>
 
       {engineSwitch && (
-        <div className="engine-switch" role="radiogroup" aria-label={t.databaseEngine}>
-          {DATABASE_ENGINES.map((engine) => {
-            const selected = engineSwitch.value === engine;
-            const pending = switching === engine;
-            return (
-              <button
-                key={engine}
-                type="button"
-                role="radio"
-                aria-checked={selected}
-                className={`engine-option${selected ? " selected" : ""}${pending ? " pending" : ""}`}
-                disabled={selected || switching !== null}
-                data-testid={`engine-option-${engine}`}
-                onClick={() => {
-                  AudioManager.playClick();
-                  engineSwitch.onChange(engine);
-                }}
-              >
-                {pending ? (
-                  <LoaderCircle size={13} className="spin-icon" />
-                ) : !selected && !engineSwitch.installed[engine] ? (
-                  <Download size={13} />
-                ) : null}
-                {DATABASE_ENGINE_NAMES[engine]}
-                {pending && engineSwitch.percent > 0 ? ` ${engineSwitch.percent}%` : ""}
-              </button>
-            );
-          })}
-        </div>
+        <OptionSwitch
+          label={t.databaseEngine}
+          options={DATABASE_ENGINES}
+          names={DATABASE_ENGINE_NAMES}
+          testIdPrefix="engine-option"
+          locked={switching !== null || toolSwitching !== null}
+          {...engineSwitch}
+        />
+      )}
+      {toolSwitch && (
+        <OptionSwitch
+          label={t.databaseManager}
+          // phpMyAdmin only speaks MySQL, so PostgreSQL offers Adminer alone.
+          options={DATABASE_TOOLS.filter((tool) =>
+            databaseToolSupportsEngine(tool, engineSwitch?.value ?? "mysql")
+          )}
+          names={DATABASE_TOOL_NAMES}
+          testIdPrefix="tool-option"
+          locked={switching !== null || toolSwitching !== null}
+          {...toolSwitch}
+        />
       )}
 
       <div className="service-readout">

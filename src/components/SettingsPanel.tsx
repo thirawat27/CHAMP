@@ -22,16 +22,22 @@ import {
   DATABASE_ENGINES,
   DATABASE_ENGINE_NAMES,
   DEFAULT_PORTS,
+  DATABASE_TOOLS,
+  DATABASE_TOOL_NAMES,
   DatabaseEngine,
+  DatabaseTool,
   DownloadProgress,
   InstalledPhpVersion,
   PackagesConfig,
   PackageSelection,
   ServiceType,
   EMPTY_PACKAGE_SELECTION,
-  databaseToolIdForEngine,
+  databaseToolSupportsEngine,
   getDatabaseEngine,
+  getDatabaseTool,
   hasPackageUrlForPlatform,
+  selectionWithEngine,
+  selectionWithTool,
 } from "../types/services";
 import { formatModelSize, useLogDoctorModel } from "../hooks/useLogDoctorModel";
 import { useLanguageStore, useTranslation } from "../stores/languageStore";
@@ -247,16 +253,27 @@ export function SettingsPanel({ onClose, onSettingsChanged, ...props }: Settings
     }));
   };
 
-  // The engine is the choice; its web manager follows automatically.
+  // PostgreSQL moves a phpMyAdmin selection onto Adminer; otherwise the
+  // manager is kept.
   const updateSelectedDatabaseEngine = (engine: DatabaseEngine) => {
-    const toolId = databaseToolIdForEngine(engine, packages?.phpmyadmin ?? []);
-    if (!toolId) return;
     setSettings((current) => ({
       ...current,
-      package_selection: {
-        ...(current.package_selection ?? defaultPackageSelection),
-        phpmyadmin: toolId,
-      },
+      package_selection: selectionWithEngine(
+        current.package_selection ?? defaultPackageSelection,
+        engine,
+        packages?.phpmyadmin ?? []
+      ),
+    }));
+  };
+
+  const updateSelectedDatabaseTool = (tool: DatabaseTool) => {
+    setSettings((current) => ({
+      ...current,
+      package_selection: selectionWithTool(
+        current.package_selection ?? defaultPackageSelection,
+        tool,
+        packages?.phpmyadmin ?? []
+      ),
     }));
   };
 
@@ -304,6 +321,7 @@ export function SettingsPanel({ onClose, onSettingsChanged, ...props }: Settings
     settings.package_selection ?? defaultPackageSelection
   );
   const activeDatabaseName = DATABASE_ENGINE_NAMES[selectedDatabaseEngine];
+  const selectedDatabaseTool = getDatabaseTool(settings.package_selection);
   const doctorModelStatus = doctorModel.status;
   const doctorModelDownloading = doctorModel.progress !== null;
 
@@ -540,12 +558,28 @@ export function SettingsPanel({ onClose, onSettingsChanged, ...props }: Settings
                     ))}
                   </select>
                   <small>
-                    {t.databaseUsedWhenStartingStack.replace("{name}", activeDatabaseName)}{" "}
-                    {t.databaseManagerAuto.replace(
-                      "{tool}",
-                      selectedDatabaseEngine === "postgresql" ? "Adminer" : "phpMyAdmin"
-                    )}
+                    {t.databaseUsedWhenStartingStack.replace("{name}", activeDatabaseName)}
                   </small>
+                </label>
+                <label className="project-row">
+                  <span>{t.databaseManager}</span>
+                  <select
+                    className="input"
+                    value={selectedDatabaseTool}
+                    data-testid="settings-database-tool"
+                    onChange={(event) =>
+                      updateSelectedDatabaseTool(event.target.value as DatabaseTool)
+                    }
+                  >
+                    {DATABASE_TOOLS.filter((tool) =>
+                      databaseToolSupportsEngine(tool, selectedDatabaseEngine)
+                    ).map((tool) => (
+                      <option key={tool} value={tool}>
+                        {DATABASE_TOOL_NAMES[tool]}
+                      </option>
+                    ))}
+                  </select>
+                  <small>{t.databaseManagerNote}</small>
                 </label>
               </div>
 

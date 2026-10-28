@@ -43,13 +43,16 @@ import {
   DEFAULT_PORTS,
   DATABASE_ENGINE_NAMES,
   DATABASE_ENGINE_SERVICES,
+  DATABASE_TOOL_NAMES,
   DatabaseEngine,
+  DatabaseTool,
   DownloadProgress,
   InstalledPhpVersion,
   SERVICE_DISPLAY_NAMES,
   ServiceState,
   ServiceType,
   getDatabaseEngine,
+  getDatabaseTool,
 } from "../types/services";
 import { useServices } from "../hooks/useServices";
 import { useHttpsTunnel } from "../hooks/useHttpsTunnel";
@@ -60,7 +63,7 @@ import { GuideModal } from "./GuideModal";
 import { HelpModal } from "./HelpModal";
 import { LanguageSelector } from "./LanguageSelector";
 import { LogDoctorModal } from "./LogDoctorModal";
-import { EngineSwitch, ServiceCard } from "./ServiceCard";
+import { EngineSwitch, ServiceCard, ToolSwitch } from "./ServiceCard";
 import { SettingsPanel } from "./SettingsPanel";
 import { StatusBar } from "./StatusBar";
 
@@ -100,6 +103,7 @@ export function Dashboard() {
   const [phpUpdate, setPhpUpdate] = useState<InstalledPhpVersion | null>(null);
   const [phpUpdating, setPhpUpdating] = useState(false);
   const [switchingEngine, setSwitchingEngine] = useState<DatabaseEngine | null>(null);
+  const [switchingTool, setSwitchingTool] = useState<DatabaseTool | null>(null);
   const [switchPercent, setSwitchPercent] = useState(0);
 
   const { notice, notify, dismiss } = useToast();
@@ -247,6 +251,33 @@ export function Dashboard() {
     }
   };
 
+  // The web manager is chosen separately from the engine. Switching installs it
+  // on first use; the backend refuses phpMyAdmin for PostgreSQL.
+  const switchDatabaseTool = async (tool: DatabaseTool) => {
+    const name = DATABASE_TOOL_NAMES[tool];
+    setSwitchingTool(tool);
+    setSwitchPercent(0);
+    const unlisten = listenIfTauri<DownloadProgress>("download-progress", (event) => {
+      setSwitchPercent(event.payload.percent);
+    });
+    notify({ tone: "info", title: t.switchingDatabaseTool.replace("{name}", name), message: "" });
+    try {
+      await invoke("switch_database_tool", { tool });
+      notify({ tone: "success", title: t.databaseToolSwitched.replace("{name}", name), message: "" });
+    } catch (error) {
+      notify({
+        tone: "error",
+        title: t.failedToSwitchDatabaseTool.replace("{name}", name),
+        message: String(error),
+      });
+    } finally {
+      unlisten.then((dispose) => dispose());
+      setSwitchingTool(null);
+      refreshMetadata();
+      refreshStatuses();
+    }
+  };
+
   // Daily background update check (silent when offline).
   useEffect(() => {
     if (settings?.auto_check_updates === false) return undefined;
@@ -278,9 +309,10 @@ export function Dashboard() {
   const caddyPort = serviceMap[ServiceType.Caddy]?.port || DEFAULT_PORTS[ServiceType.Caddy];
   const webServerUrl = `http://localhost:${caddyPort}`;
   const databaseEngine = getDatabaseEngine(packageSelection);
-  const isAdminerSelected = databaseEngine === "postgresql";
-  const databaseToolName = isAdminerSelected ? "Adminer" : "phpMyAdmin";
-  const databaseToolUrl = `${webServerUrl}/${isAdminerSelected ? "adminer" : "phpmyadmin"}`;
+  const databaseTool = getDatabaseTool(packageSelection);
+  const isAdminerSelected = databaseTool === "adminer";
+  const databaseToolName = DATABASE_TOOL_NAMES[databaseTool];
+  const databaseToolUrl = `${webServerUrl}/${databaseTool}`;
 
   const openFolder = useCallback(
     async (path?: string) => {
@@ -488,6 +520,16 @@ export function Dashboard() {
     switching: switchingEngine,
     percent: switchPercent,
     onChange: switchDatabaseEngine,
+  };
+  const toolSwitch: ToolSwitch = {
+    value: databaseTool,
+    installed: {
+      phpmyadmin: Boolean(installedVersions.phpmyadmin),
+      adminer: Boolean(installedVersions.adminer),
+    },
+    switching: switchingTool,
+    percent: switchPercent,
+    onChange: switchDatabaseTool,
   };
   const updateInstalling = updatePhase === "installing";
 
@@ -756,6 +798,7 @@ export function Dashboard() {
                   port={service.port}
                   error={service.error_message}
                   engineSwitch={isDatabase ? engineSwitch : undefined}
+                  toolSwitch={isDatabase ? toolSwitch : undefined}
                   busy={Boolean(busyServiceCommand)}
                   busyLabel={
                     busyServiceCommand

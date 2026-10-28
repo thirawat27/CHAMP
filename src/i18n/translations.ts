@@ -88,10 +88,14 @@ export interface Translations {
   browser: string;
   shortcuts: string;
   databaseEngine: string;
-  databaseManagerAuto: string;
+  databaseManager: string;
+  databaseManagerNote: string;
   switchingDatabase: string;
   databaseSwitched: string;
   failedToSwitchDatabase: string;
+  switchingDatabaseTool: string;
+  databaseToolSwitched: string;
+  failedToSwitchDatabaseTool: string;
   agentActivityTitle: string;
   agentActivityDone: string;
   updateAvailableTitle: string;
@@ -412,10 +416,15 @@ const th: Translations = {
   browser: "เบราว์เซอร์",
   shortcuts: "ทางลัด",
   databaseEngine: "ฐานข้อมูล",
-  databaseManagerAuto: "ตัวจัดการเว็บ {tool} จะเปลี่ยนตามฐานข้อมูลที่เลือกโดยอัตโนมัติ",
+  databaseManager: "ตัวจัดการฐานข้อมูล",
+  databaseManagerNote:
+    "Adminer ใช้ได้ทั้ง MySQL และ PostgreSQL ส่วน phpMyAdmin ใช้ได้กับ MySQL เท่านั้น Adminer จะล็อกอินฐานข้อมูลในเครื่องให้อัตโนมัติ",
   switchingDatabase: "กำลังเปลี่ยนไปใช้ {name}",
   databaseSwitched: "ใช้ {name} เป็นฐานข้อมูลแล้ว",
   failedToSwitchDatabase: "เปลี่ยนไปใช้ {name} ไม่สำเร็จ",
+  switchingDatabaseTool: "กำลังเปลี่ยนตัวจัดการเป็น {name}",
+  databaseToolSwitched: "ใช้ {name} เป็นตัวจัดการฐานข้อมูลแล้ว",
+  failedToSwitchDatabaseTool: "เปลี่ยนตัวจัดการเป็น {name} ไม่สำเร็จ",
   agentActivityTitle: "AI agent สั่งงาน CHAMP",
   agentActivityDone: "{action}: {target}",
   updateAvailableTitle: "CHAMP v{version} พร้อมติดตั้ง",
@@ -612,7 +621,7 @@ const th: Translations = {
   wizardDownloadRuntime: "ดาวน์โหลดรันไทม์",
   wizardStackDescription: "Caddy + HTTP(S) + phpMyAdmin/Adminer + MySQL/PostgreSQL + PHP",
   wizardWelcomeBody:
-    "CHAMP จะติดตั้ง Caddy, PHP-FPM, ฐานข้อมูลที่เหมาะกับเครื่องมือที่เลือก และ phpMyAdmin หรือ Adminer ไว้ในโปรไฟล์ผู้ใช้ เพื่อให้สแต็กทำงานได้โดยไม่ต้องเขียนไฟล์ config ลงโฟลเดอร์ระบบที่ถูกป้องกัน",
+    "CHAMP จะติดตั้ง Caddy, PHP-FPM, ฐานข้อมูลที่เลือก และ phpMyAdmin หรือ Adminer ไว้ในโปรไฟล์ผู้ใช้ เพื่อให้สแต็กทำงานได้โดยไม่ต้องเขียนไฟล์ config ลงโฟลเดอร์ระบบที่ถูกป้องกัน",
   wizardUserSpaceRuntime: "รันไทม์ในพื้นที่ผู้ใช้",
   wizardUserSpaceRuntimeCopy: "ไม่ต้องใช้สิทธิ์แอดมินเพื่อเขียน config ที่สร้างขึ้น",
   wizardDevFirstPorts: "พอร์ตสำหรับนักพัฒนา",
@@ -746,10 +755,15 @@ const en: Translations = {
   browser: "Browser",
   shortcuts: "Shortcuts",
   databaseEngine: "Database",
-  databaseManagerAuto: "The web manager ({tool}) follows the selected database automatically.",
+  databaseManager: "Database manager",
+  databaseManagerNote:
+    "Adminer works with MySQL and PostgreSQL; phpMyAdmin works with MySQL only. Adminer signs in to the local database automatically.",
   switchingDatabase: "Switching to {name}",
   databaseSwitched: "{name} is now the database",
   failedToSwitchDatabase: "Failed to switch to {name}",
+  switchingDatabaseTool: "Switching the manager to {name}",
+  databaseToolSwitched: "{name} is now the database manager",
+  failedToSwitchDatabaseTool: "Failed to switch the manager to {name}",
   agentActivityTitle: "AI agent used CHAMP",
   agentActivityDone: "{action}: {target}",
   updateAvailableTitle: "CHAMP v{version} is available",
@@ -949,7 +963,7 @@ const en: Translations = {
   wizardDownloadRuntime: "Download runtime",
   wizardStackDescription: "Caddy + HTTP(S) + phpMyAdmin/Adminer + MySQL/PostgreSQL + PHP",
   wizardWelcomeBody:
-    "CHAMP installs Caddy, PHP-FPM, the database that matches your selected tool, and phpMyAdmin or Adminer into your user profile so the stack can run without writing config files into protected system folders.",
+    "CHAMP installs Caddy, PHP-FPM, the database you select, and phpMyAdmin or Adminer into your user profile so the stack can run without writing config files into protected system folders.",
   wizardUserSpaceRuntime: "User-space runtime",
   wizardUserSpaceRuntimeCopy: "No admin write access for generated configs.",
   wizardDevFirstPorts: "Dev-first ports",

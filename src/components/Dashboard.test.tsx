@@ -87,7 +87,7 @@ describe("Dashboard Component", () => {
       expect(screen.queryByTestId("service-card-postgresql")).not.toBeInTheDocument();
     });
 
-    const mockDatabaseSettings = (phpmyadmin: string) => {
+    const mockDatabaseSettings = (phpmyadmin: string, database_engine?: string) => {
       vi.mocked(invoke).mockImplementation(async (cmd: string) => {
         switch (cmd) {
           case "get_all_statuses":
@@ -109,6 +109,7 @@ describe("Dashboard Component", () => {
                 mysql: "mysql-9.7",
                 postgresql: "postgresql-18",
                 phpmyadmin,
+                database_engine,
               },
             };
           case "get_system_metrics":
@@ -141,6 +142,38 @@ describe("Dashboard Component", () => {
 
       expect(await screen.findByTestId("service-card-postgresql")).toBeInTheDocument();
       expect(screen.queryByTestId("service-card-mysql")).not.toBeInTheDocument();
+    });
+
+    it("keeps MySQL as the engine when Adminer is the manager", async () => {
+      mockDatabaseSettings("adminer-6.2", "mysql");
+
+      render(<Dashboard />);
+
+      expect(await screen.findByTestId("service-card-mysql")).toBeInTheDocument();
+      expect(screen.queryByTestId("service-card-postgresql")).not.toBeInTheDocument();
+      expect(screen.getByTestId("tool-option-adminer")).toBeDisabled();
+      expect(screen.getByTestId("tool-option-phpmyadmin")).toBeEnabled();
+    });
+
+    it("switches the database manager from the database card", async () => {
+      mockDatabaseSettings("phpmyadmin-5.2", "mysql");
+
+      render(<Dashboard />);
+
+      fireEvent.click(await screen.findByTestId("tool-option-adminer"));
+
+      await waitFor(() => {
+        expect(invoke).toHaveBeenCalledWith("switch_database_tool", { tool: "adminer" });
+      });
+    });
+
+    it("offers only Adminer when PostgreSQL is the engine", async () => {
+      mockDatabaseSettings("adminer-6.2", "postgresql");
+
+      render(<Dashboard />);
+
+      expect(await screen.findByTestId("tool-option-adminer")).toBeInTheDocument();
+      expect(screen.queryByTestId("tool-option-phpmyadmin")).not.toBeInTheDocument();
     });
 
     it("should fetch service statuses on mount", async () => {

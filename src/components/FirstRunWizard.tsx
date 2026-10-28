@@ -8,6 +8,7 @@ import {
   PackagesConfig,
   EMPTY_PACKAGE_SELECTION,
   isAdminerSelected as isAdminerSelection,
+  getDatabaseEngine,
 } from "../types/services";
 import { BookOpen, CheckCircle2 } from "lucide-react";
 import champLogo from "../assets/champ-logo.png";
@@ -142,10 +143,11 @@ export function FirstRunWizard({ onComplete, ...props }: FirstRunWizardProps) {
       const existing = await invoke<Record<string, string>>("check_existing_components");
 
       const adminerSelected = isAdminerSelection(packageSelection);
+      const postgresqlSelected = getDatabaseEngine(packageSelection) === "postgresql";
       const existingDatabaseToolVersion = adminerSelected
         ? existing.adminer || ""
         : existing.phpmyadmin || "";
-      const activeDatabaseComponent: ExistingComponent = adminerSelected
+      const activeDatabaseComponent: ExistingComponent = postgresqlSelected
         ? {
             name: "postgresql",
             version: existing.postgresql || "",
@@ -326,9 +328,9 @@ export function FirstRunWizard({ onComplete, ...props }: FirstRunWizardProps) {
   const selectedDatabaseTool = availablePackages?.phpmyadmin.find(
     (pkg) => pkg.id === packageSelection.phpmyadmin
   );
-  const adminerSelected = isAdminerSelection(packageSelection);
-  const activeDatabaseName = adminerSelected ? "PostgreSQL" : "MySQL";
-  const activeDatabaseVersion = adminerSelected
+  const postgresqlSelected = getDatabaseEngine(packageSelection) === "postgresql";
+  const activeDatabaseName = postgresqlSelected ? "PostgreSQL" : "MySQL";
+  const activeDatabaseVersion = postgresqlSelected
     ? selectedPostgreSQL?.version || packageSelection.postgresql
     : selectedMysql?.version || packageSelection.mysql;
   const shownPercent = Math.max(0, Math.min(100, progress.percent));

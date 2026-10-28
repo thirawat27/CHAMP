@@ -116,7 +116,13 @@ export interface PackageSelection {
   php: string;
   mysql: string;
   postgresql: string;
+  /** Web database manager package id (`phpmyadmin-*` or `adminer-*`). */
   phpmyadmin: string;
+  /**
+   * Engine that fills the database role. Chosen separately from the manager;
+   * missing in settings saved before that, where Adminer meant PostgreSQL.
+   */
+  database_engine?: string;
 }
 
 export const EMPTY_PACKAGE_SELECTION: PackageSelection = {
@@ -124,18 +130,36 @@ export const EMPTY_PACKAGE_SELECTION: PackageSelection = {
   mysql: "",
   postgresql: "",
   phpmyadmin: "",
+  database_engine: "",
 };
 
-export const isAdminerSelected = (
-  selection?: Pick<PackageSelection, "phpmyadmin"> | null
-): boolean => selection?.phpmyadmin?.startsWith("adminer") ?? false;
+type DatabaseSelection = Pick<PackageSelection, "phpmyadmin" | "database_engine">;
+
+export const isAdminerSelected = (selection?: DatabaseSelection | null): boolean =>
+  selection?.phpmyadmin?.startsWith("adminer") ?? false;
 
 /**
  * MySQL and PostgreSQL fill the same "database" role of the stack; the user
- * picks one. Its web manager follows the engine, so the engine is stored as
- * that manager's package id (phpMyAdmin for MySQL, Adminer for PostgreSQL).
+ * picks one. The web manager is a separate choice: Adminer works with both,
+ * phpMyAdmin only with MySQL.
  */
 export type DatabaseEngine = "mysql" | "postgresql";
+
+export type DatabaseTool = "phpmyadmin" | "adminer";
+
+export const DATABASE_TOOLS: readonly DatabaseTool[] = ["phpmyadmin", "adminer"];
+
+export const DATABASE_TOOL_NAMES: Record<DatabaseTool, string> = {
+  phpmyadmin: "phpMyAdmin",
+  adminer: "Adminer",
+};
+
+export const getDatabaseTool = (selection?: DatabaseSelection | null): DatabaseTool =>
+  isAdminerSelected(selection) ? "adminer" : "phpmyadmin";
+
+/** Whether a manager can serve an engine. phpMyAdmin only speaks MySQL. */
+export const databaseToolSupportsEngine = (tool: DatabaseTool, engine: DatabaseEngine): boolean =>
+  tool === "adminer" || engine === "mysql";
 
 export const DATABASE_ENGINES: readonly DatabaseEngine[] = ["mysql", "postgresql"];
 
@@ -149,24 +173,50 @@ export const DATABASE_ENGINE_SERVICES: Record<DatabaseEngine, ServiceType> = {
   postgresql: ServiceType.PostgreSQL,
 };
 
-export const getDatabaseEngine = (
-  selection?: Pick<PackageSelection, "phpmyadmin"> | null
-): DatabaseEngine => (isAdminerSelected(selection) ? "postgresql" : "mysql");
+export const getDatabaseEngine = (selection?: DatabaseSelection | null): DatabaseEngine => {
+  const engine = selection?.database_engine;
+  if (engine === "mysql" || engine === "postgresql") return engine;
+  return isAdminerSelected(selection) ? "postgresql" : "mysql";
+};
 
-/** Package id of the web database manager that goes with an engine. */
-export const databaseToolIdForEngine = (
+/** Package id of a web database manager in the catalog. */
+export const databaseToolId = (
+  tool: DatabaseTool,
+  tools: readonly Pick<PhpMyAdminPackage, "id">[]
+): string | undefined => tools.find((pkg) => pkg.id.startsWith(tool))?.id;
+
+/**
+ * The selection after choosing an engine. The manager is kept when it can
+ * serve the engine; phpMyAdmin moves to Adminer for PostgreSQL.
+ */
+export const selectionWithEngine = (
+  selection: PackageSelection,
   engine: DatabaseEngine,
   tools: readonly Pick<PhpMyAdminPackage, "id">[]
-): string | undefined =>
-  tools.find((tool) => tool.id.startsWith(engine === "postgresql" ? "adminer" : "phpmyadmin"))?.id;
+): PackageSelection => {
+  const next = { ...selection, database_engine: engine };
+  if (!databaseToolSupportsEngine(getDatabaseTool(selection), engine)) {
+    next.phpmyadmin = databaseToolId("adminer", tools) ?? selection.phpmyadmin;
+  }
+  return next;
+};
 
-export const getActiveDatabaseService = (
-  selection?: Pick<PackageSelection, "phpmyadmin"> | null
-): ServiceType => (isAdminerSelected(selection) ? ServiceType.PostgreSQL : ServiceType.MySQL);
+/** The selection after choosing a manager; ignored when it cannot serve the engine. */
+export const selectionWithTool = (
+  selection: PackageSelection,
+  tool: DatabaseTool,
+  tools: readonly Pick<PhpMyAdminPackage, "id">[]
+): PackageSelection => {
+  const engine = getDatabaseEngine(selection);
+  const id = databaseToolId(tool, tools);
+  if (!id || !databaseToolSupportsEngine(tool, engine)) return selection;
+  return { ...selection, phpmyadmin: id, database_engine: engine };
+};
 
-export const getStackServiceTypes = (
-  selection?: Pick<PackageSelection, "phpmyadmin"> | null
-): ServiceType[] => [ServiceType.Caddy, ServiceType.PhpFpm, getActiveDatabaseService(selection)];
+export const getActiveDatabaseService = (selection?: DatabaseSelection | null): ServiceType =>
+  getDatabaseEngine(selection) === "postgresql" ? ServiceType.PostgreSQL : ServiceType.MySQL;
+
+export const getStackServiceTypes = (selection?: DatabaseSelection | null): ServiceType[] => [ServiceType.Caddy, ServiceType.PhpFpm, getActiveDatabaseService(selection)];
 
 export type RuntimePlatformKey =
   "windowsX64" | "windowsArm64" | "linuxX64" | "linuxArm64" | "macOSX64" | "macOSArm64";

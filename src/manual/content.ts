@@ -75,8 +75,8 @@ export const GUIDE_SECTIONS: GuideSection[] = [
             "Open CHAMP. The setup wizard appears; choose Get started."
           ),
           l(
-            "เลือกเวอร์ชัน PHP, ฐานข้อมูล (MySQL หรือ PostgreSQL ทำหน้าที่เดียวกัน เลือกได้ตัวเดียว) และเวอร์ชันของมัน ตัวจัดการเว็บ (phpMyAdmin หรือ Adminer) จะตามมาเอง ค่าเริ่มต้นคือเวอร์ชันล่าสุดเสมอ",
-            "Pick a PHP version, a database (MySQL or PostgreSQL fill the same role; choose one), and its version. The web manager (phpMyAdmin or Adminer) follows automatically. The defaults are always the newest releases."
+            "เลือกเวอร์ชัน PHP, ฐานข้อมูล (MySQL หรือ PostgreSQL ทำหน้าที่เดียวกัน เลือกได้ตัวเดียว) พร้อมเวอร์ชัน และตัวจัดการเว็บ (phpMyAdmin ใช้ได้กับ MySQL เท่านั้น ส่วน Adminer ใช้ได้ทั้งสองแบบ) ค่าเริ่มต้นคือเวอร์ชันล่าสุดเสมอ",
+            "Pick a PHP version, a database (MySQL or PostgreSQL fill the same role; choose one) and its version, and a web manager (phpMyAdmin works with MySQL only; Adminer works with both). The defaults are always the newest releases."
           ),
           l(
             "CHAMP ตรวจ library ที่ระบบต้องมี (สำคัญบน Linux) แล้วดาวน์โหลดทุกส่วนพร้อมกัน",
@@ -262,14 +262,14 @@ export const GUIDE_SECTIONS: GuideSection[] = [
             l("(ว่าง)", "(empty)"),
             l("(ว่าง, trust เฉพาะในเครื่อง)", "(empty, local trust)"),
           ],
-          [l("เครื่องมือเว็บ", "Web tool"), "/phpmyadmin", "/adminer"],
+          [l("เครื่องมือเว็บ", "Web tool"), "/phpmyadmin, /adminer", "/adminer"],
         ],
       },
       {
         kind: "p",
         text: l(
-          "สลับฐานข้อมูลได้จากการ์ดฐานข้อมูลบนหน้าหลัก (MySQL | PostgreSQL) หรือใน Settings ตัวจัดการเว็บจะเปลี่ยนตาม (MySQL ใช้ phpMyAdmin, PostgreSQL ใช้ Adminer) ถ้าตัวที่เลือกยังไม่ได้ติดตั้ง CHAMP จะดาวน์โหลดให้",
-          "Switch the database from the database card on the dashboard (MySQL | PostgreSQL) or in Settings. The web manager follows (phpMyAdmin for MySQL, Adminer for PostgreSQL). CHAMP downloads the selected one if it is missing."
+          "สลับฐานข้อมูล (MySQL | PostgreSQL) และตัวจัดการเว็บ (phpMyAdmin | Adminer) ได้จากการ์ดฐานข้อมูลบนหน้าหลักหรือใน Settings phpMyAdmin ใช้ได้กับ MySQL เท่านั้น ถ้าเลือก PostgreSQL จะมีแค่ Adminer ให้เลือก ถ้าตัวที่เลือกยังไม่ได้ติดตั้ง CHAMP จะดาวน์โหลดให้ เมื่อเปิด Adminer จากเครื่องนี้ ระบบจะกรอก server, user และรหัสผ่านว่างแล้วล็อกอินให้อัตโนมัติ (ไม่ทำงานผ่าน HTTPS Preview)",
+          "Switch the database (MySQL | PostgreSQL) and the web manager (phpMyAdmin | Adminer) from the database card on the dashboard or in Settings. phpMyAdmin works with MySQL only, so PostgreSQL offers Adminer alone. CHAMP downloads the selected one if it is missing. Opened from this computer, Adminer fills in the server, user, and empty password and signs in automatically (not through HTTPS Preview)."
         ),
       },
       {

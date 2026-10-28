@@ -10,18 +10,35 @@ pub(super) fn ensure_database_tool(
     mysql_port: u16,
     postgresql_port: u16,
     database_tool_id: &str,
+    postgresql: bool,
 ) -> Result<(), String> {
+    let is_adminer = database_tool_id.starts_with("adminer");
+    // The generated login wrapper depends on the engine and its port, so it is
+    // rewritten on every start, like the phpMyAdmin config.
+    let write_tool_config = || -> Result<(), String> {
+        if is_adminer {
+            let port = if postgresql {
+                postgresql_port
+            } else {
+                mysql_port
+            };
+            write_adminer_wrapper(&paths.adminer, postgresql, port)
+        } else {
+            write_phpmyadmin_config(&paths.adminer, web_port, mysql_port)
+        }
+    };
+
     // R-09: Reinstalling the tool (phpMyAdmin is thousands of files) on every
     // Caddy start wastes time and wipes user edits. A marker file records which
-    // tool id was installed; if it matches, skip the wipe+copy. phpMyAdmin's
-    // config still gets rewritten because it depends on ports that may change.
+    // tool id was installed; if it matches, skip the wipe+copy. Installs from
+    // before the Adminer wrapper kept Adminer itself in index.php, so those
+    // have no adminer.php and are reinstalled once.
     let marker_path = paths.adminer.join(".champ-db-tool");
     if paths.adminer.exists() {
         if let Ok(existing) = fs::read_to_string(&marker_path) {
-            if existing.trim() == database_tool_id {
-                if database_tool_id.starts_with("phpmyadmin") {
-                    write_phpmyadmin_config(&paths.adminer, web_port, mysql_port)?;
-                }
+            let layout_current = !is_adminer || paths.adminer.join(ADMINER_FILE).is_file();
+            if existing.trim() == database_tool_id && layout_current {
+                write_tool_config()?;
                 return Ok(());
             }
         }
@@ -37,7 +54,13 @@ pub(super) fn ensure_database_tool(
     let index_path = paths.adminer.join("index.php");
     if let Some(source) = find_database_tool_source(paths, database_tool_id) {
         if source.is_file() {
-            fs::copy(&source, &index_path).map_err(|e| {
+            // Adminer is a single file; it sits behind the generated index.php.
+            let target = if is_adminer {
+                paths.adminer.join(ADMINER_FILE)
+            } else {
+                index_path.clone()
+            };
+            fs::copy(&source, &target).map_err(|e| {
                 format!(
                     "Failed to install database tool from {}: {}",
                     source.display(),
@@ -47,9 +70,7 @@ pub(super) fn ensure_database_tool(
         } else {
             copy_dir_contents(&source, &paths.adminer)?;
         }
-        if database_tool_id.starts_with("phpmyadmin") {
-            write_phpmyadmin_config(&paths.adminer, web_port, mysql_port)?;
-        }
+        write_tool_config()?;
         // Only record the marker for a real install so placeholder installs are
         // retried on the next start until the real tool source exists.
         fs::write(&marker_path, database_tool_id)
@@ -67,7 +88,7 @@ pub(super) fn ensure_database_tool(
     } else {
         "/phpmyadmin"
     };
-    let default_connection = if database_tool_id.starts_with("adminer") {
+    let default_connection = if postgresql {
         format!(
             "Default PostgreSQL connection: server <code>127.0.0.1:{}</code>, user <code>postgres</code>, empty password.",
             postgresql_port
@@ -327,3 +348,133 @@ $cfg['TempDir'] = __DIR__ . '/tmp';
     fs::write(target.join("config.inc.php"), config)
         .map_err(|e| format!("Failed to write phpMyAdmin config: {}", e))
 }
+
+/// Where the real Adminer file lives inside the tool directory. `index.php` is
+/// the generated wrapper from `write_adminer_wrapper`.
+pub(super) const ADMINER_FILE: &str = "adminer.php";
+
+/// Write the `index.php` that loads Adminer with a CHAMP customization.
+///
+/// Adminer calls a global `adminer_object()` when one exists, so the wrapper
+/// returns a subclass of `Adminer\Adminer` that:
+/// - pre-fills the login form with the stack's engine, `127.0.0.1:<port>` and
+///   the default user (`postgres` or `root`),
+/// - accepts the empty password, which stock Adminer refuses,
+/// - submits the form once on page load.
+///
+/// All three apply only to requests made on this computer. Caddy listens on
+/// every interface and HTTPS Preview forwards public traffic through a local
+/// cloudflared process, so the check also rejects non-local Host headers and
+/// Cloudflare headers. Anything else gets stock Adminer.
+pub(super) fn write_adminer_wrapper(
+    target: &Path,
+    postgresql: bool,
+    port: u16,
+) -> Result<(), String> {
+    let (driver, username) = if postgresql {
+        ("pgsql", "postgres")
+    } else {
+        ("server", "root")
+    };
+    let wrapper = ADMINER_WRAPPER_TEMPLATE
+        .replace("{{DRIVER}}", driver)
+        .replace("{{SERVER}}", &format!("127.0.0.1:{}", port))
+        .replace("{{USERNAME}}", username);
+
+    fs::write(target.join("index.php"), wrapper)
+        .map_err(|e| format!("Failed to write Adminer login wrapper: {}", e))
+}
+
+const ADMINER_WRAPPER_TEMPLATE: &str = r#"<?php
+// Generated by CHAMP on every web server start. Edits are overwritten.
+// Signs this computer in to the local database; see write_adminer_wrapper.
+
+function adminer_object()
+{
+    if (!class_exists('ChampAdminer', false)) {
+        class ChampAdminer extends \Adminer\Adminer
+        {
+            const CHAMP_DRIVER = '{{DRIVER}}';
+            const CHAMP_SERVER = '{{SERVER}}';
+            const CHAMP_USERNAME = '{{USERNAME}}';
+
+            private function champLocal()
+            {
+                $loopback = array('127.0.0.1', '::1');
+                if (!in_array(isset($_SERVER['REMOTE_ADDR']) ? $_SERVER['REMOTE_ADDR'] : '', $loopback, true)) {
+                    return false;
+                }
+                // HTTPS Preview: cloudflared connects from 127.0.0.1 but adds these.
+                foreach (array('HTTP_CF_CONNECTING_IP', 'HTTP_CF_RAY', 'HTTP_X_REAL_IP') as $header) {
+                    if (!empty($_SERVER[$header])) {
+                        return false;
+                    }
+                }
+                if (!empty($_SERVER['HTTP_X_FORWARDED_FOR'])) {
+                    foreach (explode(',', $_SERVER['HTTP_X_FORWARDED_FOR']) as $ip) {
+                        if (!in_array(trim($ip), $loopback, true)) {
+                            return false;
+                        }
+                    }
+                }
+                $host = strtolower(isset($_SERVER['HTTP_HOST']) ? $_SERVER['HTTP_HOST'] : '');
+                $host = preg_replace('~:\d+$~', '', $host);
+                return in_array($host, array('localhost', '127.0.0.1', '[::1]'), true);
+            }
+
+            // A fresh visit, not a form Adminer is showing for a server or user
+            // already in the URL (an expired session, or a login that failed).
+            private function champFresh()
+            {
+                return \Adminer\SERVER == '' && (!isset($_GET['username']) || $_GET['username'] == '');
+            }
+
+            function login($login, $password)
+            {
+                if ($this->champLocal()) {
+                    return true;
+                }
+                return parent::login($login, $password);
+            }
+
+            function loginFormField($name, $heading, $value)
+            {
+                if (!$this->champLocal() || !$this->champFresh()) {
+                    return parent::loginFormField($name, $heading, $value);
+                }
+                if ($name == 'driver') {
+                    $value = \Adminer\html_select('auth[driver]', \Adminer\SqlDriver::$drivers, self::CHAMP_DRIVER, \Adminer\on('change', 'loginDriver'));
+                } elseif ($name == 'server') {
+                    $value = str_replace("value=''", "value='" . \Adminer\h(self::CHAMP_SERVER) . "'", $value);
+                } elseif ($name == 'username') {
+                    $value = str_replace('value=""', 'value="' . \Adminer\h(self::CHAMP_USERNAME) . '"', $value);
+                }
+                return parent::loginFormField($name, $heading, $value);
+            }
+
+            function loginForm()
+            {
+                parent::loginForm();
+                if (!$this->champLocal() || !$this->champFresh()) {
+                    return;
+                }
+                // Submit once. Skip it when Adminer shows an error or a notice
+                // such as "Logout successful", and when the last automatic try
+                // came back to this form a moment ago.
+                echo \Adminer\script("(function () {
+  var field = document.getElementById('username');
+  if (!field || !field.form || document.querySelector('.error, .message')) return;
+  var key = 'champ-adminer-auto-login';
+  var last = Number(sessionStorage.getItem(key)) || 0;
+  if (Date.now() - last < 15000) return;
+  sessionStorage.setItem(key, String(Date.now()));
+  field.form.submit();
+})();");
+            }
+        }
+    }
+    return new ChampAdminer();
+}
+
+require __DIR__ . '/adminer.php';
+"#;

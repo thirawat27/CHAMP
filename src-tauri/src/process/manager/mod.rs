@@ -328,7 +328,7 @@ impl ProcessManager {
                 php_port,
                 mysql_port,
                 postgresql_port,
-                &self.settings.package_selection.phpmyadmin,
+                &self.settings.package_selection,
             ),
             ServiceType::PhpFpm => start_php_fpm(
                 service_process,
@@ -613,8 +613,9 @@ fn start_caddy(
     php_port: u16,
     mysql_port: u16,
     postgresql_port: u16,
-    database_tool_id: &str,
+    selection: &crate::runtime::packages::PackageSelection,
 ) -> Result<(), String> {
+    let database_tool_id = selection.phpmyadmin.as_str();
     // ตรวจสอบและหยุด Caddy processes ที่ซ้ำซ้อนอัตโนมัติ (เหมือน MySQL)
     cleanup_duplicate_caddy_processes(paths, service_process.port)?;
 
@@ -640,6 +641,7 @@ fn start_caddy(
         mysql_port,
         postgresql_port,
         database_tool_id,
+        selection.is_postgresql(),
     )?;
 
     // Always regenerate Caddyfile with current port settings

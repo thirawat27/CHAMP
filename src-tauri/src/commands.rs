@@ -484,6 +484,7 @@ pub async fn save_settings(mut settings: AppSettings, app: AppHandle) -> Result<
     settings.agent_connector_enabled = stored.agent_connector_enabled;
     settings.agent_connector_read_only = stored.agent_connector_read_only;
     settings.agent_connector_port = stored.agent_connector_port;
+    settings.package_selection = settings.package_selection.normalized();
 
     ensure_selected_database_tool_installed(&settings, &app).await?;
 
@@ -784,7 +785,7 @@ pub async fn download_runtime_with_packages(
 #[tauri::command]
 pub async fn update_package_selection(package_selection: PackageSelection) -> Result<(), String> {
     let mut settings = AppSettings::load();
-    settings.package_selection = package_selection;
+    settings.package_selection = package_selection.normalized();
     settings.save()
 }
 
