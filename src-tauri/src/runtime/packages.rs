@@ -454,7 +454,7 @@ pub async fn refresh_runtime_catalog() -> Result<PackagesConfig, String> {
             &mut config.binaries.mysql.versions,
             vec![
                 mysql_version(&version),
-                selected_version(mysql_version("8.4.10"), false),
+                selected_version(mysql_version("8.4.13"), false),
             ],
         );
     }
@@ -764,6 +764,17 @@ fn mysql_version(version: &str) -> VersionInfo {
     }
 }
 
+/// cdn.mysql.com keeps only the current patch release under `/Downloads/` and
+/// moves superseded builds to `/archives/mysql-<family>/`.
+pub fn mysql_archive_url(url: &str) -> Option<String> {
+    let (family, file) = url
+        .strip_prefix("https://cdn.mysql.com/Downloads/MySQL-")?
+        .split_once('/')?;
+    Some(format!(
+        "https://cdn.mysql.com/archives/mysql-{family}/{file}"
+    ))
+}
+
 fn postgresql_version(version: &str) -> VersionInfo {
     let major = version.split('.').next().unwrap_or(version);
     VersionInfo {
@@ -1005,6 +1016,19 @@ fn get_default_packages() -> PackagesConfig {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn mysql_archive_url_maps_downloads_to_archives() {
+        assert_eq!(
+            mysql_archive_url("https://cdn.mysql.com/Downloads/MySQL-9.7/mysql-9.7.1-winx64.zip")
+                .as_deref(),
+            Some("https://cdn.mysql.com/archives/mysql-9.7/mysql-9.7.1-winx64.zip")
+        );
+        assert_eq!(
+            mysql_archive_url("https://cdn.mysql.com/archives/mysql-9.7/mysql-9.7.1-winx64.zip"),
+            None
+        );
+    }
 
     #[test]
     fn version_after_marker_accepts_plausible() {

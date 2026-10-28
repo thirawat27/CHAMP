@@ -848,10 +848,12 @@ impl RuntimeDownloader {
         )
     }
 
-    /// windows.php.net moves superseded PHP builds to `/archives/`; follow the
-    /// move so an older catalog entry still installs.
+    /// windows.php.net and cdn.mysql.com move superseded builds to an archive
+    /// path; follow the move so an older catalog entry still installs.
     async fn resolve_moved_url(&self, url: String, component: BinaryComponent) -> String {
-        let Some(archive) = crate::runtime::php_catalog::windows_archive_url(&url) else {
+        let Some(archive) = crate::runtime::php_catalog::windows_archive_url(&url)
+            .or_else(|| crate::runtime::packages::mysql_archive_url(&url))
+        else {
             return url;
         };
         let missing = self
@@ -861,7 +863,7 @@ impl RuntimeDownloader {
             .map(|response| response.status() == StatusCode::NOT_FOUND)
             .unwrap_or(false);
         if missing {
-            eprintln!("{} moved to the PHP archive, using {}", url, archive);
+            eprintln!("{} moved to the archive, using {}", url, archive);
             archive
         } else {
             url

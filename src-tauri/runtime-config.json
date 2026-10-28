@@ -230,34 +230,34 @@
       "versions": [
         {
           "id": "mysql-9.7",
-          "version": "9.7.1",
+          "version": "9.7.4",
           "selected": true,
-          "display_name": "MySQL 9.7.1",
+          "display_name": "MySQL 9.7.4",
           "eol": false,
           "lts": true,
           "checksums": {},
           "urls": {
-            "windowsX64": "https://cdn.mysql.com/Downloads/MySQL-9.7/mysql-9.7.1-winx64.zip",
-            "linuxX64": "https://cdn.mysql.com/Downloads/MySQL-9.7/mysql-9.7.1-linux-glibc2.28-x86_64.tar.xz",
-            "linuxArm64": "https://cdn.mysql.com/Downloads/MySQL-9.7/mysql-9.7.1-linux-glibc2.28-aarch64.tar.xz",
-            "macOSX64": "https://cdn.mysql.com/Downloads/MySQL-9.7/mysql-9.7.1-macos15-x86_64.tar.gz",
-            "macOSArm64": "https://cdn.mysql.com/Downloads/MySQL-9.7/mysql-9.7.1-macos15-arm64.tar.gz"
+            "windowsX64": "https://cdn.mysql.com/Downloads/MySQL-9.7/mysql-9.7.4-winx64.zip",
+            "linuxX64": "https://cdn.mysql.com/Downloads/MySQL-9.7/mysql-9.7.4-linux-glibc2.28-x86_64.tar.xz",
+            "linuxArm64": "https://cdn.mysql.com/Downloads/MySQL-9.7/mysql-9.7.4-linux-glibc2.28-aarch64.tar.xz",
+            "macOSX64": "https://cdn.mysql.com/Downloads/MySQL-9.7/mysql-9.7.4-macos15-x86_64.tar.gz",
+            "macOSArm64": "https://cdn.mysql.com/Downloads/MySQL-9.7/mysql-9.7.4-macos15-arm64.tar.gz"
           }
         },
         {
           "id": "mysql-8.4",
-          "version": "8.4.10",
+          "version": "8.4.13",
           "selected": false,
-          "display_name": "MySQL 8.4.10 (LTS)",
+          "display_name": "MySQL 8.4.13 (LTS)",
           "eol": false,
           "lts": true,
           "checksums": {},
           "urls": {
-            "windowsX64": "https://cdn.mysql.com/Downloads/MySQL-8.4/mysql-8.4.10-winx64.zip",
-            "linuxX64": "https://cdn.mysql.com/Downloads/MySQL-8.4/mysql-8.4.10-linux-glibc2.28-x86_64.tar.xz",
-            "linuxArm64": "https://cdn.mysql.com/Downloads/MySQL-8.4/mysql-8.4.10-linux-glibc2.28-aarch64.tar.xz",
-            "macOSX64": "https://cdn.mysql.com/Downloads/MySQL-8.4/mysql-8.4.10-macos15-x86_64.tar.gz",
-            "macOSArm64": "https://cdn.mysql.com/Downloads/MySQL-8.4/mysql-8.4.10-macos15-arm64.tar.gz"
+            "windowsX64": "https://cdn.mysql.com/Downloads/MySQL-8.4/mysql-8.4.13-winx64.zip",
+            "linuxX64": "https://cdn.mysql.com/Downloads/MySQL-8.4/mysql-8.4.13-linux-glibc2.28-x86_64.tar.xz",
+            "linuxArm64": "https://cdn.mysql.com/Downloads/MySQL-8.4/mysql-8.4.13-linux-glibc2.28-aarch64.tar.xz",
+            "macOSX64": "https://cdn.mysql.com/Downloads/MySQL-8.4/mysql-8.4.13-macos15-x86_64.tar.gz",
+            "macOSArm64": "https://cdn.mysql.com/Downloads/MySQL-8.4/mysql-8.4.13-macos15-arm64.tar.gz"
           }
         }
       ]
