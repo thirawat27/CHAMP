@@ -2024,9 +2024,9 @@ mod integration_tests {
         #[cfg(unix)]
         {
             use std::process::Command;
-            let _ = Command::new("pkill").args(&["-9", "caddy"]).output();
-            let _ = Command::new("pkill").args(&["-9", "php-cgi"]).output();
-            let _ = Command::new("pkill").args(&["-9", "mysqld"]).output();
+            let _ = Command::new("pkill").args(["-9", "caddy"]).output();
+            let _ = Command::new("pkill").args(["-9", "php-cgi"]).output();
+            let _ = Command::new("pkill").args(["-9", "mysqld"]).output();
         }
     }
 
