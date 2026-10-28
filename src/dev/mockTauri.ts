@@ -106,6 +106,7 @@ const responses: Record<string, unknown> = {
     },
   ],
   get_runtime_platform: "windowsX64",
+  install_standby_database: null,
 };
 
 export function installMockTauri() {

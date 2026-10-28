@@ -86,6 +86,37 @@ describe("Dashboard Component", () => {
       expect(screen.getByTestId("service-card-postgresql")).toBeInTheDocument();
     });
 
+    it("offers to install the standby database when setup skipped it", async () => {
+      vi.mocked(invoke).mockImplementation(async (cmd: string) => {
+        switch (cmd) {
+          case "get_all_statuses":
+            return mockServiceMap;
+          case "get_app_paths":
+            return mockAppPaths;
+          case "get_installed_versions":
+            return { mysql: "9.7.4", phpmyadmin: "5.2.3" };
+          case "get_system_metrics":
+            return mockSystemMetrics;
+          default:
+            return {};
+        }
+      });
+
+      render(<Dashboard />);
+
+      await waitFor(() => {
+        expect(screen.getByTestId("service-card-mysql")).toBeInTheDocument();
+      });
+      const installButton = await screen.findByTestId("install-button-postgresql");
+      expect(screen.queryByTestId("start-button-postgresql")).not.toBeInTheDocument();
+
+      fireEvent.click(installButton);
+
+      await waitFor(() => {
+        expect(invoke).toHaveBeenCalledWith("install_standby_database");
+      });
+    });
+
     it("should fetch service statuses on mount", async () => {
       vi.mocked(invoke).mockResolvedValue(mockServiceMap);
 

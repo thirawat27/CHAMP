@@ -742,6 +742,8 @@ fn start_php_fpm(
 /// These are drop-in replacements for each other, but have different
 /// initialization requirements and binary names.
 fn start_mysql(service_process: &mut ServiceProcess, paths: &RuntimePaths) -> Result<(), String> {
+    crate::runtime::locator::require_database_binary(&paths.mysql, "MySQL")?;
+
     // Initialize MySQL data directory if needed
     initialize_mysql_data_dir(paths)?;
 
@@ -921,6 +923,7 @@ fn start_postgresql(
     service_process: &mut ServiceProcess,
     paths: &RuntimePaths,
 ) -> Result<(), String> {
+    crate::runtime::locator::require_database_binary(&paths.postgresql, "PostgreSQL")?;
     initialize_postgresql_data_dir(paths)?;
     cleanup_stale_postgresql_pid(paths);
 

@@ -994,6 +994,52 @@ pub async fn download_runtime_with_skip(
     Ok("Runtime binaries installed successfully".to_string())
 }
 
+/// Install the database engine that is not part of the selected stack.
+///
+/// Setup installs only the selected database, so the standby card on the
+/// dashboard offers this to add the other one later without switching tools.
+#[tauri::command]
+pub async fn install_standby_database(app: AppHandle) -> Result<(), String> {
+    let settings = AppSettings::load();
+    let standby_tool_prefix = if settings.package_selection.phpmyadmin.starts_with("adminer") {
+        "phpmyadmin"
+    } else {
+        "adminer"
+    };
+    let standby_tool_id = crate::runtime::packages::get_available_packages()
+        .phpmyadmin
+        .into_iter()
+        .find(|package| package.id.starts_with(standby_tool_prefix))
+        .map(|package| package.id)
+        .ok_or_else(|| format!("No {} package in the runtime catalog", standby_tool_prefix))?;
+
+    let mut selection = settings.package_selection;
+    selection.phpmyadmin = standby_tool_id.clone();
+    let downloader = RuntimeDownloader::with_packages(selection)
+        .allow_unverified_checksums(ALLOW_UNVERIFIED_RUNTIME_DOWNLOADS);
+    let runtime_dir = downloader.get_runtime_dir()?;
+    if is_selected_database_installed(&runtime_dir, &standby_tool_id) {
+        return Ok(());
+    }
+
+    // Only the database engine: the web stack and both database tools stay as they are.
+    downloader
+        .download_all_with_skip(
+            progress_emitter(&app),
+            &["caddy", "php", "adminer", "phpmyadmin"],
+        )
+        .await?;
+
+    if is_selected_database_installed(&runtime_dir, &standby_tool_id) {
+        Ok(())
+    } else {
+        Err(format!(
+            "The database was downloaded, but CHAMP could not find its files in {}",
+            runtime_dir.display()
+        ))
+    }
+}
+
 /// Check system dependencies (libraries required by runtime binaries)
 #[tauri::command]
 pub async fn check_system_dependencies() -> DependencyCheckResult {

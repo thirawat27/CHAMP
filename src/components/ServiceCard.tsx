@@ -8,6 +8,7 @@
 import { openUrl } from "@tauri-apps/plugin-opener";
 import {
   Database,
+  Download,
   FileCode2,
   Globe2,
   LoaderCircle,
@@ -44,6 +45,10 @@ interface ServiceCardProps {
   busyLabel?: string;
   /** True for the database that is not part of the selected stack */
   standby?: boolean;
+  /** Install the runtime first; replaces the start control while set */
+  onInstall?: () => void;
+  /** Download progress (0-100) while onInstall is running */
+  installPercent?: number | null;
   onStart: () => void;
   onStop: () => void;
   onRestart: () => void;
@@ -70,6 +75,8 @@ export function ServiceCard({
   busy = false,
   busyLabel,
   standby = false,
+  onInstall,
+  installPercent = null,
   onStart,
   onStop,
   onRestart,
@@ -84,6 +91,8 @@ export function ServiceCard({
     busy || state === ServiceState.Starting || state === ServiceState.Stopping;
   const isError = state === ServiceState.Error;
   const actionLabel = busyLabel || (state === ServiceState.Stopping ? t.stopping : t.starting);
+  const needsInstall = Boolean(onInstall) && !isRunning;
+  const installing = installPercent !== null;
 
   const stateLabels: Record<ServiceState, string> = {
     [ServiceState.Stopped]: t.stopped,
@@ -109,7 +118,7 @@ export function ServiceCard({
           <p>{SERVICE_DESCRIPTIONS[serviceType]}</p>
         </div>
         <span className={`status-pill ${state}`} data-testid={`service-state-${serviceType}`}>
-          {stateLabels[state]}
+          {needsInstall ? t.notInstalled : stateLabels[state]}
         </span>
       </header>
 
@@ -136,7 +145,9 @@ export function ServiceCard({
         )}
       </div>
 
-      {standby && !isRunning && <p className="service-standby">{t.notInStack}</p>}
+      {standby && !isRunning && (
+        <p className="service-standby">{needsInstall ? t.standbyNotInstalled : t.notInStack}</p>
+      )}
 
       {isError && error && (
         <div className="service-error" title={error}>
@@ -159,7 +170,25 @@ export function ServiceCard({
             {t.diagnose}
           </button>
         )}
-        {!isRunning ? (
+        {needsInstall ? (
+          <button
+            type="button"
+            onClick={() => {
+              AudioManager.playClick();
+              onInstall?.();
+            }}
+            disabled={installing}
+            className="btn-start"
+            data-testid={`install-button-${serviceType}`}
+          >
+            {installing ? (
+              <LoaderCircle size={15} className="spin-icon" />
+            ) : (
+              <Download size={15} />
+            )}
+            {installing ? `${installPercent}%` : t.install}
+          </button>
+        ) : !isRunning ? (
           <button
             type="button"
             onClick={() => {

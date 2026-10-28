@@ -41,6 +41,7 @@ import {
   AgentActivity,
   AppSettings,
   DEFAULT_PORTS,
+  DownloadProgress,
   InstalledPhpVersion,
   SERVICE_DISPLAY_NAMES,
   ServiceState,
@@ -95,6 +96,7 @@ export function Dashboard() {
   const [doctorService, setDoctorService] = useState<ServiceType | null>(null);
   const [phpUpdate, setPhpUpdate] = useState<InstalledPhpVersion | null>(null);
   const [phpUpdating, setPhpUpdating] = useState(false);
+  const [standbyInstallPercent, setStandbyInstallPercent] = useState<number | null>(null);
 
   const { notice, notify, dismiss } = useToast();
   const updatePhase = useUpdateStore((state) => state.phase);
@@ -211,6 +213,30 @@ export function Dashboard() {
       notify({ tone: "error", title: t.failedToInstallPhpVersion, message: String(error) });
     } finally {
       setPhpUpdating(false);
+    }
+  };
+
+  const installStandbyDatabase = async (serviceType: ServiceType) => {
+    const name = SERVICE_DISPLAY_NAMES[serviceType];
+    setStandbyInstallPercent(0);
+    const unlisten = listenIfTauri<DownloadProgress>("download-progress", (event) => {
+      setStandbyInstallPercent(event.payload.percent);
+    });
+    notify({ tone: "info", title: t.installingDatabase.replace("{name}", name), message: "" });
+    try {
+      await invoke("install_standby_database");
+      notify({ tone: "success", title: t.databaseInstalled.replace("{name}", name), message: "" });
+      refreshMetadata();
+      refreshStatuses();
+    } catch (error) {
+      notify({
+        tone: "error",
+        title: t.failedToInstallDatabase.replace("{name}", name),
+        message: String(error),
+      });
+    } finally {
+      unlisten.then((dispose) => dispose());
+      setStandbyInstallPercent(null);
     }
   };
 
@@ -442,6 +468,9 @@ export function Dashboard() {
   const stackState = allRunning ? "running" : runningCount > 0 ? "partial" : "stopped";
   const stackStateLabel = allRunning ? t.running : runningCount > 0 ? t.active : t.stopped;
   const standbyDatabase = isAdminerSelected ? ServiceType.MySQL : ServiceType.PostgreSQL;
+  // Setup installs only the selected database; until the standby one is
+  // installed its card offers an install instead of a start.
+  const standbyInstalled = Boolean(installedVersions[standbyDatabase]);
   const orderedServices = [...stackServiceTypes, standbyDatabase];
   const updateInstalling = updatePhase === "installing";
 
@@ -708,6 +737,12 @@ export function Dashboard() {
                   port={service.port}
                   error={service.error_message}
                   standby={serviceType === standbyDatabase}
+                  onInstall={
+                    serviceType === standbyDatabase && !standbyInstalled
+                      ? () => installStandbyDatabase(serviceType)
+                      : undefined
+                  }
+                  installPercent={serviceType === standbyDatabase ? standbyInstallPercent : null}
                   busy={Boolean(busyServiceCommand)}
                   busyLabel={
                     busyServiceCommand

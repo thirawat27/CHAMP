@@ -159,6 +159,7 @@ pub fn run() {
             commands::check_system_dependencies,
             commands::download_runtime_with_packages,
             commands::download_runtime_with_skip,
+            commands::install_standby_database,
             commands::get_available_packages_cmd,
             commands::refresh_runtime_catalog,
             commands::refresh_php_catalog,

@@ -211,12 +211,17 @@ pub fn locate_runtime_binaries() -> Result<RuntimePaths, String> {
 
     let adminer_path = app_paths.config_dir.join("adminer");
 
+    // Setup installs only the selected database, so a missing database binary
+    // must not block the rest of the stack; `require_database_binary` reports it
+    // when that database is started.
     Ok(RuntimePaths {
         caddy: detect_caddy_binary(&runtime_dir)?,
         php_cgi: detect_php_binary(&runtime_dir)?,
         php_ini: detect_php_ini(&runtime_dir)?,
-        mysql: detect_mysql_binary(&runtime_dir)?,
-        postgresql: detect_postgresql_binary(&runtime_dir)?,
+        mysql: detect_mysql_binary(&runtime_dir)
+            .unwrap_or_else(|_| missing_binary_path(&runtime_dir, "mysql", "mysqld")),
+        postgresql: detect_postgresql_binary(&runtime_dir)
+            .unwrap_or_else(|_| missing_binary_path(&runtime_dir, "postgresql", "postgres")),
         adminer: adminer_path,
         mysql_data_dir: app_paths.mysql_data_dir.clone(),
         postgresql_data_dir: app_paths.postgresql_data_dir.clone(),
@@ -224,6 +229,27 @@ pub fn locate_runtime_binaries() -> Result<RuntimePaths, String> {
         config_dir: app_paths.config_dir.clone(),
         projects_dir: app_paths.projects_dir.clone(),
     })
+}
+
+fn missing_binary_path(runtime_dir: &Path, folder: &str, name: &str) -> PathBuf {
+    let executable = if cfg!(target_os = "windows") {
+        format!("{name}.exe")
+    } else {
+        name.to_string()
+    };
+    runtime_dir.join(folder).join("bin").join(executable)
+}
+
+/// Fail a database start when its runtime was never installed.
+pub fn require_database_binary(binary: &Path, display_name: &str) -> Result<(), String> {
+    if binary.exists() {
+        Ok(())
+    } else {
+        Err(format!(
+            "{display_name} is not installed (expected {}). Install it from the {display_name} card on the dashboard.",
+            binary.display()
+        ))
+    }
 }
 
 fn resolve_runtime_dir(app_paths: &AppDataPaths) -> Result<PathBuf, String> {
@@ -765,6 +791,18 @@ mod tests {
     fn test_portable_marker_config_supports_plain_path() {
         let path = portable_marker_configured_dir("custom-data").unwrap();
         assert_eq!(path, PathBuf::from("custom-data"));
+    }
+
+    #[test]
+    fn missing_database_binary_fails_only_on_require() {
+        let temp_dir = TempDir::new().unwrap();
+        let missing = missing_binary_path(temp_dir.path(), "postgresql", "postgres");
+        let error = require_database_binary(&missing, "PostgreSQL").unwrap_err();
+        assert!(error.contains("PostgreSQL is not installed"));
+
+        std::fs::create_dir_all(missing.parent().unwrap()).unwrap();
+        std::fs::write(&missing, b"stub").unwrap();
+        assert!(require_database_binary(&missing, "PostgreSQL").is_ok());
     }
 
     #[test]
