@@ -17,6 +17,7 @@ mod htaccess;
 mod php_config;
 mod platform;
 mod ports;
+mod welcome;
 
 use caddyfile::*;
 use db_tool::*;
@@ -24,6 +25,7 @@ use htaccess::*;
 use php_config::*;
 use platform::*;
 use ports::*;
+use welcome::*;
 
 const ALL_SERVICES: [ServiceType; 4] = [
     ServiceType::Caddy,
@@ -639,7 +641,14 @@ fn start_caddy(
 
     // Always regenerate Caddyfile with current port settings
     let caddyfile_path = paths.config_dir.join("Caddyfile");
-    generate_caddyfile(&caddyfile_path, paths, service_process.port, php_port)?;
+    let welcome_dir = write_welcome_page(paths, database_tool_id)?;
+    generate_caddyfile(
+        &caddyfile_path,
+        paths,
+        service_process.port,
+        php_port,
+        &welcome_dir,
+    )?;
 
     // Open log file with retry logic for Windows file locking
     let log_path = paths.logs_dir.join("caddy.log");
@@ -1853,10 +1862,18 @@ Options -Indexes
         };
         let caddyfile = config.join("Caddyfile");
 
-        generate_caddyfile(&caddyfile, &runtime_paths, 8080, 9000)
-            .expect("failed to generate Caddyfile");
+        generate_caddyfile(
+            &caddyfile,
+            &runtime_paths,
+            8080,
+            9000,
+            &config.join("welcome"),
+        )
+        .expect("failed to generate Caddyfile");
         let content = std::fs::read_to_string(caddyfile).expect("failed to read Caddyfile");
 
+        assert!(content.contains("@champWelcome"));
+        assert!(content.contains("not file index.html index.htm index.php"));
         assert!(content.contains("@htaccessExtPhp_0_IT_NVC"));
         assert!(content.contains("rewrite * {file_match.relative}"));
         assert!(content.contains("@htaccessError404_0_IT_NVC"));

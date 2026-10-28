@@ -87,8 +87,8 @@ export const GUIDE_SECTIONS: GuideSection[] = [
             "When it finishes, open the dashboard and press Start (Ctrl+S) to run the whole stack."
           ),
           l(
-            "เปิด http://localhost:8080 ในเบราว์เซอร์ จะเห็นโฟลเดอร์โปรเจกต์ของคุณ",
-            "Open http://localhost:8080 in your browser to see your projects folder."
+            "เปิด http://localhost:8080 ในเบราว์เซอร์ จะเห็นหน้าเริ่มต้นของ CHAMP ที่บอกที่อยู่โฟลเดอร์ projects และลิงก์ไปเว็บไซต์ที่มีอยู่",
+            "Open http://localhost:8080 in your browser to see CHAMP's start page with your projects folder and links to your sites."
           ),
         ],
       },
@@ -200,6 +200,13 @@ export const GUIDE_SECTIONS: GuideSection[] = [
         kind: "code",
         label: l("ตัวอย่างโครงสร้าง", "Example layout"),
         code: "projects/\n  shop/\n    index.php      → http://localhost:8080/shop/\n  blog/\n    index.html     → http://localhost:8080/blog/",
+      },
+      {
+        kind: "tip",
+        text: l(
+          "หน้า http://localhost:8080/ แสดงรายการเว็บไซต์ทุกโฟลเดอร์ที่มี index.html หรือ index.php ถ้าอยากให้หน้าแรกเป็นเว็บของคุณเอง ให้วาง index.html หรือ index.php ไว้ในโฟลเดอร์ projects โดยตรง หน้านี้จะถูกแทนที่ทันที",
+          "http://localhost:8080/ lists every folder that has an index.html or index.php. To make the root your own site, put an index.html or index.php directly in the projects folder; it replaces the start page immediately."
+        ),
       },
       {
         kind: "p",

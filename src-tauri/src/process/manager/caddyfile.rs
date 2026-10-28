@@ -10,7 +10,12 @@ pub(super) fn generate_caddyfile(
     paths: &RuntimePaths,
     port: u16,
     php_port: u16,
+    welcome_dir: &Path,
 ) -> Result<(), String> {
+    let welcome = welcome_dir
+        .to_str()
+        .ok_or("Invalid welcome page path")?
+        .replace('\\', "/");
     // Convert paths to use forward slashes for Caddyfile (cross-platform compatibility)
     let projects = paths
         .projects_dir
@@ -95,6 +100,20 @@ pub(super) fn generate_caddyfile(
     content.push_str("    handle @phpIndex {\n");
     content.push_str("        rewrite * {file_match.relative}\n");
     content.push_str(&format!("        php_fastcgi 127.0.0.1:{}\n", php_port));
+    content.push_str("    }\n");
+    content.push('\n');
+    // Landing page at "/" while the projects folder has no index of its own.
+    // Checked per request, so dropping an index.html in the folder takes over
+    // immediately without restarting Caddy.
+    content.push_str("    # CHAMP landing page when the projects root has no index file\n");
+    content.push_str("    @champWelcome {\n");
+    content.push_str("        path /\n");
+    content.push_str("        not file index.html index.htm index.php\n");
+    content.push_str("    }\n");
+    content.push_str("    handle @champWelcome {\n");
+    content.push_str(&format!("        root * \"{}\"\n", welcome));
+    content.push_str("        rewrite * /index.html\n");
+    content.push_str("        file_server\n");
     content.push_str("    }\n");
     content.push('\n');
     append_htaccess_no_browse_rules(&mut content, &htaccess_rules);
