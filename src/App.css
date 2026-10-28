@@ -2486,12 +2486,235 @@ select.input {
   }
 }
 
+/* ---------- Motion ---------- */
+
+/* Spinners, progress and status lights are feedback, not decoration, so they
+   keep moving even when Windows "animation effects" is off (WebView2 then
+   reports prefers-reduced-motion and a blanket rule froze every spinner). */
+
+.spin-icon {
+  display: block;
+  transform-origin: 50% 50%;
+  will-change: transform;
+}
+
+.service-card,
+.rail-card {
+  animation: rise-in 0.45s var(--ease) backwards;
+}
+
+.service-grid > .service-card:nth-child(2) {
+  animation-delay: 0.05s;
+}
+
+.service-grid > .service-card:nth-child(3) {
+  animation-delay: 0.1s;
+}
+
+.service-grid > .service-card:nth-child(4) {
+  animation-delay: 0.15s;
+}
+
+.side-rail > .rail-card:nth-child(2) {
+  animation-delay: 0.08s;
+}
+
+.side-rail > .rail-card:nth-child(3) {
+  animation-delay: 0.16s;
+}
+
+@keyframes rise-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px) scale(0.985);
+  }
+}
+
+.service-card,
+.rail-card,
+.path-node {
+  transition:
+    box-shadow 0.25s var(--ease),
+    border-color 0.25s var(--ease),
+    opacity 0.25s var(--ease);
+}
+
+/* Hover effects never move the element: a lift shifts it out from under the
+   cursor, which drops :hover and makes the UI flicker at the edges. */
+.service-card:hover,
+.rail-card:hover {
+  border-color: var(--border-strong);
+  box-shadow: var(--shadow-float);
+}
+
+.path-node:hover {
+  border-color: var(--border-strong);
+}
+
+.btn-start,
+.btn-stop,
+.btn-restart,
+.btn-diagnose,
+.btn-command,
+.btn-primary,
+.btn-secondary {
+  transition:
+    filter 0.15s var(--ease),
+    background-color 0.2s var(--ease),
+    border-color 0.2s var(--ease),
+    box-shadow 0.2s var(--ease);
+}
+
+.btn-start:hover:not(:disabled),
+.btn-command:hover:not(:disabled),
+.btn-primary:hover:not(:disabled) {
+  box-shadow: 0 4px 14px color-mix(in srgb, var(--color-primary) 30%, transparent);
+}
+
+.btn-start:active:not(:disabled),
+.btn-stop:active:not(:disabled),
+.btn-restart:active:not(:disabled),
+.btn-diagnose:active:not(:disabled),
+.btn-command:active:not(:disabled),
+.btn-primary:active:not(:disabled),
+.btn-secondary:active:not(:disabled) {
+  filter: brightness(0.92);
+}
+
+.btn-restart svg {
+  transition: transform 0.45s var(--ease);
+}
+
+.btn-restart:hover:not(:disabled) svg {
+  transform: rotate(180deg);
+}
+
+/* A moving sheen on the primary button while its service is working. */
+.state-starting .btn-start:disabled,
+.state-stopping .btn-start:disabled,
+.btn-start:disabled:has(.spin-icon) {
+  background-image: linear-gradient(
+    110deg,
+    transparent 30%,
+    color-mix(in srgb, #fff 28%, transparent) 50%,
+    transparent 70%
+  );
+  background-size: 220% 100%;
+  animation: sheen 1.4s linear infinite;
+}
+
+@keyframes sheen {
+  from {
+    background-position: 160% 0;
+  }
+  to {
+    background-position: -60% 0;
+  }
+}
+
+.status-pill {
+  transition:
+    background-color 0.3s var(--ease),
+    color 0.3s var(--ease);
+}
+
+.status-pill.starting,
+.status-pill.stopping {
+  animation: led-pulse 1.1s ease-in-out infinite;
+}
+
+/* Running services breathe a soft ring. */
+.running > .node-led,
+.state-running .service-led {
+  animation: led-ring 2.2s ease-out infinite;
+}
+
+@keyframes led-ring {
+  0% {
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--color-success) 55%, transparent);
+  }
+  70%,
+  100% {
+    box-shadow: 0 0 0 8px color-mix(in srgb, var(--color-success) 0%, transparent);
+  }
+}
+
+.state-error .service-led,
+.error > .node-led {
+  animation: led-ring-error 1.6s ease-out infinite;
+}
+
+@keyframes led-ring-error {
+  0% {
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--color-error) 55%, transparent);
+  }
+  70%,
+  100% {
+    box-shadow: 0 0 0 8px color-mix(in srgb, var(--color-error) 0%, transparent);
+  }
+}
+
+.brand-logo {
+  animation: logo-float 4.5s ease-in-out infinite;
+}
+
+@keyframes logo-float {
+  50% {
+    transform: translateY(-2px) rotate(-2deg);
+  }
+}
+
+/* Shimmer running across a determinate progress bar. */
+.progress-bar {
+  position: relative;
+  overflow: hidden;
+}
+
+.progress-bar::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    100deg,
+    transparent 20%,
+    color-mix(in srgb, #fff 38%, transparent) 50%,
+    transparent 80%
+  );
+  transform: translateX(-100%);
+  animation: bar-shimmer 1.6s ease-in-out infinite;
+}
+
+@keyframes bar-shimmer {
+  to {
+    transform: translateX(100%);
+  }
+}
+
+.service-error {
+  animation: shake-in 0.4s var(--ease);
+}
+
+@keyframes shake-in {
+  20% {
+    transform: translateX(-4px);
+  }
+  50% {
+    transform: translateX(3px);
+  }
+  80% {
+    transform: translateX(-2px);
+  }
+}
+
+/* Only decorative motion is switched off; feedback above keeps running. */
 @media (prefers-reduced-motion: reduce) {
-  *,
-  *::before,
-  *::after {
-    animation-duration: 0.01ms !important;
-    animation-iteration-count: 1 !important;
-    transition-duration: 0.01ms !important;
+  .brand-logo,
+  .progress-bar::after {
+    animation: none;
+  }
+
+  .service-card,
+  .rail-card {
+    animation-duration: 0.01ms;
   }
 }
