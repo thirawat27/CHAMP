@@ -410,13 +410,17 @@ export function Dashboard() {
       ["PHP", installedVersions.php],
       ["MySQL", installedVersions.mysql],
       ["PostgreSQL", installedVersions.postgresql],
-      [databaseToolName, installedVersions.phpmyadmin || installedVersions.adminer],
+      [
+        databaseToolName,
+        // Both tools can be on disk after switching engines; show the active one.
+        isAdminerSelected ? installedVersions.adminer : installedVersions.phpmyadmin,
+      ],
       ["cloudflared", installedVersions.cloudflared],
     ];
     return entries.filter(
       (entry): entry is [string, string] => typeof entry[1] === "string" && entry[1].length > 0
     );
-  }, [databaseToolName, installedVersions]);
+  }, [databaseToolName, installedVersions, isAdminerSelected]);
 
   const railActions: RailAction[] = [
     {

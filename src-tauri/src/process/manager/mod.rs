@@ -34,18 +34,21 @@ const ALL_SERVICES: [ServiceType; 4] = [
     ServiceType::PostgreSQL,
 ];
 
-fn active_database_service(database_tool_id: &str) -> ServiceType {
-    if database_tool_id.starts_with("adminer") {
+/// The engine chosen for the database role, independent of the web manager.
+fn active_database_service(selection: &crate::runtime::packages::PackageSelection) -> ServiceType {
+    if selection.is_postgresql() {
         ServiceType::PostgreSQL
     } else {
         ServiceType::MySQL
     }
 }
 
-fn stack_start_services(database_tool_id: &str) -> [ServiceType; 3] {
+fn stack_start_services(
+    selection: &crate::runtime::packages::PackageSelection,
+) -> [ServiceType; 3] {
     [
         ServiceType::PhpFpm,
-        active_database_service(database_tool_id),
+        active_database_service(selection),
         ServiceType::Caddy,
     ]
 }
@@ -427,7 +430,7 @@ impl ProcessManager {
     pub fn start_all(&mut self) -> Result<(), String> {
         self.initialize()?;
         self.prepare_stack_ports()?;
-        for service in stack_start_services(&self.settings.package_selection.phpmyadmin) {
+        for service in stack_start_services(&self.settings.package_selection) {
             self.start(service)?;
         }
         Ok(())
@@ -445,7 +448,7 @@ impl ProcessManager {
             .ok_or("Runtime paths not initialized")?
             .clone();
 
-        for service in stack_start_services(&self.settings.package_selection.phpmyadmin) {
+        for service in stack_start_services(&self.settings.package_selection) {
             let Some(service_process) = self.services.get(&service) else {
                 continue;
             };

@@ -115,7 +115,44 @@ pub struct PackageSelection {
     pub mysql: String,
     #[serde(default = "default_postgresql_selection")]
     pub postgresql: String,
+    /// The web database manager (`phpmyadmin-*` or `adminer-*`).
     pub phpmyadmin: String,
+    /// Which engine fills the stack's database role: `mysql` or `postgresql`.
+    /// Chosen separately from the manager; empty in settings saved before that.
+    #[serde(default)]
+    pub database_engine: String,
+}
+
+impl PackageSelection {
+    pub fn is_postgresql(&self) -> bool {
+        self.database_engine == "postgresql"
+    }
+
+    pub fn tool_is_adminer(&self) -> bool {
+        self.phpmyadmin.starts_with("adminer")
+    }
+
+    /// Fill and reconcile the database choice.
+    ///
+    /// Older settings tied the engine to the manager (Adminer meant
+    /// PostgreSQL), so an empty engine is inferred from it. phpMyAdmin only
+    /// speaks MySQL, so a PostgreSQL stack always ends up on Adminer. Saved
+    /// manager ids go stale as releases change, so they resolve to the catalog.
+    pub fn normalized(mut self) -> Self {
+        if self.database_engine != "mysql" && self.database_engine != "postgresql" {
+            self.database_engine = if self.tool_is_adminer() {
+                "postgresql"
+            } else {
+                "mysql"
+            }
+            .to_string();
+        }
+        if self.is_postgresql() && !self.tool_is_adminer() {
+            self.phpmyadmin = "adminer".to_string();
+        }
+        self.phpmyadmin = resolve_database_tool_id(&self.phpmyadmin);
+        self
+    }
 }
 
 fn default_postgresql_selection() -> String {
@@ -981,6 +1018,7 @@ fn selected_package_ids_from_config(cfg: &RuntimeConfig) -> PackageSelection {
             .or_else(|| cfg.binaries.phpmyadmin.versions.first())
             .map(|v| v.id.clone())
             .expect("runtime-config.json must define a database tool package"),
+        database_engine: "mysql".to_string(),
     }
 }
 
@@ -1142,6 +1180,30 @@ mod tests {
             "adminer",
             adminer_version("6.2.0")
         ));
+    }
+
+    #[test]
+    fn engine_and_manager_are_reconciled() {
+        let legacy = |tool: &str| PackageSelection {
+            php: "php-8.5".into(),
+            mysql: "mysql-9.7".into(),
+            postgresql: "postgresql-18".into(),
+            phpmyadmin: tool.into(),
+            database_engine: String::new(),
+        };
+        // Old settings: Adminer meant PostgreSQL, phpMyAdmin meant MySQL.
+        assert!(legacy("adminer-6.2").normalized().is_postgresql());
+        assert!(!legacy("phpmyadmin-5.2").normalized().is_postgresql());
+
+        // Adminer also works with MySQL when MySQL is chosen explicitly.
+        let mut mysql_adminer = legacy("adminer-6.2");
+        mysql_adminer.database_engine = "mysql".into();
+        assert!(!mysql_adminer.normalized().is_postgresql());
+
+        // phpMyAdmin cannot serve PostgreSQL, so the manager moves to Adminer.
+        let mut pg_phpmyadmin = legacy("phpmyadmin-5.2");
+        pg_phpmyadmin.database_engine = "postgresql".into();
+        assert!(pg_phpmyadmin.normalized().tool_is_adminer());
     }
 
     #[test]

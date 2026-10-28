@@ -94,7 +94,7 @@ src-tauri/src/
 - Stack: `start_all_services`, `stop_all_services`, `restart_all_services`
 - Status: `get_all_statuses`, `get_system_metrics`
 - Settings: `get_settings`, `save_settings`, `validate_settings`, `check_ports`
-- Runtime: `get_available_packages_cmd`, `refresh_runtime_catalog`, `refresh_php_catalog`, `download_runtime_with_packages`, `download_runtime_with_skip`, `switch_database_engine`
+- Runtime: `get_available_packages_cmd`, `refresh_runtime_catalog`, `refresh_php_catalog`, `download_runtime_with_packages`, `download_runtime_with_skip`, `switch_database_engine`, `switch_database_tool`
 - PHP: `get_installed_php_versions`, `switch_php_version`, `download_php_version` (installs/updates to the newest patch, does not switch)
 - Folders/terminal: `open_folder`, `open_project_terminal` (restricted to the CHAMP data folder)
 - HTTPS Preview: `start_https_tunnel`, `stop_https_tunnel`, `get_https_tunnel_status`

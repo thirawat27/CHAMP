@@ -298,7 +298,8 @@ fn parse_service(args: &Value) -> Result<ServiceType, String> {
 
 fn status_json(statuses: &ServiceMap) -> Value {
     let settings = AppSettings::load();
-    let adminer = settings.package_selection.phpmyadmin.starts_with("adminer");
+    let adminer = settings.package_selection.tool_is_adminer();
+    let postgresql = settings.package_selection.is_postgresql();
     let web_port = statuses
         .get(&ServiceType::Caddy)
         .map(|service| service.port)
@@ -324,7 +325,7 @@ fn status_json(statuses: &ServiceMap) -> Value {
 
     json!({
         "services": services,
-        "active_database": if adminer { "postgresql" } else { "mysql" },
+        "active_database": if postgresql { "postgresql" } else { "mysql" },
         "web_url": format!("http://localhost:{web_port}/"),
         "database_tool": {
             "name": if adminer { "Adminer" } else { "phpMyAdmin" },
@@ -385,7 +386,7 @@ async fn environment_json(app: &AppHandle) -> Result<Value, String> {
                 "auth": "trust (local connections only)",
                 "version": versions.get("postgresql"),
             },
-            "active": if settings.package_selection.phpmyadmin.starts_with("adminer") { "postgresql" } else { "mysql" },
+            "active": if settings.package_selection.is_postgresql() { "postgresql" } else { "mysql" },
             "note": "Use host 127.0.0.1 rather than localhost so drivers connect over TCP.",
         },
         "folders": {

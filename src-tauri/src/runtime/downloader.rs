@@ -419,7 +419,7 @@ impl RuntimeDownloader {
         Self {
             platform: Platform::current(),
             client: Self::build_client(),
-            package_selection: Some(package_selection),
+            package_selection: Some(package_selection.normalized()),
             allow_unverified_checksums: false,
         }
     }
@@ -1865,8 +1865,16 @@ impl RuntimeDownloader {
             })
     }
 
+    /// The database engine follows the explicit engine choice, not the manager:
+    /// Adminer works with either MySQL or PostgreSQL.
     fn selected_database_component(&self) -> BinaryComponent {
-        if self.selected_database_tool_id().starts_with("adminer") {
+        let postgresql = match &self.package_selection {
+            Some(selection) => selection.is_postgresql(),
+            None => crate::config::AppSettings::load()
+                .package_selection
+                .is_postgresql(),
+        };
+        if postgresql {
             BinaryComponent::PostgreSQL
         } else {
             BinaryComponent::MySQL

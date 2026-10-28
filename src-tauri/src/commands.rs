@@ -567,11 +567,13 @@ async fn ensure_selected_database_tool_installed(
         .find(|package| package.id == *tool_id)
         .ok_or_else(|| format!("Unknown database tool: {}", tool_id))?;
 
-    let downloader = RuntimeDownloader::with_packages(settings.package_selection.clone())
+    let selection = &settings.package_selection;
+    let postgresql = selection.is_postgresql();
+    let downloader = RuntimeDownloader::with_packages(selection.clone())
         .allow_unverified_checksums(ALLOW_UNVERIFIED_RUNTIME_DOWNLOADS);
     let runtime_dir = downloader.get_runtime_dir()?;
     if is_database_tool_installed(&runtime_dir, tool_id)
-        && is_selected_database_installed(&runtime_dir, tool_id)
+        && is_selected_database_installed(&runtime_dir, postgresql)
     {
         return Ok(());
     }
@@ -581,17 +583,24 @@ async fn ensure_selected_database_tool_installed(
         package.display_name
     );
 
-    let skip_list = if tool_id.starts_with("adminer") {
-        ["caddy", "php", "mysql", "phpmyadmin"]
-    } else {
-        ["caddy", "php", "postgresql", "adminer"]
-    };
+    // Only what the choice needs: the web stack is already there, and the
+    // engine and manager that were not chosen stay out.
+    let skip_list = [
+        "caddy",
+        "php",
+        if postgresql { "mysql" } else { "postgresql" },
+        if selection.tool_is_adminer() {
+            "phpmyadmin"
+        } else {
+            "adminer"
+        },
+    ];
     downloader
         .download_all_with_skip(progress_emitter(app), &skip_list)
         .await?;
 
     if is_database_tool_installed(&runtime_dir, tool_id)
-        && is_selected_database_installed(&runtime_dir, tool_id)
+        && is_selected_database_installed(&runtime_dir, postgresql)
     {
         Ok(())
     } else {
@@ -612,8 +621,8 @@ fn is_database_tool_installed(runtime_dir: &Path, tool_id: &str) -> bool {
     }
 }
 
-fn is_selected_database_installed(runtime_dir: &Path, tool_id: &str) -> bool {
-    let (marker, folder, binary) = if tool_id.starts_with("adminer") {
+fn is_selected_database_installed(runtime_dir: &Path, postgresql: bool) -> bool {
+    let (marker, folder, binary) = if postgresql {
         ("postgresql_installed.txt", "postgresql", "postgres")
     } else {
         ("mysql_installed.txt", "mysql", "mysqld")
@@ -997,37 +1006,50 @@ pub async fn download_runtime_with_skip(
 /// Choose which engine (`mysql` or `postgresql`) fills the stack's database role.
 ///
 /// MySQL and PostgreSQL are interchangeable: the stack runs exactly one of
-/// them, and its web manager follows the engine (phpMyAdmin for MySQL, Adminer
-/// for PostgreSQL). The engine is installed on first use, and the stack is
-/// restarted onto it when it was running.
+/// them. The web manager is a separate choice; phpMyAdmin only speaks MySQL,
+/// so moving to PostgreSQL also moves a phpMyAdmin stack onto Adminer.
 #[tauri::command]
 pub async fn switch_database_engine(engine: String, app: AppHandle) -> Result<(), String> {
-    let tool_prefix = match engine.as_str() {
-        "mysql" => "phpmyadmin",
-        "postgresql" => "adminer",
-        other => return Err(format!("Unsupported database engine: {}", other)),
-    };
-
-    let mut settings = AppSettings::load();
-    if settings
-        .package_selection
-        .phpmyadmin
-        .starts_with(tool_prefix)
-    {
-        return Ok(());
+    if engine != "mysql" && engine != "postgresql" {
+        return Err(format!("Unsupported database engine: {}", engine));
     }
 
-    settings.package_selection.phpmyadmin = crate::runtime::packages::get_available_packages()
-        .phpmyadmin
-        .into_iter()
-        .find(|package| package.id.starts_with(tool_prefix))
-        .map(|package| package.id)
-        .ok_or_else(|| format!("No {} package in the runtime catalog", tool_prefix))?;
+    let mut settings = AppSettings::load();
+    if settings.package_selection.database_engine == engine {
+        return Ok(());
+    }
+    settings.package_selection.database_engine = engine;
+    settings.package_selection = settings.package_selection.normalized();
+    apply_database_selection(settings, &app).await
+}
 
-    ensure_selected_database_tool_installed(&settings, &app).await?;
+/// Choose the web database manager: `phpmyadmin` (MySQL only) or `adminer`
+/// (MySQL and PostgreSQL), independently of the engine.
+#[tauri::command]
+pub async fn switch_database_tool(tool: String, app: AppHandle) -> Result<(), String> {
+    if tool != "phpmyadmin" && tool != "adminer" {
+        return Err(format!("Unsupported database tool: {}", tool));
+    }
+
+    let mut settings = AppSettings::load();
+    if tool == "phpmyadmin" && settings.package_selection.is_postgresql() {
+        return Err("phpMyAdmin only supports MySQL. Use Adminer with PostgreSQL.".to_string());
+    }
+    if settings.package_selection.phpmyadmin.starts_with(&tool) {
+        return Ok(());
+    }
+    settings.package_selection.phpmyadmin = tool;
+    settings.package_selection = settings.package_selection.normalized();
+    apply_database_selection(settings, &app).await
+}
+
+/// Install what the new database choice needs, save it, and move the stack
+/// onto it (restarting it only if it was running).
+async fn apply_database_selection(settings: AppSettings, app: &AppHandle) -> Result<(), String> {
+    ensure_selected_database_tool_installed(&settings, app).await?;
     settings.save()?;
 
-    run_with_manager(&app, move |manager| -> Result<(), String> {
+    run_with_manager(app, move |manager| -> Result<(), String> {
         let web_stack_was_running = manager.get_all_statuses().iter().any(|(ty, s)| {
             matches!(ty, ServiceType::Caddy | ServiceType::PhpFpm)
                 && s.state == ServiceState::Running
@@ -1057,21 +1079,16 @@ mod tests {
     #[test]
     fn selected_database_detection_uses_marker_or_binary() {
         let temp = tempfile::tempdir().expect("failed to create temp dir");
-        assert!(!is_selected_database_installed(
-            temp.path(),
-            "phpmyadmin-5.2"
-        ));
+        // `postgresql` is the engine choice, not the manager.
+        assert!(!is_selected_database_installed(temp.path(), false));
 
         fs::create_dir_all(temp.path().join("mysql").join("bin")).unwrap();
         fs::write(temp.path().join("mysql").join("bin").join("mysqld"), "").unwrap();
-        assert!(is_selected_database_installed(
-            temp.path(),
-            "phpmyadmin-5.2"
-        ));
-        assert!(!is_selected_database_installed(temp.path(), "adminer-5.4"));
+        assert!(is_selected_database_installed(temp.path(), false));
+        assert!(!is_selected_database_installed(temp.path(), true));
 
         fs::write(temp.path().join("postgresql_installed.txt"), "version=17").unwrap();
-        assert!(is_selected_database_installed(temp.path(), "adminer-5.4"));
+        assert!(is_selected_database_installed(temp.path(), true));
     }
 
     #[test]

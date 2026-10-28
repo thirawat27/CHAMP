@@ -160,6 +160,7 @@ pub fn run() {
             commands::download_runtime_with_packages,
             commands::download_runtime_with_skip,
             commands::switch_database_engine,
+            commands::switch_database_tool,
             commands::get_available_packages_cmd,
             commands::refresh_runtime_catalog,
             commands::refresh_php_catalog,
