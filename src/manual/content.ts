@@ -378,13 +378,17 @@ export const GUIDE_SECTIONS: GuideSection[] = [
       {
         kind: "p",
         text: l(
-          "HTTPS Preview ใช้ Cloudflare Quick Tunnel สร้างลิงก์ `https://….trycloudflare.com` ที่ชี้มาที่เว็บในเครื่อง เหมาะกับทดสอบบนมือถือ ส่งให้ลูกค้าดู หรือทดสอบ webhook",
-          "HTTPS Preview uses a Cloudflare Quick Tunnel to create an `https://….trycloudflare.com` link to your local site. Use it to test on a phone, show a client, or receive webhooks."
+          "HTTPS Preview ใช้ ngrok สร้างลิงก์ `https://….ngrok-free.app` ที่ชี้มาที่เว็บในเครื่อง เหมาะกับทดสอบบนมือถือ ส่งให้ลูกค้าดู หรือทดสอบ webhook",
+          "HTTPS Preview uses ngrok to create an `https://….ngrok-free.app` link to your local site. Use it to test on a phone, show a client, or receive webhooks."
         ),
       },
       {
         kind: "steps",
         items: [
+          l(
+            "ครั้งแรก สมัครบัญชี ngrok ฟรี คัดลอก authtoken แล้ววางในช่อง ngrok authtoken ของ HTTPS Preview แล้วกด บันทึก",
+            "The first time, sign up for a free ngrok account, copy your authtoken, paste it into the ngrok authtoken field in HTTPS Preview, and press Save."
+          ),
           l(
             "กด เริ่ม HTTPS (CHAMP จะเปิด stack ให้ถ้ายังไม่ได้เปิด)",
             "Press Start HTTPS (CHAMP starts the stack first if needed)."
@@ -394,8 +398,8 @@ export const GUIDE_SECTIONS: GuideSection[] = [
             "Wait for the domain check. Open and Copy appear once the link really works."
           ),
           l(
-            "กด หยุด HTTPS เมื่อใช้เสร็จ ลิงก์จะเปลี่ยนใหม่ทุกครั้งที่เริ่ม",
-            "Press Stop HTTPS when you are done. Each start creates a new link."
+            "กด หยุด HTTPS เมื่อใช้เสร็จ บัญชีฟรีของ ngrok ให้โดเมนประจำบัญชี และผู้เข้าชมผ่านเบราว์เซอร์จะเห็นหน้าเตือนของ ngrok หนึ่งครั้งก่อนเข้าเว็บ",
+            "Press Stop HTTPS when you are done. A free ngrok account gets one domain of its own, and browser visitors see an ngrok warning page once before your site."
           ),
         ],
       },

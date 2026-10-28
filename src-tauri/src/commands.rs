@@ -428,8 +428,8 @@ pub async fn get_all_statuses(app: AppHandle) -> Result<ServiceMap, String> {
 
 /// Start a free public HTTPS URL for the local CHAMP web server.
 ///
-/// This uses Cloudflare Quick Tunnel (`*.trycloudflare.com`) and starts the
-/// selected CHAMP stack first when the web server is not already running.
+/// This uses an ngrok agent (`*.ngrok-free.app` on the free plan) and starts
+/// the selected CHAMP stack first when the web server is not already running.
 #[tauri::command]
 pub async fn start_https_tunnel(
     app: AppHandle,
@@ -463,6 +463,14 @@ pub async fn stop_https_tunnel() -> Result<crate::tunnel::HttpsTunnelStatus, Str
 #[tauri::command]
 pub async fn get_https_tunnel_status() -> Result<crate::tunnel::HttpsTunnelStatus, String> {
     crate::tunnel::get_https_tunnel_status()
+}
+
+/// Save (or clear, when empty) the ngrok authtoken used by HTTPS Preview.
+#[tauri::command]
+pub async fn set_ngrok_authtoken(
+    token: String,
+) -> Result<crate::tunnel::HttpsTunnelStatus, String> {
+    crate::tunnel::set_ngrok_authtoken(&token)
 }
 
 /// Get app settings
@@ -964,7 +972,7 @@ pub async fn get_installed_versions() -> Result<std::collections::HashMap<String
         "postgresql",
         "adminer",
         "phpmyadmin",
-        "cloudflared",
+        "ngrok",
     ] {
         let marker_file = runtime_dir.join(format!("{}_installed.txt", component));
         if let Some(version) = read_marker_version(&marker_file) {

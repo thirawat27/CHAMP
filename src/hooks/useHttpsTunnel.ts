@@ -27,11 +27,13 @@ export interface HttpsTunnelController {
   startHttpsTunnel: () => Promise<void>;
   stopHttpsTunnel: () => Promise<void>;
   copyHttpsTunnelUrl: () => Promise<void>;
+  /** Saves the ngrok authtoken (empty clears it); resolves true on success. */
+  saveNgrokAuthtoken: (token: string) => Promise<boolean>;
   resetTunnel: () => void;
 }
 
 /**
- * Owns the Cloudflare Quick Tunnel (HTTPS Preview) state and lifecycle.
+ * Owns the ngrok tunnel (HTTPS Preview) state and lifecycle.
  *
  * Notices are pushed through the shared `notify` callback so only one toast is
  * visible at a time. `resetTunnel` is passed to the services hook so a
@@ -134,6 +136,31 @@ export function useHttpsTunnel({
     }
   }, [notify, t, tunnelStatus.url]);
 
+  const saveNgrokAuthtoken = useCallback(
+    async (token: string) => {
+      try {
+        const status = normalizeTunnelStatus(
+          await invoke<HttpsTunnelStatus>("set_ngrok_authtoken", { token })
+        );
+        setTunnelStatus(status);
+        notify({
+          tone: "success",
+          title: t.httpsTunnelTokenSaved,
+          message: t.httpsTunnelDevOnly,
+        });
+        return true;
+      } catch (error) {
+        notify({
+          tone: "error",
+          title: t.httpsTunnelError,
+          message: String(error),
+        });
+        return false;
+      }
+    },
+    [notify, t]
+  );
+
   const tunnelReady = Boolean(tunnelStatus.running && tunnelStatus.ready && tunnelStatus.url);
   const tunnelHasPendingUrl = Boolean(tunnelStatus.running && tunnelStatus.url && !tunnelReady);
 
@@ -146,6 +173,7 @@ export function useHttpsTunnel({
     startHttpsTunnel,
     stopHttpsTunnel,
     copyHttpsTunnelUrl,
+    saveNgrokAuthtoken,
     resetTunnel,
   };
 }

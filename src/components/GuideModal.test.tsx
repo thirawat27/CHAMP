@@ -21,7 +21,7 @@ describe("GuideModal", () => {
   it("filters topics by search text, including body content", () => {
     render(<GuideModal onClose={() => {}} />);
     fireEvent.change(screen.getByRole("searchbox", { name: /search the guide/i }), {
-      target: { value: "trycloudflare" },
+      target: { value: "ngrok-free" },
     });
     expect(screen.getByRole("heading", { name: "HTTPS Preview" })).toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "Keyboard shortcuts" })).not.toBeInTheDocument();

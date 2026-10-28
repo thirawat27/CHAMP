@@ -12,11 +12,11 @@ Core stack:
 - PHP-FPM on port `9000`
 - MySQL on port `3306` (used with phpMyAdmin at `/phpmyadmin`)
 - PostgreSQL on port `5432` (used with Adminer at `/adminer`)
-- Cloudflare Quick Tunnel based HTTPS Preview using `cloudflared`
+- ngrok based HTTPS Preview (`ngrok` agent, authtoken saved in `config/ngrok-authtoken`)
 
 Built-in features:
 
-- Log Doctor: offline diagnosis of service failures (knowledge base + optional Model2Vec model)
+- Log Doctor: offline diagnosis of service failures (knowledge base + Model2Vec model downloaded in the background on first start; removing it opts out)
 - AI agent connector: local MCP server for coding agents (off by default)
 - Self-updater: signed updates from GitHub Releases via `tauri-plugin-updater`
 - In-app bilingual guide (F1)
@@ -80,7 +80,7 @@ Frontend communicates with Rust using Tauri `invoke()` from `@tauri-apps/api/cor
 src-tauri/src/
   lib.rs              Tauri builder, plugins, tray, invoke handler
   commands.rs         IPC command handlers (process work runs via run_with_manager on the blocking pool)
-  tunnel.rs           HTTPS Preview / cloudflared quick tunnel
+  tunnel.rs           HTTPS Preview / ngrok tunnel
   doctor/             Log Doctor knowledge base matching + Model2Vec runtime (doctor-knowledge.json)
   agent/              MCP server for AI agents (hyper, 127.0.0.1, bearer token)
   process/manager/    Caddy, PHP-FPM, MySQL, PostgreSQL process control
@@ -114,7 +114,7 @@ PHP entries are rebuilt from official feeds (`php.net/releases/states.php`, `win
 CHAMP/
   config/        settings.json, agent-token, runtime-config.json override
   logs/
-  models/        Log Doctor model (optional)
+  models/        Log Doctor model (auto-downloaded)
   mysql/data/
   postgresql/data/
   projects/

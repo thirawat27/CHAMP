@@ -364,8 +364,8 @@ pub(super) const ADMINER_FILE: &str = "adminer.php";
 ///
 /// All three apply only to requests made on this computer. Caddy listens on
 /// every interface and HTTPS Preview forwards public traffic through a local
-/// cloudflared process, so the check also rejects non-local Host headers and
-/// Cloudflare headers. Anything else gets stock Adminer.
+/// ngrok agent, so the check also rejects non-local Host headers and proxy
+/// forwarding headers. Anything else gets stock Adminer.
 pub(super) fn write_adminer_wrapper(
     target: &Path,
     postgresql: bool,
@@ -404,8 +404,8 @@ function adminer_object()
                 if (!in_array(isset($_SERVER['REMOTE_ADDR']) ? $_SERVER['REMOTE_ADDR'] : '', $loopback, true)) {
                     return false;
                 }
-                // HTTPS Preview: cloudflared connects from 127.0.0.1 but adds these.
-                foreach (array('HTTP_CF_CONNECTING_IP', 'HTTP_CF_RAY', 'HTTP_X_REAL_IP') as $header) {
+                // HTTPS Preview: the tunnel agent connects from 127.0.0.1 but adds these.
+                foreach (array('HTTP_X_FORWARDED_HOST', 'HTTP_X_FORWARDED_PROTO', 'HTTP_CF_CONNECTING_IP', 'HTTP_CF_RAY', 'HTTP_X_REAL_IP') as $header) {
                     if (!empty($_SERVER[$header])) {
                         return false;
                     }

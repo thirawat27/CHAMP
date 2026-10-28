@@ -168,6 +168,12 @@ export interface Translations {
   httpsTunnelValidating: string;
   httpsTunnelError: string;
   httpsTunnelDevOnly: string;
+  httpsTunnelTokenLabel: string;
+  httpsTunnelTokenHelp: string;
+  httpsTunnelTokenGet: string;
+  httpsTunnelTokenSave: string;
+  httpsTunnelTokenSaved: string;
+  httpsTunnelTokenChange: string;
   terminal: string;
   openTerminal: string;
   openConfigFolder: string;
@@ -490,7 +496,7 @@ const th: Translations = {
   httpsPreview: "พรีวิว HTTPS",
   publicHttpsDomain: "โดเมน HTTPS ฟรีสำหรับทดสอบเว็บ",
   httpsTunnelDescription:
-    "สร้างลิงก์ HTTPS สาธารณะอัตโนมัติผ่าน trycloudflare.com สำหรับทดสอบและแชร์งานชั่วคราว",
+    "สร้างลิงก์ HTTPS สาธารณะอัตโนมัติผ่าน ngrok สำหรับทดสอบและแชร์งานชั่วคราว",
   httpsTunnelStart: "เริ่ม HTTPS",
   httpsTunnelStop: "หยุด HTTPS",
   httpsTunnelOpen: "เปิดลิงก์ HTTPS",
@@ -498,10 +504,16 @@ const th: Translations = {
   httpsTunnelStarting: "กำลังสร้าง HTTPS tunnel",
   httpsTunnelStarted: "สร้าง HTTPS tunnel แล้ว",
   httpsTunnelStopped: "หยุด HTTPS tunnel แล้ว",
-  httpsTunnelWaitingForDomain: "กำลังรอโดเมนฟรีจาก Cloudflare...",
+  httpsTunnelWaitingForDomain: "กำลังรอโดเมนฟรีจาก ngrok...",
   httpsTunnelValidating: "ได้โดเมนแล้ว กำลังตรวจสอบ DNS และ HTTPS ให้พร้อมใช้งาน...",
   httpsTunnelError: "HTTPS tunnel ล้มเหลว",
   httpsTunnelDevOnly: "ลิงก์นี้เหมาะสำหรับทดสอบและพัฒนาเท่านั้น",
+  httpsTunnelTokenLabel: "ngrok authtoken",
+  httpsTunnelTokenHelp: "ngrok ต้องใช้ authtoken ฟรีจากบัญชี ngrok ใส่ครั้งเดียว CHAMP จะจำไว้ให้",
+  httpsTunnelTokenGet: "รับ authtoken",
+  httpsTunnelTokenSave: "บันทึก",
+  httpsTunnelTokenSaved: "บันทึก ngrok authtoken แล้ว",
+  httpsTunnelTokenChange: "เปลี่ยน authtoken",
   terminal: "เทอร์มินัล",
   openTerminal: "เปิดเทอร์มินัลในโฟลเดอร์โปรเจกต์",
   openConfigFolder: "เปิดโฟลเดอร์ config",
@@ -831,7 +843,7 @@ const en: Translations = {
   httpsPreview: "HTTPS Preview",
   publicHttpsDomain: "Free HTTPS domain for website testing",
   httpsTunnelDescription:
-    "Automatically creates a temporary public HTTPS link through trycloudflare.com for testing and sharing work.",
+    "Automatically creates a temporary public HTTPS link through ngrok for testing and sharing work.",
   httpsTunnelStart: "Start HTTPS",
   httpsTunnelStop: "Stop HTTPS",
   httpsTunnelOpen: "Open HTTPS link",
@@ -839,10 +851,16 @@ const en: Translations = {
   httpsTunnelStarting: "Creating HTTPS tunnel",
   httpsTunnelStarted: "HTTPS tunnel ready",
   httpsTunnelStopped: "HTTPS tunnel stopped",
-  httpsTunnelWaitingForDomain: "Waiting for a free Cloudflare domain...",
+  httpsTunnelWaitingForDomain: "Waiting for a free ngrok domain...",
   httpsTunnelValidating: "Domain received. Validating DNS and HTTPS readiness...",
   httpsTunnelError: "HTTPS tunnel failed",
   httpsTunnelDevOnly: "This link is intended for testing and development only.",
+  httpsTunnelTokenLabel: "ngrok authtoken",
+  httpsTunnelTokenHelp: "ngrok needs a free authtoken from your ngrok account. Enter it once and CHAMP remembers it.",
+  httpsTunnelTokenGet: "Get authtoken",
+  httpsTunnelTokenSave: "Save",
+  httpsTunnelTokenSaved: "ngrok authtoken saved",
+  httpsTunnelTokenChange: "Change authtoken",
   terminal: "Terminal",
   openTerminal: "Open Terminal in Projects",
   openConfigFolder: "Open config folder",

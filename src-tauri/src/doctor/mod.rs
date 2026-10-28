@@ -166,7 +166,7 @@ pub struct Diagnosis {
     pub log_files: Vec<String>,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Clone, Debug, Serialize)]
 pub struct LogDoctorStatus {
     pub installed: bool,
     pub downloading: bool,
@@ -455,6 +455,15 @@ fn model_dir() -> Result<PathBuf, String> {
         .join(MODEL_NAME))
 }
 
+/// Written when the user removes the model, so it is not downloaded again
+/// automatically on the next start.
+fn declined_marker() -> Result<PathBuf, String> {
+    Ok(get_app_data_paths()?
+        .base_dir
+        .join("models")
+        .join(format!("{MODEL_NAME}.declined")))
+}
+
 fn model_installed(dir: &Path) -> bool {
     MODEL_FILES.iter().all(|file| {
         fs::metadata(dir.join(file.name))
@@ -652,9 +661,31 @@ pub async fn download_log_doctor_model(app: AppHandle) -> Result<LogDoctorStatus
     if DOWNLOADING.swap(true, Ordering::SeqCst) {
         return Err("The Log Doctor model is already downloading".to_string());
     }
+    if let Ok(marker) = declined_marker() {
+        let _ = fs::remove_file(marker);
+    }
     let result = download_model(&app).await;
     DOWNLOADING.store(false, Ordering::SeqCst);
     result.map(|_| status())
+}
+
+/// Install the model in the background on app start, unless it is already
+/// installed or the user removed it. Emits `log-doctor-status` when done.
+pub fn spawn_default_model_download(app: AppHandle) {
+    let installed = model_dir().map(|dir| model_installed(&dir)).unwrap_or(true);
+    let declined = declined_marker()
+        .map(|marker| marker.exists())
+        .unwrap_or(true);
+    if installed || declined || DOWNLOADING.swap(true, Ordering::SeqCst) {
+        return;
+    }
+    tauri::async_runtime::spawn(async move {
+        if let Err(error) = download_model(&app).await {
+            eprintln!("Log Doctor: automatic model download failed: {}", error);
+        }
+        DOWNLOADING.store(false, Ordering::SeqCst);
+        let _ = app.emit("log-doctor-status", status());
+    });
 }
 
 /// Delete the optional semantic model; signature matching keeps working.
@@ -668,6 +699,11 @@ pub async fn remove_log_doctor_model() -> Result<LogDoctorStatus, String> {
     if dir.exists() {
         fs::remove_dir_all(&dir).map_err(|e| format!("Failed to remove model: {}", e))?;
     }
+    let marker = declined_marker()?;
+    if let Some(parent) = marker.parent() {
+        let _ = fs::create_dir_all(parent);
+    }
+    let _ = fs::write(marker, "");
     Ok(status())
 }
 
@@ -784,6 +820,22 @@ mod tests {
             None,
         );
         assert!(matches.iter().all(|m| m.id != "mysql-locked"));
+    }
+
+    #[test]
+    fn locked_ibdata_outranks_dd_storage_engine_failure() {
+        // Windows mysqld reports a data folder held by another mysqld as
+        // "must be writable", followed by the generic DD engine failure.
+        let matches = rank_issues(
+            "mysql",
+            &lines(&[
+                "[ERROR] [MY-012271] [InnoDB] The innodb_system data file 'ibdata1' must be writable",
+                "[ERROR] [MY-010334] [Server] Failed to initialize DD Storage Engine",
+                "[ERROR] [MY-010020] [Server] Data Dictionary initialization failed.",
+            ]),
+            None,
+        );
+        assert_eq!(matches[0].id, "mysql-locked");
     }
 
     #[test]

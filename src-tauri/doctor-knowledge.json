@@ -192,10 +192,12 @@
       "signatures": [
         "unable to lock ./ibdata1",
         "check that you do not already have another mysqld process",
+        "innodb_system data file 'ibdata1' must be writable",
         "unable to lock"
       ],
       "examples": [
         "InnoDB: Unable to lock ./ibdata1 error: 11",
+        "[ERROR] [MY-012271] [InnoDB] The innodb_system data file 'ibdata1' must be writable",
         "Check that you do not already have another mysqld process using the same InnoDB data or log files."
       ],
       "title": {

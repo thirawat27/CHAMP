@@ -11,7 +11,7 @@ CHAMP loads runtime package metadata from `runtime-config.json`. Advanced users 
 - phpMyAdmin
 - Adminer
 
-`cloudflared` for HTTPS Preview is installed separately from GitHub latest-release binaries when the feature is first used.
+`ngrok` for HTTPS Preview is installed separately from the ngrok v3 stable channel (bin.equinox.io) when the feature is first used. It needs a free ngrok authtoken.
 
 ## PHP is refreshed automatically
 

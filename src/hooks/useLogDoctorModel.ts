@@ -12,7 +12,7 @@ export interface LogDoctorModelController {
   remove: () => Promise<void>;
 }
 
-/** Status and install/remove actions for the optional Log Doctor AI model. */
+/** Status and install/remove actions for the Log Doctor AI model (installed by default). */
 export function useLogDoctorModel(): LogDoctorModelController {
   const [status, setStatus] = useState<LogDoctorStatus | null>(null);
   const [progress, setProgress] = useState<number | null>(null);
@@ -31,10 +31,16 @@ export function useLogDoctorModel(): LogDoctorModelController {
     const unlisten = listenIfTauri<LogDoctorProgress>("log-doctor-progress", (event) => {
       setProgress(event.payload.percent);
     });
+    // The model is downloaded in the background on app start by default.
+    const unlistenStatus = listenIfTauri<LogDoctorStatus>("log-doctor-status", (event) => {
+      setStatus(event.payload);
+      setProgress(null);
+    });
 
     return () => {
       active = false;
       unlisten.then((dispose) => dispose());
+      unlistenStatus.then((dispose) => dispose());
     };
   }, []);
 

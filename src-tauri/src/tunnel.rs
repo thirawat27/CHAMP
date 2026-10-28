@@ -11,13 +11,17 @@ use std::time::{Duration, SystemTime};
 #[cfg(target_os = "windows")]
 const CREATE_NO_WINDOW: u32 = 0x08000000;
 
-const CLOUDFLARED_COMPONENT: &str = "cloudflared";
-const CLOUDFLARED_VERSION: &str = "2026.7.0";
-/// TODO(retire S-02): set to `false` and populate CloudflaredDownload.sha256 for
-/// cloudflared 2026.7.0 on every platform (compute against genuine upstream
-/// artifacts, ideally in CI). A configured checksum that MISMATCHES must always
-/// hard-fail regardless of this flag. Tracked in CODE_HEALTH_BACKLOG.md (S-02).
-const ALLOW_UNVERIFIED_CLOUDFLARED: bool = true;
+const NGROK_COMPONENT: &str = "ngrok";
+/// ngrok publishes only a rolling "v3-stable" download channel.
+const NGROK_VERSION: &str = "v3-stable";
+const NGROK_DOWNLOAD_BASE: &str = "https://bin.equinox.io/c/bNyj1mQVY4c";
+/// TODO(retire S-02): the stable channel is unversioned, so no SHA-256 can be
+/// pinned. Pin a versioned ngrok artifact with checksums, then set this to
+/// `false`. A configured checksum that MISMATCHES must always hard-fail
+/// regardless of this flag. Tracked in CODE_HEALTH_BACKLOG.md (S-02).
+const ALLOW_UNVERIFIED_NGROK: bool = true;
+const NGROK_AUTHTOKEN_FILE: &str = "ngrok-authtoken";
+const NGROK_SIGNUP_URL: &str = "https://dashboard.ngrok.com/get-started/your-authtoken";
 const TUNNEL_LOG_NAME: &str = "https-tunnel.log";
 const PUBLIC_URL_WAIT_ATTEMPTS: usize = 120;
 const PUBLIC_URL_WAIT_DELAY: Duration = Duration::from_millis(250);
@@ -32,6 +36,9 @@ pub struct HttpsTunnelStatus {
     pub error: Option<String>,
     pub log_path: Option<String>,
     pub pid: Option<u32>,
+    /// An ngrok authtoken is saved in CHAMP, set in `NGROK_AUTHTOKEN`, or
+    /// present in ngrok's own config file.
+    pub authtoken_configured: bool,
 }
 
 struct HttpsTunnelRuntime {
@@ -51,6 +58,7 @@ impl Default for HttpsTunnelRuntime {
                 error: None,
                 log_path: None,
                 pid: None,
+                authtoken_configured: false,
             },
         }
     }
@@ -83,23 +91,41 @@ pub async fn start_https_tunnel(web_port: u16) -> Result<HttpsTunnelStatus, Stri
 
     stop_https_tunnel()?;
 
+    let saved_authtoken = read_saved_authtoken();
+    if saved_authtoken.is_none() && !external_authtoken_configured() {
+        return Err(format!(
+            "ngrok needs a free authtoken. Sign in at {NGROK_SIGNUP_URL}, copy your authtoken, and save it in HTTPS Preview."
+        ));
+    }
+
     let app_paths = get_app_data_paths()?;
     fs::create_dir_all(&app_paths.runtime_dir)
         .map_err(|e| format!("Failed to create runtime directory: {}", e))?;
     fs::create_dir_all(&app_paths.logs_dir)
         .map_err(|e| format!("Failed to create logs directory: {}", e))?;
 
-    let cloudflared = ensure_cloudflared_installed(&app_paths.runtime_dir).await?;
+    let ngrok = ensure_ngrok_installed(&app_paths.runtime_dir).await?;
     let log_path = app_paths.logs_dir.join(TUNNEL_LOG_NAME);
     reset_tunnel_log(&log_path)?;
 
-    let mut command = Command::new(&cloudflared);
+    let mut command = Command::new(&ngrok);
     command
-        .args(["tunnel", "--no-autoupdate", "--url", &local_url])
+        .args([
+            "http",
+            &local_url,
+            "--log",
+            "stdout",
+            "--log-format",
+            "logfmt",
+        ])
         .current_dir(&app_paths.runtime_dir)
         .env("NO_COLOR", "1")
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
+    // Passed through the environment so the token never shows in process lists.
+    if let Some(token) = saved_authtoken {
+        command.env("NGROK_AUTHTOKEN", token);
+    }
     configure_no_window(&mut command);
 
     let mut child = command
@@ -121,6 +147,7 @@ pub async fn start_https_tunnel(web_port: u16) -> Result<HttpsTunnelStatus, Stri
             error: None,
             log_path: Some(log_path.to_string_lossy().to_string()),
             pid: Some(pid),
+            authtoken_configured: true,
         };
         runtime.child = Some(child);
     }
@@ -150,15 +177,104 @@ pub fn stop_https_tunnel() -> Result<HttpsTunnelStatus, String> {
     runtime.status.url = None;
     runtime.status.ready = false;
     runtime.status.error = None;
+    runtime.status.authtoken_configured = authtoken_configured();
     Ok(runtime.status.clone())
 }
 
 pub fn get_https_tunnel_status() -> Result<HttpsTunnelStatus, String> {
     update_tunnel_health()?;
-    let runtime = tunnel_runtime()
+    let mut runtime = tunnel_runtime()
         .lock()
         .map_err(|e| format!("Failed to acquire tunnel lock: {}", e))?;
+    runtime.status.authtoken_configured = authtoken_configured();
     Ok(runtime.status.clone())
+}
+
+/// Save the ngrok authtoken CHAMP passes to the tunnel. An empty token clears it.
+pub fn set_ngrok_authtoken(token: &str) -> Result<HttpsTunnelStatus, String> {
+    let token = token.trim();
+    let path = authtoken_path()?;
+    if token.is_empty() {
+        if path.exists() {
+            fs::remove_file(&path)
+                .map_err(|e| format!("Failed to remove ngrok authtoken: {}", e))?;
+        }
+    } else {
+        if !token
+            .chars()
+            .all(|ch| ch.is_ascii_alphanumeric() || matches!(ch, '_' | '-'))
+        {
+            return Err("The ngrok authtoken contains unexpected characters.".to_string());
+        }
+        if let Some(parent) = path.parent() {
+            fs::create_dir_all(parent)
+                .map_err(|e| format!("Failed to create config directory: {}", e))?;
+        }
+        fs::write(&path, token).map_err(|e| format!("Failed to save ngrok authtoken: {}", e))?;
+        restrict_to_owner(&path)?;
+    }
+    get_https_tunnel_status()
+}
+
+fn authtoken_path() -> Result<PathBuf, String> {
+    Ok(get_app_data_paths()?.config_dir.join(NGROK_AUTHTOKEN_FILE))
+}
+
+fn read_saved_authtoken() -> Option<String> {
+    let token = fs::read_to_string(authtoken_path().ok()?).ok()?;
+    let token = token.trim();
+    (!token.is_empty()).then(|| token.to_string())
+}
+
+fn authtoken_configured() -> bool {
+    read_saved_authtoken().is_some() || external_authtoken_configured()
+}
+
+/// A token from `NGROK_AUTHTOKEN` or from `ngrok config add-authtoken`.
+fn external_authtoken_configured() -> bool {
+    if std::env::var("NGROK_AUTHTOKEN").is_ok_and(|value| !value.trim().is_empty()) {
+        return true;
+    }
+    ngrok_config_paths()
+        .iter()
+        .any(|path| fs::read_to_string(path).is_ok_and(|content| config_has_authtoken(&content)))
+}
+
+fn ngrok_config_paths() -> Vec<PathBuf> {
+    let mut paths = Vec::new();
+    // ngrok v3: %LOCALAPPDATA%\ngrok, ~/Library/Application Support/ngrok, ~/.config/ngrok.
+    if let Some(dir) = dirs::config_local_dir() {
+        paths.push(dir.join("ngrok").join("ngrok.yml"));
+    }
+    if let Some(home) = dirs::home_dir() {
+        paths.push(home.join(".config").join("ngrok").join("ngrok.yml"));
+        paths.push(home.join(".ngrok2").join("ngrok.yml"));
+    }
+    paths
+}
+
+fn config_has_authtoken(content: &str) -> bool {
+    content.lines().any(|line| {
+        line.trim()
+            .strip_prefix("authtoken:")
+            .is_some_and(|value| !value.trim().trim_matches(['"', '\'']).is_empty())
+    })
+}
+
+fn restrict_to_owner(path: &Path) -> Result<(), String> {
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        fs::set_permissions(path, fs::Permissions::from_mode(0o600))
+            .map_err(|e| format!("Failed to protect ngrok authtoken: {}", e))?;
+    }
+
+    #[cfg(not(unix))]
+    {
+        let _ = path;
+    }
+
+    Ok(())
 }
 
 fn running_status_for_local_url(local_url: &str) -> Result<Option<HttpsTunnelStatus>, String> {
@@ -261,17 +377,17 @@ fn mark_public_url_timeout() -> Result<HttpsTunnelStatus, String> {
     Ok(runtime.status.clone())
 }
 
-async fn ensure_cloudflared_installed(runtime_dir: &Path) -> Result<PathBuf, String> {
-    if let Some(path) = detect_cloudflared(runtime_dir) {
+async fn ensure_ngrok_installed(runtime_dir: &Path) -> Result<PathBuf, String> {
+    if let Some(path) = detect_ngrok(runtime_dir) {
         return Ok(path);
     }
 
-    let install_dir = runtime_dir.join(CLOUDFLARED_COMPONENT);
+    let install_dir = runtime_dir.join(NGROK_COMPONENT);
     fs::create_dir_all(&install_dir)
-        .map_err(|e| format!("Failed to create cloudflared directory: {}", e))?;
+        .map_err(|e| format!("Failed to create ngrok directory: {}", e))?;
 
-    let target = install_dir.join(cloudflared_executable_name());
-    let download = cloudflared_download()?;
+    let target = install_dir.join(ngrok_executable_name());
+    let download = ngrok_download()?;
     let temp = install_dir.join(download.temp_file_name);
 
     let bytes = reqwest::Client::builder()
@@ -281,175 +397,171 @@ async fn ensure_cloudflared_installed(runtime_dir: &Path) -> Result<PathBuf, Str
         .get(download.url.as_str())
         .send()
         .await
-        .map_err(|e| format!("Failed to download cloudflared: {}", e))?
+        .map_err(|e| format!("Failed to download ngrok: {}", e))?
         .error_for_status()
-        .map_err(|e| format!("Failed to download cloudflared: {}", e))?
+        .map_err(|e| format!("Failed to download ngrok: {}", e))?
         .bytes()
         .await
-        .map_err(|e| format!("Failed to read cloudflared download: {}", e))?;
+        .map_err(|e| format!("Failed to read ngrok download: {}", e))?;
 
     // Checksum verification is fail-closed (S-02): a configured SHA-256 that
     // mismatches always hard-fails. When none is configured, the install is
-    // refused unless ALLOW_UNVERIFIED_CLOUDFLARED is explicitly set.
+    // refused unless ALLOW_UNVERIFIED_NGROK is explicitly set.
     match download.sha256 {
         Some(expected) => {
             let actual = hex::encode(Sha256::digest(&bytes));
             if actual.to_lowercase() != expected.to_lowercase() {
                 return Err(format!(
-                    "Checksum verification failed for cloudflared {}.\nExpected: {}\nActual: {}\n\nThe downloaded file may be corrupted or tampered with.",
-                    CLOUDFLARED_VERSION, expected, actual
+                    "Checksum verification failed for ngrok {}.\nExpected: {}\nActual: {}\n\nThe downloaded file may be corrupted or tampered with.",
+                    NGROK_VERSION, expected, actual
                 ));
             }
-            eprintln!("Checksum verified for cloudflared {CLOUDFLARED_VERSION}: {actual}");
+            eprintln!("Checksum verified for ngrok {NGROK_VERSION}: {actual}");
         }
-        None if ALLOW_UNVERIFIED_CLOUDFLARED => {
+        None if ALLOW_UNVERIFIED_NGROK => {
             eprintln!(
-                "WARNING: no checksum configured for cloudflared {CLOUDFLARED_VERSION} — installing UNVERIFIED."
+                "WARNING: no checksum configured for ngrok {NGROK_VERSION} — installing UNVERIFIED."
             );
         }
         None => {
             return Err(format!(
-                "No SHA-256 checksum is configured for cloudflared {CLOUDFLARED_VERSION}. \
+                "No SHA-256 checksum is configured for ngrok {NGROK_VERSION}. \
                  Installation was refused because the downloaded binary cannot be verified.",
             ));
         }
     }
 
-    fs::write(&temp, bytes).map_err(|e| format!("Failed to save cloudflared: {}", e))?;
-    if download.archive_tgz {
-        extract_cloudflared_tgz(&temp, &target)?;
-        let _ = fs::remove_file(&temp);
-    } else {
-        if target.exists() {
-            fs::remove_file(&target)
-                .map_err(|e| format!("Failed to replace cloudflared: {}", e))?;
-        }
-        fs::rename(&temp, &target).map_err(|e| format!("Failed to install cloudflared: {}", e))?;
-    }
+    fs::write(&temp, bytes).map_err(|e| format!("Failed to save ngrok: {}", e))?;
+    let extracted = match download.archive {
+        NgrokArchive::Zip => extract_ngrok_zip(&temp, &target),
+        NgrokArchive::Tgz => extract_ngrok_tgz(&temp, &target),
+    };
+    let _ = fs::remove_file(&temp);
+    extracted?;
 
     make_executable(&target)?;
     fs::write(
-        runtime_dir.join("cloudflared_installed.txt"),
+        runtime_dir.join("ngrok_installed.txt"),
         format!(
-            "version={CLOUDFLARED_VERSION}\ninstalled_at={:?}\n",
+            "version={NGROK_VERSION}\ninstalled_at={:?}\n",
             SystemTime::now()
         ),
     )
-    .map_err(|e| format!("Failed to write cloudflared marker: {}", e))?;
+    .map_err(|e| format!("Failed to write ngrok marker: {}", e))?;
 
     Ok(target)
 }
 
-fn detect_cloudflared(runtime_dir: &Path) -> Option<PathBuf> {
-    let executable = cloudflared_executable_name();
+fn detect_ngrok(runtime_dir: &Path) -> Option<PathBuf> {
+    let executable = ngrok_executable_name();
     [
-        runtime_dir.join(CLOUDFLARED_COMPONENT).join(executable),
+        runtime_dir.join(NGROK_COMPONENT).join(executable),
         runtime_dir.join(executable),
         runtime_dir.join("bin").join(executable),
     ]
     .into_iter()
     .find(|path| path.exists())
-    .or_else(system_cloudflared)
+    .or_else(system_ngrok)
 }
 
-fn system_cloudflared() -> Option<PathBuf> {
-    let output = Command::new("cloudflared")
-        .arg("--version")
+fn system_ngrok() -> Option<PathBuf> {
+    let mut command = Command::new("ngrok");
+    command
+        .arg("version")
         .stdout(Stdio::null())
-        .stderr(Stdio::null())
-        .output()
-        .ok()?;
-    output
-        .status
-        .success()
-        .then(|| PathBuf::from("cloudflared"))
+        .stderr(Stdio::null());
+    configure_no_window(&mut command);
+    let output = command.output().ok()?;
+    output.status.success().then(|| PathBuf::from("ngrok"))
 }
 
-struct CloudflaredDownload {
+enum NgrokArchive {
+    Zip,
+    Tgz,
+}
+
+struct NgrokDownload {
     url: String,
     temp_file_name: &'static str,
-    archive_tgz: bool,
+    archive: NgrokArchive,
     /// Expected SHA-256 of the downloaded artifact for this platform.
-    /// `None` until genuine cloudflared 2026.7.0 checksums are computed (S-02).
+    /// `None` while CHAMP installs the unversioned stable channel (S-02).
     sha256: Option<&'static str>,
 }
 
-fn cloudflared_download() -> Result<CloudflaredDownload, String> {
-    match (std::env::consts::OS, std::env::consts::ARCH) {
-        ("windows", "x86_64") => Ok(CloudflaredDownload {
-            url: format!("https://github.com/cloudflare/cloudflared/releases/download/{CLOUDFLARED_VERSION}/cloudflared-windows-amd64.exe"),
-            temp_file_name: "cloudflared-download.exe",
-            archive_tgz: false,
-            sha256: None,
-        }),
-        ("windows", "aarch64") => Ok(CloudflaredDownload {
-            url: format!("https://github.com/cloudflare/cloudflared/releases/download/{CLOUDFLARED_VERSION}/cloudflared-windows-arm64.exe"),
-            temp_file_name: "cloudflared-download.exe",
-            archive_tgz: false,
-            sha256: None,
-        }),
-        ("linux", "x86_64") => Ok(CloudflaredDownload {
-            url: format!("https://github.com/cloudflare/cloudflared/releases/download/{CLOUDFLARED_VERSION}/cloudflared-linux-amd64"),
-            temp_file_name: "cloudflared-download",
-            archive_tgz: false,
-            sha256: None,
-        }),
-        ("linux", "aarch64") => Ok(CloudflaredDownload {
-            url: format!("https://github.com/cloudflare/cloudflared/releases/download/{CLOUDFLARED_VERSION}/cloudflared-linux-arm64"),
-            temp_file_name: "cloudflared-download",
-            archive_tgz: false,
-            sha256: None,
-        }),
-        ("macos", "x86_64") => Ok(CloudflaredDownload {
-            url: format!("https://github.com/cloudflare/cloudflared/releases/download/{CLOUDFLARED_VERSION}/cloudflared-darwin-amd64.tgz"),
-            temp_file_name: "cloudflared-download.tgz",
-            archive_tgz: true,
-            sha256: None,
-        }),
-        ("macos", "aarch64") => Ok(CloudflaredDownload {
-            url: format!("https://github.com/cloudflare/cloudflared/releases/download/{CLOUDFLARED_VERSION}/cloudflared-darwin-arm64.tgz"),
-            temp_file_name: "cloudflared-download.tgz",
-            archive_tgz: true,
-            sha256: None,
-        }),
-        (os, arch) => Err(format!(
-            "Automatic HTTPS tunnel runtime is not available for {os}/{arch}"
-        )),
-    }
+fn ngrok_download() -> Result<NgrokDownload, String> {
+    let (platform, archive) = match (std::env::consts::OS, std::env::consts::ARCH) {
+        ("windows", "x86_64") => ("windows-amd64", NgrokArchive::Zip),
+        ("windows", "aarch64") => ("windows-arm64", NgrokArchive::Zip),
+        ("linux", "x86_64") => ("linux-amd64", NgrokArchive::Tgz),
+        ("linux", "aarch64") => ("linux-arm64", NgrokArchive::Tgz),
+        ("macos", "x86_64") => ("darwin-amd64", NgrokArchive::Zip),
+        ("macos", "aarch64") => ("darwin-arm64", NgrokArchive::Zip),
+        (os, arch) => {
+            return Err(format!(
+                "Automatic HTTPS tunnel runtime is not available for {os}/{arch}"
+            ))
+        }
+    };
+    let (extension, temp_file_name) = match archive {
+        NgrokArchive::Zip => ("zip", "ngrok-download.zip"),
+        NgrokArchive::Tgz => ("tgz", "ngrok-download.tgz"),
+    };
+    Ok(NgrokDownload {
+        url: format!("{NGROK_DOWNLOAD_BASE}/ngrok-{NGROK_VERSION}-{platform}.{extension}"),
+        temp_file_name,
+        archive,
+        sha256: None,
+    })
 }
 
-fn cloudflared_executable_name() -> &'static str {
+fn ngrok_executable_name() -> &'static str {
     if cfg!(target_os = "windows") {
-        "cloudflared.exe"
+        "ngrok.exe"
     } else {
-        "cloudflared"
+        "ngrok"
     }
 }
 
-fn extract_cloudflared_tgz(archive_path: &Path, target: &Path) -> Result<(), String> {
-    let file = File::open(archive_path)
-        .map_err(|e| format!("Failed to open cloudflared archive: {}", e))?;
+fn extract_ngrok_zip(archive_path: &Path, target: &Path) -> Result<(), String> {
+    let file =
+        File::open(archive_path).map_err(|e| format!("Failed to open ngrok archive: {}", e))?;
+    let mut archive =
+        zip::ZipArchive::new(file).map_err(|e| format!("Failed to read ngrok archive: {}", e))?;
+    let mut entry = archive
+        .by_name(ngrok_executable_name())
+        .map_err(|_| "ngrok binary was not found in the downloaded archive".to_string())?;
+    let mut output =
+        File::create(target).map_err(|e| format!("Failed to create ngrok binary: {}", e))?;
+    std::io::copy(&mut entry, &mut output)
+        .map_err(|e| format!("Failed to extract ngrok: {}", e))?;
+    Ok(())
+}
+
+fn extract_ngrok_tgz(archive_path: &Path, target: &Path) -> Result<(), String> {
+    let file =
+        File::open(archive_path).map_err(|e| format!("Failed to open ngrok archive: {}", e))?;
     let decoder = flate2::read::GzDecoder::new(file);
     let mut archive = tar::Archive::new(decoder);
 
     for entry in archive
         .entries()
-        .map_err(|e| format!("Failed to inspect cloudflared archive: {}", e))?
+        .map_err(|e| format!("Failed to inspect ngrok archive: {}", e))?
     {
-        let mut entry = entry.map_err(|e| format!("Failed to read cloudflared archive: {}", e))?;
+        let mut entry = entry.map_err(|e| format!("Failed to read ngrok archive: {}", e))?;
         let path = entry
             .path()
-            .map_err(|e| format!("Failed to read cloudflared archive path: {}", e))?;
-        if path.file_name().and_then(|name| name.to_str()) == Some("cloudflared") {
+            .map_err(|e| format!("Failed to read ngrok archive path: {}", e))?;
+        if path.file_name().and_then(|name| name.to_str()) == Some("ngrok") {
             let mut output = File::create(target)
-                .map_err(|e| format!("Failed to create cloudflared binary: {}", e))?;
+                .map_err(|e| format!("Failed to create ngrok binary: {}", e))?;
             std::io::copy(&mut entry, &mut output)
-                .map_err(|e| format!("Failed to extract cloudflared: {}", e))?;
+                .map_err(|e| format!("Failed to extract ngrok: {}", e))?;
             return Ok(());
         }
     }
 
-    Err("cloudflared binary was not found in the downloaded archive".to_string())
+    Err("ngrok binary was not found in the downloaded archive".to_string())
 }
 
 fn make_executable(path: &Path) -> Result<(), String> {
@@ -457,11 +569,11 @@ fn make_executable(path: &Path) -> Result<(), String> {
     {
         use std::os::unix::fs::PermissionsExt;
         let mut permissions = fs::metadata(path)
-            .map_err(|e| format!("Failed to read cloudflared permissions: {}", e))?
+            .map_err(|e| format!("Failed to read ngrok permissions: {}", e))?
             .permissions();
         permissions.set_mode(0o755);
         fs::set_permissions(path, permissions)
-            .map_err(|e| format!("Failed to mark cloudflared executable: {}", e))?;
+            .map_err(|e| format!("Failed to mark ngrok executable: {}", e))?;
     }
 
     #[cfg(not(unix))]
@@ -499,11 +611,10 @@ fn append_log_line(log_path: &Path, line: &str) {
 }
 
 fn record_tunnel_output(line: &str) {
-    let public_url = extract_trycloudflare_url(line);
-    let lower = line.to_ascii_lowercase();
-    let is_error = lower.contains("error") || lower.contains("failed") || lower.contains("panic");
+    let public_url = extract_ngrok_url(line);
+    let error = extract_ngrok_error(line);
 
-    if public_url.is_none() && !is_error {
+    if public_url.is_none() && error.is_none() {
         return;
     }
 
@@ -513,22 +624,66 @@ fn record_tunnel_output(line: &str) {
             runtime.status.ready = false;
             runtime.status.error = None;
         } else if runtime.status.url.is_none() {
-            runtime.status.error = Some(line.trim().to_string());
+            runtime.status.error = error;
         }
     }
 }
 
-fn extract_trycloudflare_url(line: &str) -> Option<String> {
-    let start = line.find("https://")?;
-    let tail = &line[start..];
-    let end = tail
-        .find(|ch: char| ch.is_whitespace() || matches!(ch, '"' | '\'' | '<' | '>' | ')' | ']'))
-        .unwrap_or(tail.len());
-    let url = tail[..end]
-        .trim_end_matches(['.', ',', ';', ':'])
+/// Value of a `key=value` / `key="quoted value"` field in an ngrok logfmt line.
+fn logfmt_value<'a>(line: &'a str, key: &str) -> Option<&'a str> {
+    let needle = format!("{key}=");
+    let start = line
+        .match_indices(&needle)
+        .find(|(index, _)| *index == 0 || line.as_bytes()[index - 1] == b' ')?
+        .0
+        + needle.len();
+    let rest = &line[start..];
+    if let Some(quoted) = rest.strip_prefix('"') {
+        Some(&quoted[..quoted.find('"').unwrap_or(quoted.len())])
+    } else {
+        Some(&rest[..rest.find(char::is_whitespace).unwrap_or(rest.len())])
+    }
+}
+
+/// `msg="started tunnel" ... url=https://<name>.ngrok-free.app`
+fn extract_ngrok_url(line: &str) -> Option<String> {
+    let url = logfmt_value(line, "url")?;
+    url.starts_with("https://").then(|| url.to_string())
+}
+
+fn extract_ngrok_error(line: &str) -> Option<String> {
+    let lower = line.to_ascii_lowercase();
+    let is_error = lower.contains("lvl=eror")
+        || lower.contains("lvl=crit")
+        || lower.trim_start().starts_with("error:")
+        || lower.contains("err_ngrok_");
+    if !is_error {
+        return None;
+    }
+
+    let message = logfmt_value(line, "err")
+        .filter(|value| !value.is_empty() && *value != "nil")
+        .unwrap_or(line.trim())
+        .trim_start_matches("ERROR:")
+        .trim()
         .to_string();
 
-    (url.contains(".trycloudflare.com") || url.ends_with("trycloudflare.com")).then_some(url)
+    // ERR_NGROK_4018: missing token, ERR_NGROK_105/107: invalid or revoked token.
+    if ["err_ngrok_4018", "err_ngrok_105", "err_ngrok_107"]
+        .iter()
+        .any(|code| lower.contains(code))
+    {
+        return Some(format!(
+            "ngrok rejected the authtoken. Copy a valid token from {NGROK_SIGNUP_URL} and save it in HTTPS Preview. ({message})"
+        ));
+    }
+    // ERR_NGROK_108: the free plan allows one agent session at a time.
+    if lower.contains("err_ngrok_108") {
+        return Some(format!(
+            "Another ngrok agent is already online with this account. Stop it and start HTTPS again. ({message})"
+        ));
+    }
+    Some(message)
 }
 
 #[cfg(test)]
@@ -536,16 +691,40 @@ mod tests {
     use super::*;
 
     #[test]
-    fn extracts_trycloudflare_url_from_log_line() {
-        let line = "Visit it at: https://demo-random.trycloudflare.com";
+    fn extracts_ngrok_url_from_started_tunnel_line() {
+        let line = r#"t=2026-10-28T21:00:00+0700 lvl=info msg="started tunnel" obj=tunnels name=command_line addr=http://127.0.0.1:8080 url=https://demo-random.ngrok-free.app"#;
         assert_eq!(
-            extract_trycloudflare_url(line).as_deref(),
-            Some("https://demo-random.trycloudflare.com")
+            extract_ngrok_url(line).as_deref(),
+            Some("https://demo-random.ngrok-free.app")
         );
     }
 
     #[test]
-    fn ignores_non_trycloudflare_https_urls() {
-        assert!(extract_trycloudflare_url("docs: https://example.com").is_none());
+    fn ignores_lines_without_public_url() {
+        assert!(extract_ngrok_url("lvl=info msg=\"client session established\"").is_none());
+        assert!(extract_ngrok_url("lvl=info addr=http://127.0.0.1:8080").is_none());
+    }
+
+    #[test]
+    fn explains_missing_authtoken() {
+        let line = r#"t=2026-10-28T21:00:00+0700 lvl=eror msg="failed to reconnect session" obj=tunnels.session err="authentication failed: Usage of ngrok requires a verified account and authtoken.\n\nERR_NGROK_4018\n""#;
+        let error = extract_ngrok_error(line).unwrap();
+        assert!(error.contains("authtoken"));
+        assert!(error.contains(NGROK_SIGNUP_URL));
+    }
+
+    #[test]
+    fn ignores_info_lines_as_errors() {
+        assert!(extract_ngrok_error("lvl=info msg=\"no configuration paths supplied\"").is_none());
+    }
+
+    #[test]
+    fn reads_authtoken_from_ngrok_config() {
+        assert!(config_has_authtoken(
+            "version: \"3\"\nagent:\n    authtoken: abc123\n"
+        ));
+        assert!(!config_has_authtoken(
+            "version: \"3\"\nagent:\n    authtoken: \"\"\n"
+        ));
     }
 }

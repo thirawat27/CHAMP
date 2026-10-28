@@ -301,6 +301,8 @@ impl ProcessManager {
         let reserved_ports = self.reserved_ports_except(service);
         let selected_port = match service {
             ServiceType::Caddy => select_caddy_port(current_port, &paths.caddy, &reserved_ports)?,
+            // CHAMP's own mysqld still serving this port is reused by start_mysql.
+            ServiceType::MySQL if mysql_port_held_by_champ(&paths, current_port) => current_port,
             ServiceType::PhpFpm | ServiceType::MySQL | ServiceType::PostgreSQL => {
                 select_available_port(service, current_port, &reserved_ports)?
             }
@@ -461,6 +463,9 @@ impl ProcessManager {
             let selected_port = match service {
                 ServiceType::Caddy => {
                     select_caddy_port(current_port, &paths.caddy, &reserved_ports)?
+                }
+                ServiceType::MySQL if mysql_port_held_by_champ(&paths, current_port) => {
+                    current_port
                 }
                 ServiceType::PhpFpm | ServiceType::MySQL | ServiceType::PostgreSQL => {
                     select_available_port(service, current_port, &reserved_ports)?
@@ -767,6 +772,10 @@ fn start_mysql(service_process: &mut ServiceProcess, paths: &RuntimePaths) -> Re
         attach_existing_mysql_process(service_process, pid, log_path.clone());
         return Ok(());
     }
+
+    // A CHAMP mysqld left running on another port still owns the data
+    // directory; a second mysqld would abort with "ibdata1 must be writable".
+    stop_mysql_holding_data_dir(paths)?;
 
     // Check if port is available before attempting to start
     if !port_can_bind(service_process.port) {
@@ -1110,6 +1119,49 @@ fn find_running_mysql_pid(paths: &RuntimePaths, port: u16) -> Option<u32> {
     }
 
     None
+}
+
+/// PID from the data directory's pid file, only when it is a live process
+/// running CHAMP's own mysqld (a stale pid file may name a reused PID).
+fn champ_mysql_pid_for_data_dir(paths: &RuntimePaths) -> Option<u32> {
+    let pid = read_mysql_pid_file(&paths.mysql_data_dir)?;
+    if !process_exists(pid) {
+        return None;
+    }
+    find_process_ids_by_executable(&paths.mysql)
+        .ok()?
+        .contains(&pid)
+        .then_some(pid)
+}
+
+fn mysql_port_held_by_champ(paths: &RuntimePaths, port: u16) -> bool {
+    tcp_port_accepts(port) && champ_mysql_pid_for_data_dir(paths).is_some()
+}
+
+fn stop_mysql_holding_data_dir(paths: &RuntimePaths) -> Result<(), String> {
+    let Some(pid) = champ_mysql_pid_for_data_dir(paths) else {
+        return Ok(());
+    };
+    let log_path = paths.logs_dir.join("mysql.log");
+    append_log_line(
+        &log_path,
+        &format!(
+            "CHAMP MySQL process (pid {}) still holds the data directory on another port. Stopping it before start...",
+            pid
+        ),
+    );
+    terminate_process_by_pid(pid)?;
+    let deadline = Instant::now() + process_stop_wait_timeout();
+    while process_exists_uncached(pid) {
+        if Instant::now() >= deadline {
+            return Err(format!(
+                "MySQL process (pid {}) is still running and locking the data directory. Stop it and try again.",
+                pid
+            ));
+        }
+        thread::sleep(std::time::Duration::from_millis(250));
+    }
+    Ok(())
 }
 
 fn read_mysql_pid_file(data_dir: &Path) -> Option<u32> {

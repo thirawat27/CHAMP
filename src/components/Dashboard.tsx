@@ -177,7 +177,18 @@ export function Dashboard() {
     startHttpsTunnel,
     stopHttpsTunnel,
     copyHttpsTunnelUrl,
+    saveNgrokAuthtoken,
   } = tunnel;
+  const [ngrokTokenDraft, setNgrokTokenDraft] = useState("");
+  const [editingNgrokToken, setEditingNgrokToken] = useState(false);
+  const showNgrokTokenForm =
+    !tunnelStatus.running && (!tunnelStatus.authtoken_configured || editingNgrokToken);
+  const submitNgrokToken = async () => {
+    if (await saveNgrokAuthtoken(ngrokTokenDraft)) {
+      setNgrokTokenDraft("");
+      setEditingNgrokToken(false);
+    }
+  };
 
   // Initialize audio context on first user interaction
   useEffect(() => {
@@ -447,7 +458,7 @@ export function Dashboard() {
         // Both tools can be on disk after switching engines; show the active one.
         isAdminerSelected ? installedVersions.adminer : installedVersions.phpmyadmin,
       ],
-      ["cloudflared", installedVersions.cloudflared],
+      ["ngrok", installedVersions.ngrok],
     ];
     return entries.filter(
       (entry): entry is [string, string] => typeof entry[1] === "string" && entry[1].length > 0
@@ -836,6 +847,44 @@ export function Dashboard() {
                 <small className="https-tunnel-pending-url">{tunnelStatus.url}</small>
               )}
               {tunnelStatus.error && <small className="rail-error">{tunnelStatus.error}</small>}
+              {showNgrokTokenForm && (
+                <form
+                  className="https-tunnel-token"
+                  onSubmit={(event) => {
+                    event.preventDefault();
+                    void submitNgrokToken();
+                  }}
+                >
+                  <label htmlFor="ngrok-authtoken">{t.httpsTunnelTokenLabel}</label>
+                  <small className="rail-muted">{t.httpsTunnelTokenHelp}</small>
+                  <input
+                    id="ngrok-authtoken"
+                    type="password"
+                    autoComplete="off"
+                    spellCheck={false}
+                    value={ngrokTokenDraft}
+                    onChange={(event) => setNgrokTokenDraft(event.target.value)}
+                  />
+                  <div className="https-tunnel-actions">
+                    <button
+                      type="submit"
+                      className="btn-primary compact"
+                      disabled={!ngrokTokenDraft.trim()}
+                    >
+                      {t.httpsTunnelTokenSave}
+                    </button>
+                    <button
+                      type="button"
+                      className="btn-secondary compact"
+                      onClick={() =>
+                        openUrl("https://dashboard.ngrok.com/get-started/your-authtoken")
+                      }
+                    >
+                      <ExternalLink size={14} /> {t.httpsTunnelTokenGet}
+                    </button>
+                  </div>
+                </form>
+              )}
               <div className="https-tunnel-actions">
                 {tunnelReady && (
                   <>
@@ -878,6 +927,17 @@ export function Dashboard() {
                         ? t.httpsTunnelStop
                         : t.httpsTunnelStart}
                 </button>
+                {tunnelStatus.authtoken_configured &&
+                  !tunnelStatus.running &&
+                  !editingNgrokToken && (
+                    <button
+                      type="button"
+                      className="btn-secondary compact"
+                      onClick={() => setEditingNgrokToken(true)}
+                    >
+                      {t.httpsTunnelTokenChange}
+                    </button>
+                  )}
               </div>
             </section>
 

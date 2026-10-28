@@ -22,7 +22,7 @@ CHAMP is a desktop app that runs a complete PHP development stack **without admi
 
 - 🚀 **No admin required** — everything runs in user space on unprivileged ports
 - 🆕 **Always current** — PHP comes straight from php.net / windows.php.net, so installs and updates use the newest patch release (SHA-256 verified on Windows)
-- 🩺 **Log Doctor** — explains why a service failed and how to fix it, with an optional 8M-parameter offline AI model
+- 🩺 **Log Doctor** — explains why a service failed and how to fix it, with an 8M-parameter offline AI model downloaded automatically on first start
 - 🤖 **AI agent connector** — a built-in MCP server for Claude Code, Cursor, and other coding agents
 - 🔄 **Self-updating** — signed updates from GitHub Releases
 - 🪶 **Light** — Rust backend, ~640 KB UI bundle, no Node.js/Python/Go runtimes to babysit
@@ -37,7 +37,7 @@ CHAMP is a desktop app that runs a complete PHP development stack **without admi
 | Dashboard | Live request path (browser → Caddy → PHP-FPM → database), status lights, port readouts, CPU / RAM / network |
 | PHP | Install, switch, and update PHP branches; the dashboard offers patch updates for the active PHP |
 | Projects | Every folder in `projects/` is served at `http://localhost:8080/<folder>/`; common `.htaccess` rules are translated to Caddy |
-| HTTPS Preview | Temporary public `https://*.trycloudflare.com` link via Cloudflare Quick Tunnel |
+| HTTPS Preview | Public `https://*.ngrok-free.app` link via ngrok (free ngrok authtoken required) |
 | Log Doctor | 28 known failure patterns (ports, VC++ runtime, corrupted data, locks, permissions, …) with fixes and one-click actions |
 | AI agents | Local MCP server (127.0.0.1 + bearer token) with status, environment, logs, diagnosis, and service-control tools |
 | Updates | Daily update check, one-click install and restart, minisign-verified packages |
@@ -128,7 +128,7 @@ Security: localhost-only, 256-bit bearer token compared in constant time, browse
 %LOCALAPPDATA%\CHAMP\          (Windows; the system user-data folder elsewhere)
 ├── config/        settings.json, agent token, generated configs
 ├── logs/          service logs
-├── models/        Log Doctor AI model (optional)
+├── models/        Log Doctor AI model (auto-downloaded)
 ├── mysql/data/    MySQL data
 ├── postgresql/data/
 ├── projects/      your websites
@@ -170,7 +170,7 @@ src-tauri/src/
 ├── runtime/              catalog, PHP feeds, downloader, binary locator
 ├── doctor/               Log Doctor knowledge base + Model2Vec runtime
 ├── agent/                MCP server for AI agents
-└── tunnel.rs             HTTPS Preview (cloudflared)
+└── tunnel.rs             HTTPS Preview (ngrok)
 ```
 
 ---

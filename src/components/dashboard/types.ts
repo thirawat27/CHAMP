@@ -12,6 +12,7 @@ export const DEFAULT_TUNNEL_STATUS: HttpsTunnelStatus = {
   error: null,
   log_path: null,
   pid: null,
+  authtoken_configured: false,
 };
 
 export type NoticeTone = "info" | "success" | "error";

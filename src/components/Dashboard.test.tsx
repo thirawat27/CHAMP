@@ -491,12 +491,13 @@ describe("Dashboard Component", () => {
           case "get_https_tunnel_status":
             return {
               running: true,
-              url: "https://demo.trycloudflare.com",
+              url: "https://demo.ngrok-free.app",
               ready: true,
               local_url: "http://127.0.0.1:8080",
               error: null,
               log_path: "C:\\CHAMP\\logs\\https-tunnel.log",
               pid: 1234,
+              authtoken_configured: true,
             };
           default:
             return {};
@@ -506,8 +507,51 @@ describe("Dashboard Component", () => {
       render(<Dashboard />);
 
       expect(await screen.findByTestId("https-tunnel-panel")).toBeInTheDocument();
-      expect(await screen.findByText("https://demo.trycloudflare.com")).toBeInTheDocument();
+      expect(await screen.findByText("https://demo.ngrok-free.app")).toBeInTheDocument();
       expect(screen.getByRole("button", { name: /^copy$/i })).toBeInTheDocument();
+    });
+
+    it("should ask for an ngrok authtoken and save it", async () => {
+      let authtokenConfigured = false;
+      vi.mocked(invoke).mockImplementation(async (cmd: string) => {
+        const tunnelStatus = {
+          running: false,
+          url: null,
+          ready: false,
+          local_url: "",
+          error: null,
+          log_path: null,
+          pid: null,
+          authtoken_configured: authtokenConfigured,
+        };
+        switch (cmd) {
+          case "get_all_statuses":
+            return mockServiceMap;
+          case "get_app_paths":
+            return mockAppPaths;
+          case "get_system_metrics":
+            return mockSystemMetrics;
+          case "get_https_tunnel_status":
+            return tunnelStatus;
+          case "set_ngrok_authtoken":
+            authtokenConfigured = true;
+            return { ...tunnelStatus, authtoken_configured: true };
+          default:
+            return {};
+        }
+      });
+
+      render(<Dashboard />);
+
+      const input = await screen.findByLabelText("ngrok authtoken");
+      fireEvent.change(input, { target: { value: "2abcTOKEN_x" } });
+      fireEvent.click(screen.getByRole("button", { name: /^save$/i }));
+
+      await waitFor(() => {
+        expect(invoke).toHaveBeenCalledWith("set_ngrok_authtoken", { token: "2abcTOKEN_x" });
+        expect(screen.queryByLabelText("ngrok authtoken")).not.toBeInTheDocument();
+      });
+      expect(screen.getByRole("button", { name: /change authtoken/i })).toBeInTheDocument();
     });
   });
 

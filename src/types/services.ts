@@ -289,6 +289,8 @@ export interface HttpsTunnelStatus {
   error: string | null;
   log_path: string | null;
   pid: number | null;
+  /** An ngrok authtoken is saved in CHAMP, in NGROK_AUTHTOKEN, or in ngrok's config. */
+  authtoken_configured: boolean;
 }
 
 /**

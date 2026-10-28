@@ -42,6 +42,7 @@ const responses: Record<string, unknown> = {
     error: null,
     log_path: null,
     pid: null,
+    authtoken_configured: true,
   },
   get_app_paths: paths,
   get_installed_versions: {
@@ -49,7 +50,7 @@ const responses: Record<string, unknown> = {
     php: "8.4.14",
     mysql: "8.4.7",
     phpmyadmin: "5.2.3",
-    cloudflared: "2025.10.1",
+    ngrok: "v3-stable",
   },
   get_settings: {
     web_port: 8080,

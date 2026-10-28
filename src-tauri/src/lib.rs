@@ -117,6 +117,8 @@ pub fn run() {
                 });
             }
 
+            doctor::spawn_default_model_download(app.handle().clone());
+
             if crate::config::AppSettings::load().auto_start_services {
                 let app_handle = app.handle().clone();
                 tauri::async_runtime::spawn(async move {
@@ -146,6 +148,7 @@ pub fn run() {
             commands::start_https_tunnel,
             commands::stop_https_tunnel,
             commands::get_https_tunnel_status,
+            commands::set_ngrok_authtoken,
             // Settings commands
             commands::get_settings,
             commands::save_settings,
