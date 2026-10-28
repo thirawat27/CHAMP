@@ -15,7 +15,13 @@ function App() {
 
   useEffect(() => {
     initializeLanguage();
-    checkRuntimeInstalled();
+    invoke<boolean>("check_runtime_installed")
+      .then((installed) => setIsFirstRun(!installed))
+      .catch((error) => {
+        console.error("Failed to check runtime status:", error);
+        // Default to showing wizard if check fails
+        setIsFirstRun(true);
+      });
 
     const blockDevtoolsShortcuts = (e: KeyboardEvent) => {
       const key = e.key.toLowerCase();
@@ -60,17 +66,6 @@ function App() {
     };
   }, []);
 
-  const checkRuntimeInstalled = async () => {
-    try {
-      const installed = await invoke<boolean>("check_runtime_installed");
-      setIsFirstRun(!installed);
-    } catch (error) {
-      console.error("Failed to check runtime status:", error);
-      // Default to showing wizard if check fails
-      setIsFirstRun(true);
-    }
-  };
-
   const handleWizardComplete = () => {
     setIsFirstRun(false);
   };
@@ -78,8 +73,7 @@ function App() {
   const handleResetInstallation = async () => {
     if (confirm(t.resetInstallationConfirm)) {
       try {
-        // Stop all services first
-        await invoke("cleanup_all_services");
+        // reset_installation stops every service before deleting the runtime.
         await invoke("reset_installation");
         setIsFirstRun(true);
         setShowDebugMenu(false);

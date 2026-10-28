@@ -57,10 +57,6 @@ pub enum BinaryComponent {
     MySQL,
     PostgreSQL,
     PhpMyAdmin,
-    Node,
-    Python,
-    Go,
-    Ruby,
 }
 
 impl BinaryComponent {
@@ -71,19 +67,11 @@ impl BinaryComponent {
             BinaryComponent::MySQL => "MySQL",
             BinaryComponent::PostgreSQL => "PostgreSQL",
             BinaryComponent::PhpMyAdmin => "phpMyAdmin",
-            BinaryComponent::Node => "Node.js",
-            BinaryComponent::Python => "Python",
-            BinaryComponent::Go => "Go",
-            BinaryComponent::Ruby => "Ruby",
         }
     }
 
     pub fn version(&self) -> String {
         let config = get_config();
-        // Collapsed 9 near-identical selected-or-first-version arms into one
-        // helper. Optional components pass an empty slice when unconfigured,
-        // preserving the previous `unwrap_or_default()` (empty string). (M-02)
-        let empty: &[VersionInfo] = &[];
         match self {
             BinaryComponent::Caddy => selected_or_first_version(&config.binaries.caddy.versions),
             BinaryComponent::Php => selected_or_first_version(&config.binaries.php.versions),
@@ -103,38 +91,6 @@ impl BinaryComponent {
                     .map(|v| v.version.clone())
                     .unwrap_or_default()
             }
-            BinaryComponent::Node => selected_or_first_version(
-                config
-                    .binaries
-                    .node
-                    .as_ref()
-                    .map(|b| b.versions.as_slice())
-                    .unwrap_or(empty),
-            ),
-            BinaryComponent::Python => selected_or_first_version(
-                config
-                    .binaries
-                    .python
-                    .as_ref()
-                    .map(|b| b.versions.as_slice())
-                    .unwrap_or(empty),
-            ),
-            BinaryComponent::Go => selected_or_first_version(
-                config
-                    .binaries
-                    .go
-                    .as_ref()
-                    .map(|b| b.versions.as_slice())
-                    .unwrap_or(empty),
-            ),
-            BinaryComponent::Ruby => selected_or_first_version(
-                config
-                    .binaries
-                    .ruby
-                    .as_ref()
-                    .map(|b| b.versions.as_slice())
-                    .unwrap_or(empty),
-            ),
         }
     }
 
@@ -149,10 +105,6 @@ impl BinaryComponent {
             BinaryComponent::MySQL => "mysql",
             BinaryComponent::PostgreSQL => "postgresql",
             BinaryComponent::PhpMyAdmin => "adminer",
-            BinaryComponent::Node => "node",
-            BinaryComponent::Python => "python",
-            BinaryComponent::Go => "go",
-            BinaryComponent::Ruby => "ruby",
         }
     }
 }
@@ -180,34 +132,6 @@ impl RuntimeDownloader {
                 BinaryComponent::PhpMyAdmin => {
                     if let Some(pkg) = get_phpmyadmin_package(&selection.phpmyadmin) {
                         return pkg.version;
-                    }
-                }
-                BinaryComponent::Node => {
-                    if let Some(id) = &selection.node {
-                        if let Some(pkg) = crate::runtime::packages::get_node_package(id) {
-                            return pkg.version;
-                        }
-                    }
-                }
-                BinaryComponent::Python => {
-                    if let Some(id) = &selection.python {
-                        if let Some(pkg) = crate::runtime::packages::get_python_package(id) {
-                            return pkg.version;
-                        }
-                    }
-                }
-                BinaryComponent::Go => {
-                    if let Some(id) = &selection.go {
-                        if let Some(pkg) = crate::runtime::packages::get_go_package(id) {
-                            return pkg.version;
-                        }
-                    }
-                }
-                BinaryComponent::Ruby => {
-                    if let Some(id) = &selection.ruby {
-                        if let Some(pkg) = crate::runtime::packages::get_ruby_package(id) {
-                            return pkg.version;
-                        }
                     }
                 }
                 BinaryComponent::Caddy => {
@@ -397,7 +321,11 @@ impl RuntimeDownloader {
     /// require a browser-like UA get one via the per-request exception in
     /// `build_download_request` / `build_head_request`. (M-11)
     fn user_agent(&self) -> &'static str {
-        "CHAMP-Runtime-Installer/1.3 (+https://github.com/thirawat27/CHAMP)"
+        concat!(
+            "CHAMP-Runtime-Installer/",
+            env!("CARGO_PKG_VERSION"),
+            " (+https://github.com/thirawat27/CHAMP)"
+        )
     }
 
     /// Browser-like User-Agent kept only for hosts that reject non-browser
@@ -550,62 +478,6 @@ impl RuntimeDownloader {
                         return pkg.url;
                     }
                 }
-                BinaryComponent::Node => {
-                    if let Some(id) = &selection.node {
-                        if let Some(pkg) = crate::runtime::packages::get_node_package(id) {
-                            return match self.platform {
-                                Platform::WindowsX64 => pkg.windows_x64,
-                                Platform::WindowsArm64 => pkg.windows_arm64,
-                                Platform::MacOSX64 => pkg.macos_x64,
-                                Platform::MacOSArm64 => pkg.macos_arm64,
-                                Platform::LinuxX64 => pkg.linux_x64,
-                                Platform::LinuxArm64 => pkg.linux_arm64,
-                            };
-                        }
-                    }
-                }
-                BinaryComponent::Python => {
-                    if let Some(id) = &selection.python {
-                        if let Some(pkg) = crate::runtime::packages::get_python_package(id) {
-                            return match self.platform {
-                                Platform::WindowsX64 => pkg.windows_x64,
-                                Platform::WindowsArm64 => pkg.windows_arm64,
-                                Platform::MacOSX64 => pkg.macos_x64,
-                                Platform::MacOSArm64 => pkg.macos_arm64,
-                                Platform::LinuxX64 => pkg.linux_x64,
-                                Platform::LinuxArm64 => pkg.linux_arm64,
-                            };
-                        }
-                    }
-                }
-                BinaryComponent::Go => {
-                    if let Some(id) = &selection.go {
-                        if let Some(pkg) = crate::runtime::packages::get_go_package(id) {
-                            return match self.platform {
-                                Platform::WindowsX64 => pkg.windows_x64,
-                                Platform::WindowsArm64 => pkg.windows_arm64,
-                                Platform::MacOSX64 => pkg.macos_x64,
-                                Platform::MacOSArm64 => pkg.macos_arm64,
-                                Platform::LinuxX64 => pkg.linux_x64,
-                                Platform::LinuxArm64 => pkg.linux_arm64,
-                            };
-                        }
-                    }
-                }
-                BinaryComponent::Ruby => {
-                    if let Some(id) = &selection.ruby {
-                        if let Some(pkg) = crate::runtime::packages::get_ruby_package(id) {
-                            return match self.platform {
-                                Platform::WindowsX64 => pkg.windows_x64,
-                                Platform::WindowsArm64 => pkg.windows_arm64,
-                                Platform::MacOSX64 => pkg.macos_x64,
-                                Platform::MacOSArm64 => pkg.macos_arm64,
-                                Platform::LinuxX64 => pkg.linux_x64,
-                                Platform::LinuxArm64 => pkg.linux_arm64,
-                            };
-                        }
-                    }
-                }
                 BinaryComponent::Caddy => {
                     // Caddy doesn't have package selection, use default
                 }
@@ -671,62 +543,6 @@ impl RuntimeDownloader {
                     .unwrap();
                 version_info.url.clone()
             }
-            BinaryComponent::Node => {
-                let version_info = config
-                    .binaries
-                    .node
-                    .as_ref()
-                    .and_then(|b| {
-                        b.versions
-                            .iter()
-                            .find(|v| v.selected)
-                            .or_else(|| b.versions.first())
-                    })
-                    .expect("Node is not configured");
-                self.url_for_platform(&version_info.urls)
-            }
-            BinaryComponent::Python => {
-                let version_info = config
-                    .binaries
-                    .python
-                    .as_ref()
-                    .and_then(|b| {
-                        b.versions
-                            .iter()
-                            .find(|v| v.selected)
-                            .or_else(|| b.versions.first())
-                    })
-                    .expect("Python is not configured");
-                self.url_for_platform(&version_info.urls)
-            }
-            BinaryComponent::Go => {
-                let version_info = config
-                    .binaries
-                    .go
-                    .as_ref()
-                    .and_then(|b| {
-                        b.versions
-                            .iter()
-                            .find(|v| v.selected)
-                            .or_else(|| b.versions.first())
-                    })
-                    .expect("Go is not configured");
-                self.url_for_platform(&version_info.urls)
-            }
-            BinaryComponent::Ruby => {
-                let version_info = config
-                    .binaries
-                    .ruby
-                    .as_ref()
-                    .and_then(|b| {
-                        b.versions
-                            .iter()
-                            .find(|v| v.selected)
-                            .or_else(|| b.versions.first())
-                    })
-                    .expect("Ruby is not configured");
-                self.url_for_platform(&version_info.urls)
-            }
         }
     }
 
@@ -749,10 +565,7 @@ impl RuntimeDownloader {
     }
 
     fn is_supported_download_extension(extension: &str) -> bool {
-        matches!(
-            extension,
-            "zip" | "gz" | "tar.gz" | "xz" | "tar.xz" | "7z" | "php"
-        )
+        matches!(extension, "zip" | "gz" | "tar.gz" | "xz" | "tar.xz" | "php")
     }
 
     /// Download a single binary component
@@ -764,7 +577,9 @@ impl RuntimeDownloader {
         current: u8,
         total: u8,
     ) -> Result<PathBuf, String> {
-        let url = self.get_binary_url(component);
+        let url = self
+            .resolve_moved_url(self.get_binary_url(component), component)
+            .await;
         if url.trim().is_empty() {
             return Err(format!(
                 "{} does not have an official portable binary URL for {:?}. Use the Windows official runtime or configure a trusted platform package source.",
@@ -775,7 +590,7 @@ impl RuntimeDownloader {
         let extension = Self::get_extension_from_url(&url);
         if !Self::is_supported_download_extension(&extension) {
             return Err(format!(
-                "{} uses an unsupported archive format '.{}'. CHAMP can install .zip, .tar.gz, .tar.xz, .7z, and .php runtime packages.",
+                "{} uses an unsupported archive format '.{}'. CHAMP can install .zip, .tar.gz, .tar.xz, and .php runtime packages.",
                 self.component_display_name(component),
                 extension
             ));
@@ -1031,6 +846,26 @@ impl RuntimeDownloader {
                 hasher,
             },
         )
+    }
+
+    /// windows.php.net moves superseded PHP builds to `/archives/`; follow the
+    /// move so an older catalog entry still installs.
+    async fn resolve_moved_url(&self, url: String, component: BinaryComponent) -> String {
+        let Some(archive) = crate::runtime::php_catalog::windows_archive_url(&url) else {
+            return url;
+        };
+        let missing = self
+            .build_head_request(&url, component)
+            .send()
+            .await
+            .map(|response| response.status() == StatusCode::NOT_FOUND)
+            .unwrap_or(false);
+        if missing {
+            eprintln!("{} moved to the PHP archive, using {}", url, archive);
+            archive
+        } else {
+            url
+        }
     }
 
     async fn probe_download_metadata(
@@ -1355,8 +1190,6 @@ impl RuntimeDownloader {
         let is_gzip = downloaded_file.magic_bytes.len() >= 2
             && downloaded_file.magic_bytes[0] == 0x1f
             && downloaded_file.magic_bytes[1] == 0x8b;
-        let is_7z = downloaded_file.magic_bytes.len() >= 6
-            && downloaded_file.magic_bytes[..6] == [0x37, 0x7a, 0xbc, 0xaf, 0x27, 0x1c];
 
         if request.extension == "zip" && !is_zip {
             return Err("Expected ZIP file but downloaded file doesn't have ZIP magic bytes. URL may have redirected to HTML page.".to_string());
@@ -1365,12 +1198,6 @@ impl RuntimeDownloader {
         if (request.extension == "gz" || request.extension == "tar.gz") && !is_gzip {
             return Err(
                 "Expected gzip file but downloaded file doesn't have gzip magic bytes.".to_string(),
-            );
-        }
-
-        if request.extension == "7z" && !is_7z {
-            return Err(
-                "Expected 7z file but downloaded file doesn't have 7z magic bytes.".to_string(),
             );
         }
 
@@ -1501,48 +1328,6 @@ impl RuntimeDownloader {
                     .find(|v| selected_id.map(|id| v.id == id).unwrap_or(v.selected))?;
                 version.checksum.clone()
             }
-            BinaryComponent::Node
-            | BinaryComponent::Python
-            | BinaryComponent::Go
-            | BinaryComponent::Ruby => {
-                // Determine which version ID to look for based on package selection
-                let target_id = if let Some(ref selection) = self.package_selection {
-                    match component {
-                        BinaryComponent::Node => selection.node.as_deref(),
-                        BinaryComponent::Python => selection.python.as_deref(),
-                        BinaryComponent::Go => selection.go.as_deref(),
-                        BinaryComponent::Ruby => selection.ruby.as_deref(),
-                        _ => None,
-                    }
-                } else {
-                    None
-                };
-
-                let version_info = match component {
-                    BinaryComponent::Node => config.binaries.node.as_ref()?,
-                    BinaryComponent::Python => config.binaries.python.as_ref()?,
-                    BinaryComponent::Go => config.binaries.go.as_ref()?,
-                    BinaryComponent::Ruby => config.binaries.ruby.as_ref()?,
-                    _ => return None,
-                };
-
-                for version in &version_info.versions {
-                    if target_id == Some(version.id.as_str())
-                        || (target_id.is_none() && version.selected)
-                    {
-                        return match platform_key.as_str() {
-                            "windowsX64" => version.checksums.windows_x64.clone(),
-                            "windowsArm64" => version.checksums.windows_arm64.clone(),
-                            "linuxX64" => version.checksums.linux_x64.clone(),
-                            "linuxArm64" => version.checksums.linux_arm64.clone(),
-                            "macOSX64" => version.checksums.macos_x64.clone(),
-                            "macOSArm64" => version.checksums.macos_arm64.clone(),
-                            _ => None,
-                        };
-                    }
-                }
-                None
-            }
         }
     }
 
@@ -1561,7 +1346,7 @@ impl RuntimeDownloader {
                 .map_err(|e| format!("Failed to get file: {}", e))?;
             let outpath = dest_dir.join(file.enclosed_name().ok_or("Invalid path")?);
 
-            if file.name().ends_with('/') {
+            if file.is_dir() {
                 fs::create_dir_all(&outpath)
                     .map_err(|e| format!("Failed to create directory: {}", e))?;
             } else {
@@ -1580,7 +1365,7 @@ impl RuntimeDownloader {
                 #[cfg(unix)]
                 {
                     use std::os::unix::fs::PermissionsExt;
-                    if is_executable(&file.name()) {
+                    if is_executable(&outpath.to_string_lossy()) {
                         let mut perms = fs::metadata(&outpath)
                             .map_err(|e| format!("Failed to get metadata: {}", e))?
                             .permissions();
@@ -1726,12 +1511,6 @@ impl RuntimeDownloader {
         }
 
         Ok(())
-    }
-
-    /// Extract a 7z archive
-    fn extract_7z(&self, archive_path: &Path, dest_dir: &Path) -> Result<(), String> {
-        sevenz_rust::decompress_file(archive_path, dest_dir)
-            .map_err(|e| format!("Failed to extract {}: {}", archive_path.display(), e))
     }
 
     /// Download and install all runtime binaries
@@ -2000,6 +1779,17 @@ impl RuntimeDownloader {
         runtime_dir: &Path,
     ) -> Result<(), String> {
         let install_dir = self.install_dir_for_component(component, runtime_dir);
+        // Updating a PHP branch replaces its folder so files from the previous
+        // patch release cannot linger (php.ini is regenerated on every start).
+        if component == BinaryComponent::Php && install_dir.exists() {
+            fs::remove_dir_all(&install_dir).map_err(|e| {
+                format!(
+                    "Failed to replace {} (is PHP still running?): {}",
+                    install_dir.display(),
+                    e
+                )
+            })?;
+        }
         fs::create_dir_all(&install_dir)
             .map_err(|e| format!("Failed to create runtime directory: {}", e))?;
 
@@ -2024,8 +1814,6 @@ impl RuntimeDownloader {
             self.extract_tar_gz(downloaded_path, &install_dir)?;
         } else if is_tar_xz || extension == "xz" {
             self.extract_tar_xz(downloaded_path, &install_dir)?;
-        } else if extension == "7z" {
-            self.extract_7z(downloaded_path, &install_dir)?;
         } else if extension == "zip" {
             self.extract_zip(downloaded_path, &install_dir)?;
             if component == BinaryComponent::PhpMyAdmin {
@@ -2084,40 +1872,12 @@ impl RuntimeDownloader {
     }
 
     fn selected_stack_components(&self) -> Vec<BinaryComponent> {
-        let mut components = vec![
+        vec![
             BinaryComponent::Caddy,
             BinaryComponent::Php,
             self.selected_database_component(),
             BinaryComponent::PhpMyAdmin,
-        ];
-
-        let selection = self
-            .package_selection
-            .clone()
-            .unwrap_or_else(|| crate::config::AppSettings::load().package_selection);
-
-        if let Some(node) = &selection.node {
-            if !node.is_empty() {
-                components.push(BinaryComponent::Node);
-            }
-        }
-        if let Some(python) = &selection.python {
-            if !python.is_empty() {
-                components.push(BinaryComponent::Python);
-            }
-        }
-        if let Some(go) = &selection.go {
-            if !go.is_empty() {
-                components.push(BinaryComponent::Go);
-            }
-        }
-        if let Some(ruby) = &selection.ruby {
-            if !ruby.is_empty() {
-                components.push(BinaryComponent::Ruby);
-            }
-        }
-
-        components
+        ]
     }
 
     fn normalize_phpmyadmin_install(&self, runtime_dir: &Path) -> Result<(), String> {
@@ -2241,20 +2001,10 @@ impl RuntimeDownloader {
             "postgresql",
             "adminer",
             "phpmyadmin",
-            "node",
-            "python",
-            "go",
-            "ruby",
         ] {
             let marker_file = runtime_dir.join(format!("{}_installed.txt", component));
-            if let Ok(content) = fs::read_to_string(&marker_file) {
-                // Parse version from format: "version=1.2.3\ninstalled_at=..."
-                for line in content.lines() {
-                    if let Some(version) = line.strip_prefix("version=") {
-                        installed.insert(component.to_string(), version.to_string());
-                        break;
-                    }
-                }
+            if let Some(version) = read_marker_version(&marker_file) {
+                installed.insert(component.to_string(), version);
             }
         }
 
@@ -2266,6 +2016,14 @@ impl Default for RuntimeDownloader {
     fn default() -> Self {
         Self::new()
     }
+}
+
+/// Read `version=...` from an install marker file (`version=1.2.3\ninstalled_at=...`).
+pub fn read_marker_version(path: &Path) -> Option<String> {
+    fs::read_to_string(path)
+        .ok()?
+        .lines()
+        .find_map(|line| line.strip_prefix("version=").map(str::to_string))
 }
 
 /// Check if a file is executable based on its name

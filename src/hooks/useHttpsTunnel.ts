@@ -135,9 +135,7 @@ export function useHttpsTunnel({
   }, [notify, t, tunnelStatus.url]);
 
   const tunnelReady = Boolean(tunnelStatus.running && tunnelStatus.ready && tunnelStatus.url);
-  const tunnelHasPendingUrl = Boolean(
-    tunnelStatus.running && tunnelStatus.url && !tunnelReady
-  );
+  const tunnelHasPendingUrl = Boolean(tunnelStatus.running && tunnelStatus.url && !tunnelReady);
 
   return {
     tunnelStatus,

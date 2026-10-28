@@ -1,5 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
-import { Activity, HardDrive } from "lucide-react";
+import { Activity, ArrowDown, ArrowUp, Cpu, HardDrive, MemoryStick, Network } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "../stores/languageStore";
 import { PackageSelection, ServiceMap, getStackServiceTypes } from "../types/services";
@@ -82,33 +82,36 @@ export function StatusBar({ services, appPaths, packageSelection, ...props }: St
     };
   }, []);
 
-  const cpuText = metrics ? `${Math.max(metrics.cpu_usage, 0).toFixed(1)}%` : "--";
-  const ramText = metrics
-    ? `${formatBytes(metrics.memory_used_bytes)} / ${formatBytes(metrics.memory_total_bytes)}`
-    : "--";
-  const networkText = metrics
-    ? `↓ ${formatBytes(metrics.network_rx_bps)}/s ↑ ${formatBytes(metrics.network_tx_bps)}/s`
-    : "--";
-
   return (
     <footer className="status-bar" {...props}>
       <span>
-        <Activity size={14} /> {runningCount}/{totalCount} {t.running}
+        <Activity size={13} /> {runningCount}/{totalCount} {t.running}
       </span>
       {appPaths?.base_dir && (
-        <span className="status-path">
-          <HardDrive size={14} /> {appPaths.portable ? "Portable" : "Local"}: {appPaths.base_dir}
+        <span className="status-path" title={appPaths.base_dir}>
+          <HardDrive size={13} /> {appPaths.portable ? "Portable" : "Local"}: {appPaths.base_dir}
         </span>
       )}
       <span className="status-metrics">
-        <span className="status-metric">
-          <strong>CPU</strong> {cpuText}
+        <span className="status-metric" title="CPU">
+          <Cpu size={13} /> {metrics ? `${Math.max(metrics.cpu_usage, 0).toFixed(1)}%` : "--"}
         </span>
-        <span className="status-metric">
-          <strong>RAM</strong> {ramText}
+        <span className="status-metric" title="RAM">
+          <MemoryStick size={13} />
+          {metrics
+            ? `${formatBytes(metrics.memory_used_bytes)} / ${formatBytes(metrics.memory_total_bytes)}`
+            : "--"}
         </span>
-        <span className="status-metric">
-          <strong>NET</strong> {networkText}
+        <span className="status-metric" title={t.network}>
+          <Network size={13} />
+          {metrics ? (
+            <>
+              <ArrowDown size={11} /> {formatBytes(metrics.network_rx_bps)}/s
+              <ArrowUp size={11} /> {formatBytes(metrics.network_tx_bps)}/s
+            </>
+          ) : (
+            "--"
+          )}
         </span>
       </span>
       <span>CHAMP By Thirawat27</span>

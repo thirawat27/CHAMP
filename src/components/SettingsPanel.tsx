@@ -1,6 +1,21 @@
 import { invoke } from "@tauri-apps/api/core";
-import { listen } from "@tauri-apps/api/event";
-import { CheckCircle2, FolderOpen, X } from "lucide-react";
+import {
+  ArrowUpCircle,
+  BrainCircuit,
+  CheckCircle2,
+  Database,
+  Download,
+  FileCode2,
+  LoaderCircle,
+  Network,
+  Power,
+  Radar,
+  Repeat,
+  Settings2,
+  Trash2,
+  Volume2,
+  X,
+} from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import {
   AppSettings,
@@ -11,13 +26,15 @@ import {
   PackageSelection,
   ServiceType,
   EMPTY_PACKAGE_SELECTION,
-  GenericPackage,
-  hasInstallablePackageForPlatform,
   hasPackageUrlForPlatform,
   isAdminerSelected,
 } from "../types/services";
+import { formatModelSize, useLogDoctorModel } from "../hooks/useLogDoctorModel";
 import { useLanguageStore, useTranslation } from "../stores/languageStore";
 import { AudioManager } from "../utils/audioManager";
+import { listenIfTauri } from "../utils/tauri";
+import { AgentConnectorSection } from "./settings/AgentConnectorSection";
+import { UpdatesSection } from "./settings/UpdatesSection";
 
 interface SettingsPanelProps {
   onClose: () => void;
@@ -33,15 +50,11 @@ interface PortCheck {
 }
 
 const defaultPackageSelection: PackageSelection = EMPTY_PACKAGE_SELECTION;
-type OptionalRuntimeKey = "node" | "python" | "go" | "ruby";
-const OPTIONAL_RUNTIME_KEYS: OptionalRuntimeKey[] = ["node", "python", "go", "ruby"];
-
-const runtimeLabel = (runtimeKey: OptionalRuntimeKey): string =>
-  runtimeKey === "node" ? "Node.js" : runtimeKey[0].toUpperCase() + runtimeKey.slice(1);
 
 export function SettingsPanel({ onClose, onSettingsChanged, ...props }: SettingsPanelProps) {
   const { t } = useTranslation();
   const { soundEnabled, toggleSound } = useLanguageStore();
+  const doctorModel = useLogDoctorModel();
 
   // ESC to close
   useEffect(() => {
@@ -60,7 +73,6 @@ export function SettingsPanel({ onClose, onSettingsChanged, ...props }: Settings
     php_port: DEFAULT_PORTS[ServiceType.PhpFpm],
     mysql_port: DEFAULT_PORTS[ServiceType.MySQL],
     postgresql_port: DEFAULT_PORTS[ServiceType.PostgreSQL],
-    project_root: "",
     auto_start_services: false,
     package_selection: defaultPackageSelection,
   });
@@ -75,24 +87,15 @@ export function SettingsPanel({ onClose, onSettingsChanged, ...props }: Settings
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [installedRuntimes, setInstalledRuntimes] = useState<Record<string, string>>({});
-  const [runtimeBusy, setRuntimeBusy] = useState<Record<string, boolean>>({
-    node: false,
-    python: false,
-    go: false,
-    ruby: false,
-  });
 
   const loadSettings = useCallback(async () => {
     try {
-      const [loaded, availablePackages, installedPhp, platformKey, installedRuntimesData] =
-        await Promise.all([
-          invoke<AppSettings>("get_settings"),
-          invoke<PackagesConfig>("get_available_packages_cmd"),
-          invoke<InstalledPhpVersion[]>("get_installed_php_versions"),
-          invoke<string>("get_runtime_platform"),
-          invoke<Record<string, string>>("get_installed_versions"),
-        ]);
+      const [loaded, availablePackages, installedPhp, platformKey] = await Promise.all([
+        invoke<AppSettings>("get_settings"),
+        invoke<PackagesConfig>("get_available_packages_cmd"),
+        invoke<InstalledPhpVersion[]>("get_installed_php_versions"),
+        invoke<string>("get_runtime_platform"),
+      ]);
       const packageSelection = loaded.package_selection ?? defaultPackageSelection;
       const availablePhpPackages = availablePackages.php.filter((pkg) =>
         hasPackageUrlForPlatform(pkg, platformKey)
@@ -144,7 +147,6 @@ export function SettingsPanel({ onClose, onSettingsChanged, ...props }: Settings
       setRuntimePlatformKey(platformKey);
       setPhpVersions(installedPhp);
       setSelectedPhpId(normalizedPackageSelection.php);
-      setInstalledRuntimes(installedRuntimesData || {});
 
       invoke<PackagesConfig>("refresh_runtime_catalog")
         .then((freshPackages) => setPackages(freshPackages))
@@ -163,7 +165,7 @@ export function SettingsPanel({ onClose, onSettingsChanged, ...props }: Settings
   }, [loadSettings]);
 
   useEffect(() => {
-    const unlisten = listen<DownloadProgress>("download-progress", (event) => {
+    const unlisten = listenIfTauri<DownloadProgress>("download-progress", (event) => {
       setSaveProgress(event.payload);
     });
 
@@ -285,125 +287,17 @@ export function SettingsPanel({ onClose, onSettingsChanged, ...props }: Settings
     }
   };
 
-  const getInstallableOptionalPackages = useCallback(
-    (runtimeKey: OptionalRuntimeKey): GenericPackage[] =>
-      (packages?.[runtimeKey] ?? []).filter((pkg) =>
-        hasInstallablePackageForPlatform(pkg, runtimePlatformKey)
-      ),
-    [packages, runtimePlatformKey]
-  );
-
-  const packageBadges = (pkg?: Pick<GenericPackage, "lts" | "eol" | "recommended">): string[] => {
-    if (!pkg) return [];
-    return [
-      pkg.lts ? t.ltsBadge : t.stableBadge,
-      pkg.eol ? t.eolBadge : "",
-      pkg.recommended ? t.wizardRecommended : "",
-    ].filter(Boolean);
-  };
-
-  const packageOptionLabel = (pkg: GenericPackage): string => {
-    const badges = packageBadges(pkg);
-    return badges.length > 0 ? `${pkg.display_name} [${badges.join(", ")}]` : pkg.display_name;
-  };
-
-  const updateSelectedOptionalRuntime = (runtimeKey: OptionalRuntimeKey, packageId: string) => {
-    setSettings((current) => ({
-      ...current,
-      package_selection: {
-        ...(current.package_selection ?? defaultPackageSelection),
-        [runtimeKey]: packageId,
-      },
-    }));
-  };
-
-  const installOptionalRuntime = async (runtimeKey: OptionalRuntimeKey) => {
-    const packageId = settings.package_selection?.[runtimeKey];
-    if (!packageId) return;
-
-    const selectedPackage = getInstallableOptionalPackages(runtimeKey).find(
-      (pkg) => pkg.id === packageId
-    );
-    if (!selectedPackage) {
-      setError(t.runtimeUnavailableForPlatform.replace("{name}", runtimeKey.toUpperCase()));
-      return;
-    }
-
-    setRuntimeBusy((prev) => ({ ...prev, [runtimeKey]: true }));
-    setError(null);
-    setMessage(null);
-
-    try {
-      // Build selection where only this runtime is chosen to download
-      const selection: PackageSelection = {
-        ...EMPTY_PACKAGE_SELECTION,
-        [runtimeKey]: packageId,
-      };
-
-      // Build skip list of all other components
-      const allComponents = [
-        "caddy",
-        "php",
-        "mysql",
-        "postgresql",
-        "adminer",
-        "phpmyadmin",
-        "node",
-        "python",
-        "go",
-        "ruby",
-      ];
-      const skipList = allComponents.filter((item) => item !== runtimeKey);
-
-      // Trigger download via tauri command
-      await invoke("download_runtime_with_skip", {
-        packageSelection: selection,
-        skipList,
-      });
-
-      // Save settings to persist the choice
-      await invoke("save_settings", { settings });
-
-      // Reload installed versions
-      const installedRuntimesData = await invoke<Record<string, string>>("get_installed_versions");
-      setInstalledRuntimes(installedRuntimesData || {});
-
-      setMessage(t.runtimeInstalledSuccessfully.replace("{name}", runtimeKey.toUpperCase()));
-      onSettingsChanged?.();
-    } catch (e) {
-      setError(`${t.failedToInstallRuntime.replace("{name}", runtimeKey.toUpperCase())}: ${e}`);
-    } finally {
-      setRuntimeBusy((prev) => ({ ...prev, [runtimeKey]: false }));
-      setSaveProgress(null);
-    }
-  };
-
-  const openProjectRoot = async () => {
-    if (!settings.project_root) return;
-    await invoke("open_folder", { path: settings.project_root });
-  };
-
   const availablePhpPackages = (packages?.php ?? []).filter((pkg) =>
     hasPackageUrlForPlatform(pkg, runtimePlatformKey)
   );
   const availablePhpIds = new Set(availablePhpPackages.map((pkg) => pkg.id));
   const visiblePhpVersions = phpVersions.filter((php) => availablePhpIds.has(php.id));
+  const selectedPhp = phpVersions.find((php) => php.id === selectedPhpId);
   const selectedDatabaseToolId =
     settings.package_selection?.phpmyadmin ?? defaultPackageSelection.phpmyadmin;
   const activeDatabaseName = isAdminerSelected(settings.package_selection) ? "PostgreSQL" : "MySQL";
-  const optionalRuntimeRows = OPTIONAL_RUNTIME_KEYS.map((runtimeKey) => {
-    const runtimePackages = getInstallableOptionalPackages(runtimeKey);
-    const selectedPackageId = settings.package_selection?.[runtimeKey] || "";
-    const selectedPackage = runtimePackages.find((pkg) => pkg.id === selectedPackageId);
-    return {
-      runtimeKey,
-      label: runtimeLabel(runtimeKey),
-      packages: runtimePackages,
-      selectedPackage,
-      selectedPackageId,
-      installedVersion: installedRuntimes?.[runtimeKey],
-    };
-  }).filter((row) => row.packages.length > 0);
+  const doctorModelStatus = doctorModel.status;
+  const doctorModelDownloading = doctorModel.progress !== null;
 
   return (
     <div className="modal-backdrop" onClick={onClose} {...props}>
@@ -416,7 +310,9 @@ export function SettingsPanel({ onClose, onSettingsChanged, ...props }: Settings
       >
         <header className="settings-header">
           <div>
-            <h2>{t.settingsTitle}</h2>
+            <h2>
+              <Settings2 size={19} /> {t.settingsTitle}
+            </h2>
             <p>{t.settingsDescription}</p>
           </div>
           <button
@@ -450,7 +346,9 @@ export function SettingsPanel({ onClose, onSettingsChanged, ...props }: Settings
               )}
 
               <div className="settings-section">
-                <h3>{t.ports}</h3>
+                <h3>
+                  <Network size={16} /> {t.ports}
+                </h3>
                 <div className="settings-grid">
                   <label>
                     <span>{t.httpPort}</span>
@@ -525,12 +423,14 @@ export function SettingsPanel({ onClose, onSettingsChanged, ...props }: Settings
                   }}
                   onMouseEnter={() => AudioManager.playHover()}
                 >
-                  {t.checkPorts}
+                  <Radar size={14} /> {t.checkPorts}
                 </button>
               </div>
 
               <div className="settings-section">
-                <h3>{t.phpVersions}</h3>
+                <h3>
+                  <FileCode2 size={16} /> {t.phpVersions}
+                </h3>
                 <label className="project-row">
                   <span>{t.activePhpRuntime}</span>
                   <select
@@ -559,10 +459,15 @@ export function SettingsPanel({ onClose, onSettingsChanged, ...props }: Settings
                     >
                       <strong>{php.display_name}</strong>
                       <span>
+                        {php.installed ? php.version : php.latest_version} ·{" "}
                         {php.active ? t.active : php.installed ? t.installed : t.available}
-                        {php.lts ? " · LTS" : ""}
                         {php.eol ? " · EOL" : ""}
                       </span>
+                      {php.update_available && (
+                        <span className="php-update-badge">
+                          <ArrowUpCircle size={12} /> {php.latest_version}
+                        </span>
+                      )}
                     </button>
                   ))}
                 </div>
@@ -573,12 +478,21 @@ export function SettingsPanel({ onClose, onSettingsChanged, ...props }: Settings
                       AudioManager.playClick();
                       installPhpVersion();
                     }}
-                    disabled={
-                      phpBusy || phpVersions.find((php) => php.id === selectedPhpId)?.installed
-                    }
+                    disabled={phpBusy || (selectedPhp?.installed && !selectedPhp.update_available)}
                     onMouseEnter={() => AudioManager.playHover()}
                   >
-                    {phpBusy ? t.working : t.installSelected}
+                    {phpBusy ? (
+                      <LoaderCircle size={14} className="spin-icon" />
+                    ) : selectedPhp?.update_available ? (
+                      <ArrowUpCircle size={14} />
+                    ) : (
+                      <Download size={14} />
+                    )}
+                    {phpBusy
+                      ? t.working
+                      : selectedPhp?.update_available
+                        ? t.phpUpdateTo.replace("{version}", selectedPhp.latest_version)
+                        : t.installSelected}
                   </button>
                   <button
                     className="btn-primary"
@@ -593,13 +507,15 @@ export function SettingsPanel({ onClose, onSettingsChanged, ...props }: Settings
                     }
                     onMouseEnter={() => AudioManager.playHover()}
                   >
-                    {t.switchPhp}
+                    <Repeat size={14} /> {t.switchPhp}
                   </button>
                 </div>
               </div>
 
               <div className="settings-section">
-                <h3>{t.databaseToolSelect}</h3>
+                <h3>
+                  <Database size={16} /> {t.databaseToolSelect}
+                </h3>
                 <label className="project-row">
                   <span>{t.webDatabaseManager}</span>
                   <select
@@ -620,96 +536,73 @@ export function SettingsPanel({ onClose, onSettingsChanged, ...props }: Settings
               </div>
 
               <div className="settings-section">
-                <h3>{t.additionalRuntimes}</h3>
-                <p className="settings-muted">{t.additionalRuntimesDescription}</p>
-                <p className="settings-muted runtime-terminal-hint">{t.runtimeTerminalHint}</p>
-                <div className="optional-runtime-list">
-                  {optionalRuntimeRows.length === 0 ? (
-                    <div className="empty-state">{t.noAdditionalRuntimes}</div>
-                  ) : (
-                    optionalRuntimeRows.map((row) => {
-                      const installed = Boolean(row.installedVersion);
-                      const selectedVersion = row.selectedPackage?.version;
-                      const selectedInstalled =
-                        Boolean(selectedVersion) && row.installedVersion === selectedVersion;
-                      const progressForRuntime =
-                        saveProgress?.currentComponent.toLowerCase().includes(row.runtimeKey) ??
-                        false;
-                      const badges = packageBadges(row.selectedPackage);
-
-                      return (
-                        <div className="optional-runtime-row" key={row.runtimeKey}>
-                          <div className="optional-runtime-meta">
-                            <span className="optional-runtime-name">
-                              {row.label}
-                              {badges.length > 0 && (
-                                <span className="optional-runtime-badges">
-                                  {badges.map((badge) => (
-                                    <span key={badge}>{badge}</span>
-                                  ))}
-                                </span>
-                              )}
-                            </span>
-                            {installed ? (
-                              <span className="optional-runtime-status installed">
-                                <CheckCircle2 size={12} /> {t.installedVersion}:{" "}
-                                {row.installedVersion}
-                              </span>
-                            ) : (
-                              <span className="optional-runtime-status">{t.notInstalled}</span>
+                <h3>
+                  <BrainCircuit size={16} /> {t.logDoctorAiTitle}
+                </h3>
+                <p className="settings-muted">{t.logDoctorAiSettingsDescription}</p>
+                {doctorModel.error && (
+                  <div className="error-box">
+                    <p className="error-box-text">{doctorModel.error}</p>
+                  </div>
+                )}
+                {doctorModelStatus && (
+                  <div className="settings-inline-actions">
+                    <span className="settings-muted">
+                      {doctorModelStatus.model_name} · {doctorModelStatus.parameters} ·{" "}
+                      {formatModelSize(doctorModelStatus.download_bytes)} ·{" "}
+                      {doctorModelStatus.installed ? t.installed : t.logDoctorAiNotInstalled}
+                    </span>
+                    {doctorModelStatus.installed ? (
+                      <button
+                        className="btn-secondary danger compact"
+                        onClick={() => {
+                          AudioManager.playClick();
+                          doctorModel.remove();
+                        }}
+                      >
+                        <Trash2 size={14} /> {t.logDoctorRemoveAi}
+                      </button>
+                    ) : (
+                      <button
+                        className="btn-primary compact"
+                        onClick={() => {
+                          AudioManager.playClick();
+                          doctorModel.download();
+                        }}
+                        disabled={doctorModelDownloading}
+                      >
+                        {doctorModelDownloading ? (
+                          <>
+                            <LoaderCircle size={14} className="spin-icon" /> {doctorModel.progress}%
+                          </>
+                        ) : (
+                          <>
+                            <Download size={14} />
+                            {t.logDoctorEnableAi.replace(
+                              "{size}",
+                              formatModelSize(doctorModelStatus.download_bytes)
                             )}
-                            {row.selectedPackage && (
-                              <span className="optional-runtime-selected">
-                                {t.selectedVersion}: {row.selectedPackage.display_name}
-                              </span>
-                            )}
-                          </div>
-
-                          <div className="optional-runtime-controls">
-                            <select
-                              className="input optional-runtime-select"
-                              value={row.selectedPackageId}
-                              onChange={(e) =>
-                                updateSelectedOptionalRuntime(row.runtimeKey, e.target.value)
-                              }
-                            >
-                              <option value="">{t.wizardNotSelected || "Do not install"}</option>
-                              {row.packages.map((pkg) => (
-                                <option key={pkg.id} value={pkg.id}>
-                                  {packageOptionLabel(pkg)}
-                                </option>
-                              ))}
-                            </select>
-
-                            {row.selectedPackageId && (
-                              <button
-                                className="btn-primary optional-runtime-install"
-                                onClick={() => {
-                                  AudioManager.playClick();
-                                  installOptionalRuntime(row.runtimeKey);
-                                }}
-                                disabled={runtimeBusy[row.runtimeKey] || selectedInstalled}
-                              >
-                                {runtimeBusy[row.runtimeKey]
-                                  ? progressForRuntime
-                                    ? `${t.downloading} ${saveProgress?.percent ?? 0}%`
-                                    : t.working
-                                  : selectedInstalled
-                                    ? t.installed
-                                    : t.install}
-                              </button>
-                            )}
-                          </div>
-                        </div>
-                      );
-                    })
-                  )}
-                </div>
+                          </>
+                        )}
+                      </button>
+                    )}
+                  </div>
+                )}
               </div>
 
-              {/* Sound Effects Section */}
+              <AgentConnectorSection />
+
+              <UpdatesSection
+                autoCheck={settings.auto_check_updates ?? true}
+                onAutoCheckChange={(enabled) =>
+                  setSettings((current) => ({ ...current, auto_check_updates: enabled }))
+                }
+              />
+
               <div className="settings-section">
-                <h3>{t.soundEffects}</h3>
+                <h3>
+                  <Volume2 size={16} /> {t.soundEffects}
+                </h3>
                 <label className="toggle-row">
                   <input
                     type="checkbox"
@@ -721,49 +614,13 @@ export function SettingsPanel({ onClose, onSettingsChanged, ...props }: Settings
                   />
                   <span>{t.enableSoundEffects}</span>
                 </label>
-                <p
-                  style={{
-                    fontSize: "0.75rem",
-                    color: "var(--text-secondary)",
-                    marginTop: "4px",
-                    marginLeft: "24px",
-                  }}
-                >
-                  {t.soundEffectsDescription}
-                </p>
+                <p className="settings-muted settings-toggle-hint">{t.soundEffectsDescription}</p>
               </div>
 
               <div className="settings-section">
-                <h3>{t.workspace}</h3>
-                <label className="project-row">
-                  <span>{t.projectsFolder}</span>
-                  <div className="input-with-button">
-                    <input
-                      className="input"
-                      value={settings.project_root}
-                      onChange={(e) =>
-                        setSettings((current) => ({ ...current, project_root: e.target.value }))
-                      }
-                    />
-                    <button
-                      className="icon-button"
-                      onClick={() => {
-                        AudioManager.playClick();
-                        openProjectRoot();
-                      }}
-                      type="button"
-                      title={t.openProjectsFolder}
-                      aria-label={t.openProjectsFolder}
-                      onMouseEnter={() => AudioManager.playHover()}
-                    >
-                      <FolderOpen size={18} />
-                    </button>
-                  </div>
-                </label>
-              </div>
-
-              <div className="settings-section">
-                <h3>{t.startup}</h3>
+                <h3>
+                  <Power size={16} /> {t.startup}
+                </h3>
                 <label className="toggle-row">
                   <input
                     type="checkbox"
@@ -778,16 +635,7 @@ export function SettingsPanel({ onClose, onSettingsChanged, ...props }: Settings
                   />
                   <span>{t.autoStartServices}</span>
                 </label>
-                <p
-                  style={{
-                    fontSize: "0.75rem",
-                    color: "var(--text-secondary)",
-                    marginTop: "4px",
-                    marginLeft: "24px",
-                  }}
-                >
-                  {t.autoStartDescription}
-                </p>
+                <p className="settings-muted settings-toggle-hint">{t.autoStartDescription}</p>
               </div>
             </>
           )}

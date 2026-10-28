@@ -7,24 +7,24 @@ import {
   DependencyCheckResult,
   PackagesConfig,
   EMPTY_PACKAGE_SELECTION,
-  getDatabaseDisplayName,
   isAdminerSelected as isAdminerSelection,
 } from "../types/services";
-import { CheckCircle2 } from "lucide-react";
-import champLogo from "../assets/CHAMP.png";
+import { BookOpen, CheckCircle2 } from "lucide-react";
+import champLogo from "../assets/champ-logo.png";
 import { useTranslation } from "../stores/languageStore";
 import { LanguageSelector } from "./LanguageSelector";
+import { GuideModal } from "./GuideModal";
 import { PackageSelector } from "./PackageSelector";
 
-// Helper to detect platform
-const detectPlatform = (): string => {
-  const userAgent = window.navigator.userAgent.toLowerCase();
-  if (userAgent.includes("win")) return "windows";
-  if (userAgent.includes("mac")) return "darwin";
-  return "linux";
-};
-
 const isTauriRuntime = () => "__TAURI_INTERNALS__" in window;
+
+const formatBytes = (bytes: number) => {
+  if (bytes === 0) return "0 B";
+  const k = 1024;
+  const sizes = ["B", "KB", "MB", "GB"];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  return `${(bytes / Math.pow(k, i)).toFixed(1)} ${sizes[i]}`;
+};
 
 interface FirstRunWizardProps extends HTMLAttributes<HTMLDivElement> {
   onComplete: () => void;
@@ -42,7 +42,7 @@ interface ExistingComponent {
 export function FirstRunWizard({ onComplete, ...props }: FirstRunWizardProps) {
   const { t } = useTranslation();
   const [step, setStep] = useState<WizardStep>("welcome");
-  const [currentPlatform, setCurrentPlatform] = useState<string>("linux");
+  const [showGuide, setShowGuide] = useState(false);
   const [progress, setProgress] = useState<DownloadProgressType>({
     step: "downloading",
     percent: 0,
@@ -82,14 +82,18 @@ export function FirstRunWizard({ onComplete, ...props }: FirstRunWizardProps) {
     }
   }, [step]);
 
-  // Detect platform on mount
+  // Load package metadata on mount. The catalog is refreshed first so the
+  // default selection is the newest PHP (and database) release.
   useEffect(() => {
-    setCurrentPlatform(detectPlatform());
-    Promise.all([
-      invoke<PackagesConfig>("get_available_packages_cmd"),
-      invoke<PackageSelection>("get_selected_package_ids"),
-      invoke<Record<string, string>>("get_installed_versions"),
-    ])
+    invoke<PackagesConfig>("refresh_runtime_catalog")
+      .catch(() => invoke<PackagesConfig>("get_available_packages_cmd"))
+      .then((packages) =>
+        Promise.all([
+          packages,
+          invoke<PackageSelection>("get_selected_package_ids"),
+          invoke<Record<string, string>>("get_installed_versions"),
+        ])
+      )
       .then(([packages, selectedPackages, versions]) => {
         setAvailablePackages(packages);
         setPackageSelection(selectedPackages);
@@ -114,24 +118,6 @@ export function FirstRunWizard({ onComplete, ...props }: FirstRunWizardProps) {
     return () => {
       unlisten.then((fn) => fn());
     };
-  }, []);
-
-  // Keyboard shortcut handler for Ctrl+Shift+D / Cmd+Shift+D
-  useEffect(() => {
-    const handleKeyDown = async (e: KeyboardEvent) => {
-      if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === "d") {
-        e.preventDefault();
-        try {
-          const downloadDir = await invoke<string>("get_download_dir");
-          await invoke("open_folder", { path: downloadDir });
-        } catch (err) {
-          console.error("Failed to open download folder:", err);
-        }
-      }
-    };
-
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
   }, []);
 
   const startDownload = async () => {
@@ -169,7 +155,7 @@ export function FirstRunWizard({ onComplete, ...props }: FirstRunWizardProps) {
         : {
             name: "mysql",
             version: existing.mysql || "",
-            displayName: getDatabaseDisplayName(currentPlatform),
+            displayName: "MySQL",
             isExisting: !!existing.mysql,
           };
 
@@ -304,14 +290,6 @@ export function FirstRunWizard({ onComplete, ...props }: FirstRunWizardProps) {
     }
   };
 
-  const formatBytes = (bytes: number) => {
-    if (bytes === 0) return "0 B";
-    const k = 1024;
-    const sizes = ["B", "KB", "MB", "GB"];
-    const i = Math.floor(Math.log(bytes) / Math.log(k));
-    return `${(bytes / Math.pow(k, i)).toFixed(1)} ${sizes[i]}`;
-  };
-
   const getStepNumber = () => {
     switch (step) {
       case "welcome":
@@ -349,9 +327,7 @@ export function FirstRunWizard({ onComplete, ...props }: FirstRunWizardProps) {
     (pkg) => pkg.id === packageSelection.phpmyadmin
   );
   const adminerSelected = isAdminerSelection(packageSelection);
-  const activeDatabaseName = adminerSelected
-    ? "PostgreSQL"
-    : getDatabaseDisplayName(currentPlatform);
+  const activeDatabaseName = adminerSelected ? "PostgreSQL" : "MySQL";
   const activeDatabaseVersion = adminerSelected
     ? selectedPostgreSQL?.version || packageSelection.postgresql
     : selectedMysql?.version || packageSelection.mysql;
@@ -365,7 +341,7 @@ export function FirstRunWizard({ onComplete, ...props }: FirstRunWizardProps) {
     <div className="setup-shell" {...props}>
       <div className="setup-card">
         <div className="setup-language-switcher">
-          <LanguageSelector variant="toggle" />
+          <LanguageSelector />
         </div>
         <aside className="setup-rail">
           <div className="setup-brand">
@@ -408,10 +384,7 @@ export function FirstRunWizard({ onComplete, ...props }: FirstRunWizardProps) {
                     marginBottom: "0.75rem",
                   }}
                 >
-                  {t.wizardWelcomeBody.replace(
-                    "{database}",
-                    getDatabaseDisplayName(currentPlatform)
-                  )}
+                  {t.wizardWelcomeBody.replace("{database}", "MySQL")}
                 </p>
                 <div className="setup-summary">
                   <div className="setup-summary-item">
@@ -457,18 +430,12 @@ export function FirstRunWizard({ onComplete, ...props }: FirstRunWizardProps) {
                     {hasExistingOnWelcome ? t.wizardDownloadFresh : t.wizardGetStarted}
                   </button>
                   <button
-                    onClick={async () => {
-                      try {
-                        await invoke("open_manual");
-                      } catch (err) {
-                        console.error("Failed to open manual:", err);
-                      }
-                    }}
+                    type="button"
+                    onClick={() => setShowGuide(true)}
                     className="btn-secondary setup-btn-help"
                     title={t.wizardReadUserManual}
-                    style={{ fontSize: "0.875rem", padding: "0.5rem 0.75rem" }}
                   >
-                    ?
+                    <BookOpen size={15} /> {t.manual}
                   </button>
                 </div>
               </div>
@@ -478,10 +445,7 @@ export function FirstRunWizard({ onComplete, ...props }: FirstRunWizardProps) {
             {step === "packages" && (
               <div>
                 <p style={{ fontSize: "0.875rem", marginBottom: "0.75rem" }}>
-                  {t.wizardPackageIntro.replace(
-                    "{database}",
-                    getDatabaseDisplayName(currentPlatform)
-                  )}
+                  {t.wizardPackageIntro.replace("{database}", "MySQL")}
                 </p>
                 <PackageSelector
                   onSelectionChange={handlePackageChange}
@@ -889,6 +853,7 @@ export function FirstRunWizard({ onComplete, ...props }: FirstRunWizardProps) {
           </div>
         </section>
       </div>
+      {showGuide && <GuideModal onClose={() => setShowGuide(false)} initialSection="start" />}
     </div>
   );
 }

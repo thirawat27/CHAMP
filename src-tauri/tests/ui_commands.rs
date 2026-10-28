@@ -36,7 +36,7 @@ mod ui_command_tests {
     #[test]
     fn test_service_type_display_names() {
         assert_eq!(ServiceType::Caddy.display_name(), "Caddy");
-        assert_eq!(ServiceType::PhpFpm.display_name(), "PHP-FPM 8.5");
+        assert_eq!(ServiceType::PhpFpm.display_name(), "PHP-FPM");
         assert_eq!(ServiceType::MySQL.display_name(), "MySQL");
         assert_eq!(ServiceType::PostgreSQL.display_name(), "PostgreSQL");
     }

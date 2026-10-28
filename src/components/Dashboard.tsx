@@ -2,51 +2,63 @@ import { invoke } from "@tauri-apps/api/core";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import {
   AlertTriangle,
+  ArrowUpCircle,
+  BookOpen,
   CheckCircle2,
   Copy,
-  CircleHelp,
   Database,
   ExternalLink,
-  FilePlus2,
   Folder,
+  FileCode2,
+  FolderCog,
   Globe,
+  Globe2,
   HardDrive,
+  Keyboard,
   LoaderCircle,
-  MoreHorizontal,
+  Monitor,
+  Package,
   Play,
-  RefreshCw,
+  Route,
+  RotateCw,
+  ScrollText,
   Settings,
   ShieldCheck,
   Square,
+  Stethoscope,
   TerminalSquare,
+  X,
+  Zap,
 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import packageInfo from "../../package.json";
-import champLogo from "../assets/CHAMP.png";
+import champLogo from "../assets/champ-logo.png";
 import { useTranslation } from "../stores/languageStore";
+import { useUpdateStore } from "../stores/updateStore";
 import { AudioManager } from "../utils/audioManager";
+import { listenIfTauri } from "../utils/tauri";
 import {
+  AgentActivity,
   AppSettings,
   DEFAULT_PORTS,
+  InstalledPhpVersion,
+  SERVICE_DISPLAY_NAMES,
+  ServiceState,
   ServiceType,
   isAdminerSelected as isAdminerSelection,
 } from "../types/services";
 import { useServices } from "../hooks/useServices";
 import { useHttpsTunnel } from "../hooks/useHttpsTunnel";
 import { useToast } from "../hooks/useToast";
-import {
-  AppPaths,
-  SERVICE_COMMAND_COPY,
-  SOURCE_REPO_URL,
-  ServiceCommand,
-} from "./dashboard/types";
+import { AppPaths, SERVICE_COMMAND_COPY, SOURCE_REPO_URL, ServiceCommand } from "./dashboard/types";
 import { GitHubIcon } from "./dashboard/GitHubIcon";
+import { GuideModal } from "./GuideModal";
 import { HelpModal } from "./HelpModal";
 import { LanguageSelector } from "./LanguageSelector";
+import { LogDoctorModal } from "./LogDoctorModal";
 import { ServiceCard } from "./ServiceCard";
 import { SettingsPanel } from "./SettingsPanel";
 import { StatusBar } from "./StatusBar";
-import { TemplateSelector, ProjectScaffoldResult } from "./TemplateSelector";
 
 const DASHBOARD_SERVICE_TYPES = [
   ServiceType.Caddy,
@@ -55,17 +67,42 @@ const DASHBOARD_SERVICE_TYPES = [
   ServiceType.PostgreSQL,
 ] as const;
 
+const isMac = typeof navigator !== "undefined" && /mac/i.test(navigator.userAgent);
+const MOD_KEY = isMac ? "⌘" : "Ctrl";
+
+function PathIcon({ serviceType }: { serviceType: ServiceType }) {
+  if (serviceType === ServiceType.Caddy) return <Globe2 size={14} />;
+  if (serviceType === ServiceType.PhpFpm) return <FileCode2 size={14} />;
+  return <Database size={14} />;
+}
+
+interface RailAction {
+  id: string;
+  icon: ReactNode;
+  label: string;
+  shortcut?: string;
+  onSelect: () => void;
+}
+
 export function Dashboard() {
   const { t } = useTranslation();
   const [showSettings, setShowSettings] = useState(false);
   const [showHelp, setShowHelp] = useState(false);
+  const [showGuide, setShowGuide] = useState(false);
   const [appPaths, setAppPaths] = useState<AppPaths | null>(null);
   const [settings, setSettings] = useState<AppSettings | null>(null);
   const [installedVersions, setInstalledVersions] = useState<Record<string, string>>({});
-  const [showProjectCreator, setShowProjectCreator] = useState(false);
-  const [showQuickActionsMenu, setShowQuickActionsMenu] = useState(false);
+  const [doctorService, setDoctorService] = useState<ServiceType | null>(null);
+  const [phpUpdate, setPhpUpdate] = useState<InstalledPhpVersion | null>(null);
+  const [phpUpdating, setPhpUpdating] = useState(false);
 
   const { notice, notify, dismiss } = useToast();
+  const updatePhase = useUpdateStore((state) => state.phase);
+  const availableUpdate = useUpdateStore((state) => state.update);
+  const updateProgress = useUpdateStore((state) => state.progress);
+  const installUpdate = useUpdateStore((state) => state.install);
+  const dismissUpdate = useUpdateStore((state) => state.dismiss);
+  const autoCheckUpdates = useUpdateStore((state) => state.autoCheck);
 
   const refreshMetadata = useCallback(async () => {
     try {
@@ -115,6 +152,7 @@ export function Dashboard() {
     totalCount,
     allRunning,
     isCaddyRunning,
+    stackServiceTypes,
     packageSelection,
     refreshStatuses,
     runStackCommand,
@@ -144,8 +182,67 @@ export function Dashboard() {
     refreshMetadata();
   }, [refreshMetadata]);
 
-  const caddyPort =
-    serviceMap[ServiceType.Caddy]?.port || DEFAULT_PORTS[ServiceType.Caddy];
+  // Offer the newest patch release of the active PHP (checked once per launch).
+  useEffect(() => {
+    invoke("refresh_php_catalog")
+      .catch(() => undefined)
+      .then(() => invoke<InstalledPhpVersion[]>("get_installed_php_versions"))
+      .then((versions) =>
+        setPhpUpdate(versions.find((php) => php.active && php.update_available) ?? null)
+      )
+      .catch((error) => console.error("Failed to check PHP updates:", error));
+  }, []);
+
+  const updatePhp = async () => {
+    if (!phpUpdate) return;
+    setPhpUpdating(true);
+    notify({ tone: "info", title: t.phpUpdating, message: phpUpdate.display_name });
+    try {
+      await invoke("download_php_version", { phpId: phpUpdate.id });
+      notify({
+        tone: "success",
+        title: t.phpUpdated.replace("{version}", phpUpdate.latest_version),
+        message: phpUpdate.display_name,
+      });
+      setPhpUpdate(null);
+      refreshMetadata();
+      refreshStatuses();
+    } catch (error) {
+      notify({ tone: "error", title: t.failedToInstallPhpVersion, message: String(error) });
+    } finally {
+      setPhpUpdating(false);
+    }
+  };
+
+  // Daily background update check (silent when offline).
+  useEffect(() => {
+    if (settings?.auto_check_updates === false) return undefined;
+    const timer = window.setTimeout(() => {
+      autoCheckUpdates();
+    }, 4000);
+    return () => window.clearTimeout(timer);
+  }, [autoCheckUpdates, settings?.auto_check_updates]);
+
+  // Tell the user whenever an AI agent changes a service through the connector.
+  useEffect(() => {
+    const unlisten = listenIfTauri<AgentActivity>("agent-activity", (event) => {
+      const activity = event.payload;
+      const target = activity.service ? SERVICE_DISPLAY_NAMES[activity.service] : t.stack;
+      notify({
+        tone: activity.ok ? "success" : "error",
+        title: t.agentActivityTitle,
+        message: activity.ok
+          ? t.agentActivityDone.replace("{action}", activity.tool).replace("{target}", target)
+          : (activity.error ?? activity.tool),
+      });
+      refreshStatuses();
+    });
+    return () => {
+      unlisten.then((dispose) => dispose());
+    };
+  }, [notify, refreshStatuses, t]);
+
+  const caddyPort = serviceMap[ServiceType.Caddy]?.port || DEFAULT_PORTS[ServiceType.Caddy];
   const webServerUrl = `http://localhost:${caddyPort}`;
   const isAdminerSelected = isAdminerSelection(packageSelection);
   const databaseToolName = isAdminerSelected ? "Adminer" : "phpMyAdmin";
@@ -188,6 +285,11 @@ export function Dashboard() {
       // Esc to dismiss toast (works in any keyboard layout)
       if (e.code === "Escape" && notice) {
         dismiss();
+      }
+      // F1 to open the guide
+      if (e.key === "F1") {
+        e.preventDefault();
+        setShowGuide(true);
       }
       // ? to show help (Shift + Slash)
       if (e.key === "?" && !showSettings && !showHelp) {
@@ -260,56 +362,15 @@ export function Dashboard() {
     openTerminal,
   ]);
 
-  useEffect(() => {
-    if (!showProjectCreator) return undefined;
+  /** Open Log Doctor on the first failed service, or on the web server. */
+  const openLogDoctor = useCallback(() => {
+    const failed = DASHBOARD_SERVICE_TYPES.find(
+      (serviceType) => serviceMap[serviceType]?.state === ServiceState.Error
+    );
+    setDoctorService(failed ?? ServiceType.Caddy);
+  }, [serviceMap]);
 
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.code === "Escape") {
-        setShowProjectCreator(false);
-      }
-    };
-
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [showProjectCreator]);
-
-  useEffect(() => {
-    if (!showQuickActionsMenu) return undefined;
-
-    const closeMenu = () => setShowQuickActionsMenu(false);
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.code === "Escape") {
-        setShowQuickActionsMenu(false);
-      }
-    };
-
-    window.addEventListener("click", closeMenu);
-    window.addEventListener("keydown", handleKeyDown);
-    return () => {
-      window.removeEventListener("click", closeMenu);
-      window.removeEventListener("keydown", handleKeyDown);
-    };
-  }, [showQuickActionsMenu]);
-
-  const handleProjectCreated = async (result: ProjectScaffoldResult) => {
-    notify({
-      tone: "success",
-      title: t.projectCreated,
-      message: `${result.name} -> ${result.path}`,
-    });
-    setShowProjectCreator(false);
-    await refreshMetadata();
-  };
-
-  const handleProjectError = (error: string) => {
-    notify({
-      tone: "error",
-      title: t.projectCreateFailed,
-      message: error,
-    });
-  };
-
-  const versionBadges = useMemo(() => {
+  const versionRows = useMemo(() => {
     const entries: Array<[string, unknown]> = [
       ["Caddy", installedVersions.caddy],
       ["PHP", installedVersions.php],
@@ -323,79 +384,160 @@ export function Dashboard() {
     );
   }, [databaseToolName, installedVersions]);
 
+  const railActions: RailAction[] = [
+    {
+      id: "projects",
+      icon: <Folder size={16} />,
+      label: t.projects,
+      shortcut: `${MOD_KEY} O`,
+      onSelect: () => openFolder(appPaths?.projects_dir),
+    },
+    {
+      id: "terminal",
+      icon: <TerminalSquare size={16} />,
+      label: t.terminal,
+      shortcut: `${MOD_KEY} T`,
+      onSelect: () => openTerminal(appPaths?.projects_dir),
+    },
+    {
+      id: "doctor",
+      icon: <Stethoscope size={16} />,
+      label: t.logDoctor,
+      onSelect: openLogDoctor,
+    },
+    {
+      id: "logs",
+      icon: <ScrollText size={16} />,
+      label: t.logs,
+      shortcut: `${MOD_KEY} L`,
+      onSelect: () => openFolder(appPaths?.logs_dir),
+    },
+    {
+      id: "runtime",
+      icon: <HardDrive size={16} />,
+      label: t.runtime,
+      onSelect: () => openFolder(appPaths?.runtime_dir),
+    },
+    {
+      id: "guide",
+      icon: <BookOpen size={16} />,
+      label: t.manual,
+      shortcut: "F1",
+      onSelect: () => setShowGuide(true),
+    },
+    {
+      id: "config",
+      icon: <FolderCog size={16} />,
+      label: t.openConfigFolder,
+      onSelect: () => openFolder(appPaths?.config_dir),
+    },
+  ];
+
+  // The request path: browser -> Caddy -> PHP-FPM -> active database.
+  const pathNodes = stackServiceTypes.map((serviceType) => ({
+    serviceType,
+    state: serviceMap[serviceType]?.state ?? ServiceState.Stopped,
+    port: serviceMap[serviceType]?.port ?? DEFAULT_PORTS[serviceType],
+  }));
+  const stackState = allRunning ? "running" : runningCount > 0 ? "partial" : "stopped";
+  const stackStateLabel = allRunning ? t.running : runningCount > 0 ? t.active : t.stopped;
+  const standbyDatabase = isAdminerSelected ? ServiceType.MySQL : ServiceType.PostgreSQL;
+  const orderedServices = [...stackServiceTypes, standbyDatabase];
+  const updateInstalling = updatePhase === "installing";
+
   return (
     <div className="app-shell" data-testid="dashboard">
       <header className="titlebar">
-        <div className="brand-mark" aria-hidden="true">
+        <div className="brand">
           <img className="brand-logo" src={champLogo} alt="" />
+          <div className="brand-copy">
+            <h1>
+              CHAMP <span className="brand-version">v{packageInfo.version}</span>
+            </h1>
+            <p>{t.appDescription}</p>
+          </div>
         </div>
-        <div className="titlebar-copy">
-          <h1>
-            {t.appName} <span>v{packageInfo.version}</span>
-          </h1>
-          <p>{t.appDescription}</p>
-        </div>
+
         <div className="titlebar-actions">
+          <div className="stack-controls" role="group" aria-label={t.stack}>
+            <button
+              type="button"
+              className="btn-command primary"
+              onClick={() => {
+                AudioManager.playClick();
+                runStackCommand("start_all_services");
+              }}
+              disabled={Boolean(busy) || allRunning}
+              title={`${t.startAllServices} (Ctrl+S)`}
+            >
+              {busyStackCommand === "start_all_services" ? (
+                <LoaderCircle size={15} className="spin-icon" />
+              ) : (
+                <Play size={15} />
+              )}
+              {busyStackCommand === "start_all_services" ? t.starting : t.start}
+            </button>
+            <button
+              type="button"
+              className="btn-command"
+              onClick={() => {
+                AudioManager.playClick();
+                runStackCommand("restart_all_services");
+              }}
+              disabled={Boolean(busy)}
+              title={`${t.restartAllServices} (Ctrl+R)`}
+            >
+              {busyStackCommand === "restart_all_services" ? (
+                <LoaderCircle size={15} className="spin-icon" />
+              ) : (
+                <RotateCw size={15} />
+              )}
+              {busyStackCommand === "restart_all_services" ? t.restarting : t.restart}
+            </button>
+            <button
+              type="button"
+              className="btn-command danger"
+              onClick={() => {
+                AudioManager.playClick();
+                runStackCommand("stop_all_services");
+              }}
+              disabled={Boolean(busy) || runningCount === 0}
+              title={`${t.stopAllServices} (Ctrl+X)`}
+            >
+              {busyStackCommand === "stop_all_services" ? (
+                <LoaderCircle size={14} className="spin-icon" />
+              ) : (
+                <Square size={13} />
+              )}
+              {busyStackCommand === "stop_all_services" ? t.stopping : t.stop}
+            </button>
+          </div>
+
+          <span className="titlebar-divider" aria-hidden="true" />
+
           <button
-            className="btn-command primary"
-            onClick={() => {
-              AudioManager.playClick();
-              runStackCommand("start_all_services");
-            }}
-            disabled={Boolean(busy) || allRunning}
-            title={`${t.startAllServices} (Ctrl+S)`}
-            onMouseEnter={() => AudioManager.playHover()}
-          >
-            {busyStackCommand === "start_all_services" ? (
-              <LoaderCircle size={16} className="spin-icon" />
-            ) : (
-              <Play size={16} />
-            )}
-            {busyStackCommand === "start_all_services" ? t.starting : t.start}
-          </button>
-          <button
-            className="btn-command"
-            onClick={() => {
-              AudioManager.playClick();
-              runStackCommand("restart_all_services");
-            }}
-            disabled={Boolean(busy)}
-            title={`${t.restartAllServices} (Ctrl+R)`}
-            onMouseEnter={() => AudioManager.playHover()}
-          >
-            {busyStackCommand === "restart_all_services" ? (
-              <LoaderCircle size={16} className="spin-icon" />
-            ) : (
-              <RefreshCw size={16} />
-            )}
-            {busyStackCommand === "restart_all_services" ? t.restarting : t.restart}
-          </button>
-          <button
-            className="btn-command danger"
-            onClick={() => {
-              AudioManager.playClick();
-              runStackCommand("stop_all_services");
-            }}
-            disabled={Boolean(busy) || runningCount === 0}
-            title={`${t.stopAllServices} (Ctrl+X)`}
-            onMouseEnter={() => AudioManager.playHover()}
-          >
-            {busyStackCommand === "stop_all_services" ? (
-              <LoaderCircle size={15} className="spin-icon" />
-            ) : (
-              <Square size={15} />
-            )}
-            {busyStackCommand === "stop_all_services" ? t.stopping : t.stop}
-          </button>
-          <button
-            className="icon-button github"
+            type="button"
+            className="icon-button"
             onClick={() => openUrl(SOURCE_REPO_URL)}
             title={t.sourceRepository}
             aria-label={t.sourceRepository}
           >
-            <GitHubIcon size={18} />
+            <GitHubIcon size={17} />
           </button>
           <button
+            type="button"
+            className="icon-button"
+            onClick={() => {
+              AudioManager.playClick();
+              setShowGuide(true);
+            }}
+            title={`${t.manual} (F1)`}
+            aria-label={t.manual}
+          >
+            <BookOpen size={17} />
+          </button>
+          <button
+            type="button"
             className="icon-button"
             onClick={() => {
               AudioManager.playClick();
@@ -403,11 +545,11 @@ export function Dashboard() {
             }}
             title={`${t.help} (?)`}
             aria-label={t.help}
-            onMouseEnter={() => AudioManager.playHover()}
           >
-            <CircleHelp size={18} />
+            <Keyboard size={17} />
           </button>
           <button
+            type="button"
             className="icon-button"
             onClick={() => {
               AudioManager.playClick();
@@ -415,13 +557,43 @@ export function Dashboard() {
             }}
             title={`${t.settings} (Ctrl+,)`}
             aria-label={t.settings}
-            onMouseEnter={() => AudioManager.playHover()}
           >
-            <Settings size={18} />
+            <Settings size={17} />
           </button>
-          <LanguageSelector variant="toggle" />
+          <LanguageSelector />
         </div>
       </header>
+
+      {(updatePhase === "available" || updateInstalling) && availableUpdate && (
+        <div className="update-banner" role="status">
+          <ArrowUpCircle size={17} />
+          <p>
+            <strong>{t.updateAvailableTitle.replace("{version}", availableUpdate.version)}</strong>
+            <span>{updateInstalling ? t.updateInstalling : t.updateRestartNote}</span>
+          </p>
+          {updateInstalling ? (
+            <span className="update-progress">
+              <LoaderCircle size={15} className="spin-icon" />
+              {updateProgress !== null ? `${updateProgress}%` : t.working}
+            </span>
+          ) : (
+            <>
+              <button type="button" className="btn-primary compact" onClick={installUpdate}>
+                {t.updateInstall}
+              </button>
+              <button
+                type="button"
+                className="icon-button ghost"
+                onClick={dismissUpdate}
+                aria-label={t.updateLater}
+                title={t.updateLater}
+              >
+                <X size={15} />
+              </button>
+            </>
+          )}
+        </div>
+      )}
 
       {notice && (
         <div
@@ -429,175 +601,138 @@ export function Dashboard() {
           role={notice.tone === "error" ? "alert" : "status"}
         >
           <span className="stack-notice-icon" aria-hidden="true">
-            {notice.tone === "info" && <LoaderCircle size={18} className="spin-icon" />}
-            {notice.tone === "success" && <CheckCircle2 size={18} />}
-            {notice.tone === "error" && <AlertTriangle size={18} />}
+            {notice.tone === "info" && <LoaderCircle size={17} className="spin-icon" />}
+            {notice.tone === "success" && <CheckCircle2 size={17} />}
+            {notice.tone === "error" && <AlertTriangle size={17} />}
           </span>
           <span>
             <strong>{notice.title}</strong>
             <small>{notice.message}</small>
           </span>
           <button
+            type="button"
             className="notice-close"
             onClick={() => {
               AudioManager.playClick();
               dismiss();
             }}
             aria-label={t.close}
-            onMouseEnter={() => AudioManager.playHover()}
           >
-            ×
+            <X size={15} />
           </button>
         </div>
       )}
 
       <main className="workspace">
-        <section className="overview-band">
-          <div>
-            <span
-              className={`stack-state ${allRunning ? "running" : runningCount > 0 ? "partial" : ""}`}
-            >
-              {allRunning ? t.running : runningCount > 0 ? t.active : t.stopped}
+        <section className={`request-path ${stackState}`} aria-label={t.requestPath}>
+          <div className="request-path-head">
+            <span className="eyebrow">
+              <Route size={13} /> {t.requestPath}
             </span>
-            <h2>
-              {runningCount}/{totalCount} {t.services}
-            </h2>
+            <span className={`stack-state ${stackState}`}>
+              {stackStateLabel} · {runningCount}/{totalCount} {t.services}
+            </span>
           </div>
-          <div className="quick-actions">
+
+          <ol className="path-chain">
+            <li className={`path-node origin ${isCaddyRunning ? "running" : "stopped"}`}>
+              <span className="node-led" aria-hidden="true" />
+              <span className="node-name">
+                <Monitor size={14} /> {t.browser}
+              </span>
+              <span className="node-port">localhost:{caddyPort}</span>
+            </li>
+            {pathNodes.map((node, index) => {
+              const previous =
+                index === 0 ? isCaddyRunning : pathNodes[index - 1].state === ServiceState.Running;
+              const linkLive = previous && node.state === ServiceState.Running;
+              return [
+                <li
+                  key={`${node.serviceType}-link`}
+                  className={`path-link ${linkLive ? "live" : ""}`}
+                  aria-hidden="true"
+                />,
+                <li key={node.serviceType} className={`path-node ${node.state}`}>
+                  <span className="node-led" aria-hidden="true" />
+                  <span className="node-name">
+                    <PathIcon serviceType={node.serviceType} />{" "}
+                    {SERVICE_DISPLAY_NAMES[node.serviceType]}
+                  </span>
+                  <span className="node-port">:{node.port}</span>
+                </li>,
+              ];
+            })}
+          </ol>
+
+          <div className="request-path-actions">
             <button
-              className="btn-quick-action action-site"
+              type="button"
+              className="btn-path"
               onClick={() => {
                 AudioManager.playClick();
                 openUrl(webServerUrl);
               }}
               disabled={!isCaddyRunning}
               title={`${t.openWebsite} (Ctrl+W)`}
-              onMouseEnter={() => AudioManager.playHover()}
             >
               <Globe size={16} /> {t.website}
             </button>
             <button
-              className="btn-quick-action action-database"
+              type="button"
+              className="btn-path"
               onClick={() => {
                 AudioManager.playClick();
                 openUrl(databaseToolUrl);
               }}
               disabled={!isCaddyRunning}
               title={`${t.openDatabaseTool} (Ctrl+D)`}
-              onMouseEnter={() => AudioManager.playHover()}
             >
               <Database size={16} /> {databaseToolName}
             </button>
-            <button
-              className="btn-quick-action action-projects"
-              onClick={() => {
-                AudioManager.playClick();
-                openFolder(appPaths?.projects_dir);
-              }}
-              title={`${t.openProjectsFolder} (Ctrl+O)`}
-              onMouseEnter={() => AudioManager.playHover()}
-            >
-              <Folder size={16} /> {t.projects}
-            </button>
-            <button
-              className="btn-quick-action action-runtime"
-              onClick={() => {
-                AudioManager.playClick();
-                openFolder(appPaths?.runtime_dir);
-              }}
-              title={t.openRuntimeFolder}
-              onMouseEnter={() => AudioManager.playHover()}
-            >
-              <HardDrive size={16} /> {t.runtime}
-            </button>
-            <div className="quick-actions-menu-wrap" onClick={(event) => event.stopPropagation()}>
-              <button
-                className="btn-quick-action action-more"
-                onClick={() => {
-                  AudioManager.playClick();
-                  setShowQuickActionsMenu((current) => !current);
-                }}
-                title={t.more || "More"}
-                aria-haspopup="menu"
-                aria-expanded={showQuickActionsMenu}
-                onMouseEnter={() => AudioManager.playHover()}
-              >
-                <MoreHorizontal size={16} /> {t.more || "More"}
-              </button>
-              {showQuickActionsMenu && (
-                <div className="quick-actions-menu" role="menu">
-                  <button
-                    className="quick-menu-action"
-                    role="menuitem"
-                    onClick={() => {
-                      AudioManager.playClick();
-                      setShowQuickActionsMenu(false);
-                      openTerminal(appPaths?.projects_dir);
-                    }}
-                  >
-                    <TerminalSquare size={16} /> {t.terminal}
-                  </button>
-                  <button
-                    className="quick-menu-action"
-                    role="menuitem"
-                    onClick={() => {
-                      AudioManager.playClick();
-                      setShowQuickActionsMenu(false);
-                      setShowProjectCreator(true);
-                    }}
-                  >
-                    <FilePlus2 size={16} /> {t.createProject}
-                  </button>
-                  <button
-                    className="quick-menu-action"
-                    role="menuitem"
-                    onClick={() => {
-                      AudioManager.playClick();
-                      setShowQuickActionsMenu(false);
-                      openFolder(appPaths?.logs_dir);
-                    }}
-                  >
-                    <TerminalSquare size={16} /> {t.logs}
-                  </button>
-                  <button
-                    className="quick-menu-action"
-                    role="menuitem"
-                    onClick={() => {
-                      AudioManager.playClick();
-                      setShowQuickActionsMenu(false);
-                      openFolder(appPaths?.config_dir);
-                    }}
-                  >
-                    <HardDrive size={16} /> {t.settings}
-                  </button>
-                  <button
-                    className="quick-menu-action"
-                    role="menuitem"
-                    onClick={() => {
-                      setShowQuickActionsMenu(false);
-                      openUrl(SOURCE_REPO_URL);
-                    }}
-                  >
-                    <GitHubIcon size={16} /> GitHub
-                  </button>
-                </div>
-              )}
-            </div>
           </div>
         </section>
 
-        <section
-          className={`https-tunnel-panel ${tunnelReady ? "ready" : tunnelStatus.running ? "running" : ""}`}
-          data-testid="https-tunnel-panel"
-        >
-          <div className="https-tunnel-copy">
-            <span className="https-tunnel-icon" aria-hidden="true">
-              <ShieldCheck size={18} />
-            </span>
-            <div className="https-tunnel-main">
-              <span className="https-tunnel-kicker">{t.httpsPreview}</span>
-              <h3>{t.publicHttpsDomain}</h3>
-              <p className={tunnelStatus.url ? "https-tunnel-url" : undefined}>
+        <div className="workspace-grid">
+          <section className="service-grid" aria-label={t.services}>
+            {orderedServices.map((serviceType) => {
+              const service = serviceMap[serviceType];
+              if (!service) return null;
+              const busyServiceCommand = busy?.endsWith(serviceType)
+                ? (busy.split(":")[0] as ServiceCommand)
+                : null;
+              return (
+                <ServiceCard
+                  key={serviceType}
+                  serviceType={serviceType}
+                  state={service.state}
+                  port={service.port}
+                  error={service.error_message}
+                  standby={serviceType === standbyDatabase}
+                  busy={Boolean(busyServiceCommand)}
+                  busyLabel={
+                    busyServiceCommand
+                      ? t[SERVICE_COMMAND_COPY[busyServiceCommand].buttonLabelKey]
+                      : undefined
+                  }
+                  onStart={() => runServiceCommand("start_service", serviceType)}
+                  onStop={() => runServiceCommand("stop_service", serviceType)}
+                  onRestart={() => runServiceCommand("restart_service", serviceType)}
+                  onDiagnose={() => setDoctorService(serviceType)}
+                />
+              );
+            })}
+          </section>
+
+          <aside className="side-rail">
+            <section
+              className={`rail-card https-tunnel-panel ${tunnelReady ? "ready" : tunnelStatus.running ? "running" : ""}`}
+              data-testid="https-tunnel-panel"
+            >
+              <header className="rail-card-head">
+                <ShieldCheck size={16} />
+                <h2>{t.httpsPreview}</h2>
+              </header>
+              <p className={tunnelReady ? "https-tunnel-url" : "rail-muted"}>
                 {tunnelReady
                   ? tunnelStatus.url
                   : tunnelHasPendingUrl
@@ -609,94 +744,112 @@ export function Dashboard() {
               {tunnelHasPendingUrl && (
                 <small className="https-tunnel-pending-url">{tunnelStatus.url}</small>
               )}
-              {tunnelStatus.error && <small>{tunnelStatus.error}</small>}
-            </div>
-          </div>
-          <div className="https-tunnel-actions">
-            {tunnelReady && (
-              <>
+              {tunnelStatus.error && <small className="rail-error">{tunnelStatus.error}</small>}
+              <div className="https-tunnel-actions">
+                {tunnelReady && (
+                  <>
+                    <button
+                      type="button"
+                      className="btn-secondary compact"
+                      onClick={() => openUrl(tunnelStatus.url ?? "")}
+                      title={t.httpsTunnelOpen}
+                    >
+                      <ExternalLink size={14} /> {t.open}
+                    </button>
+                    <button
+                      type="button"
+                      className="btn-secondary compact"
+                      onClick={copyHttpsTunnelUrl}
+                      title={t.httpsTunnelCopy}
+                    >
+                      <Copy size={14} /> {t.httpsTunnelCopy}
+                    </button>
+                  </>
+                )}
                 <button
-                  className="btn-secondary"
                   type="button"
-                  onClick={() => openUrl(tunnelStatus.url ?? "")}
-                  title={t.httpsTunnelOpen}
-                  onMouseEnter={() => AudioManager.playHover()}
+                  className={`compact ${tunnelStatus.running ? "btn-secondary danger" : "btn-primary"}`}
+                  onClick={tunnelStatus.running ? stopHttpsTunnel : startHttpsTunnel}
+                  disabled={Boolean(tunnelBusy)}
                 >
-                  <ExternalLink size={15} /> {t.open}
+                  {tunnelBusy ? (
+                    <LoaderCircle size={14} className="spin-icon" />
+                  ) : tunnelStatus.running ? (
+                    <Square size={13} />
+                  ) : (
+                    <ShieldCheck size={14} />
+                  )}
+                  {tunnelBusy === "start"
+                    ? t.starting
+                    : tunnelBusy === "stop"
+                      ? t.stopping
+                      : tunnelStatus.running
+                        ? t.httpsTunnelStop
+                        : t.httpsTunnelStart}
                 </button>
-                <button
-                  className="btn-secondary"
-                  type="button"
-                  onClick={copyHttpsTunnelUrl}
-                  title={t.httpsTunnelCopy}
-                  onMouseEnter={() => AudioManager.playHover()}
-                >
-                  <Copy size={15} /> {t.httpsTunnelCopy}
-                </button>
-              </>
+              </div>
+            </section>
+
+            <nav className="rail-card" aria-label={t.shortcuts}>
+              <header className="rail-card-head">
+                <Zap size={16} />
+                <h2>{t.shortcuts}</h2>
+              </header>
+              <ul className="rail-actions">
+                {railActions.map((action) => (
+                  <li key={action.id}>
+                    <button
+                      type="button"
+                      className="rail-action"
+                      onClick={() => {
+                        AudioManager.playClick();
+                        action.onSelect();
+                      }}
+                    >
+                      {action.icon}
+                      <span>{action.label}</span>
+                      {action.shortcut && <kbd>{action.shortcut}</kbd>}
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </nav>
+
+            {versionRows.length > 0 && (
+              <section className="rail-card" aria-label={t.installedVersionsLabel}>
+                <header className="rail-card-head">
+                  <Package size={16} />
+                  <h2>{t.installedVersionsLabel}</h2>
+                </header>
+                {phpUpdate && (
+                  <div className="version-update">
+                    <ArrowUpCircle size={15} />
+                    <span>
+                      PHP {phpUpdate.version} → <strong>{phpUpdate.latest_version}</strong>
+                    </span>
+                    <button
+                      type="button"
+                      className="btn-primary compact"
+                      onClick={updatePhp}
+                      disabled={phpUpdating}
+                    >
+                      {phpUpdating ? <LoaderCircle size={14} className="spin-icon" /> : null}
+                      {phpUpdating ? t.working : t.phpUpdateNow}
+                    </button>
+                  </div>
+                )}
+                <dl className="version-list">
+                  {versionRows.map(([name, version]) => (
+                    <div key={name}>
+                      <dt>{name}</dt>
+                      <dd>{version}</dd>
+                    </div>
+                  ))}
+                </dl>
+              </section>
             )}
-            <button
-              className={tunnelStatus.running ? "btn-secondary danger" : "btn-primary"}
-              type="button"
-              onClick={tunnelStatus.running ? stopHttpsTunnel : startHttpsTunnel}
-              disabled={Boolean(tunnelBusy)}
-              onMouseEnter={() => AudioManager.playHover()}
-            >
-              {tunnelBusy ? (
-                <LoaderCircle size={15} className="spin-icon" />
-              ) : tunnelStatus.running ? (
-                <Square size={15} />
-              ) : (
-                <ShieldCheck size={15} />
-              )}
-              {tunnelBusy === "start"
-                ? t.starting
-                : tunnelBusy === "stop"
-                  ? t.stopping
-                  : tunnelStatus.running
-                    ? t.httpsTunnelStop
-                    : t.httpsTunnelStart}
-            </button>
-          </div>
-        </section>
-
-        {versionBadges.length > 0 && (
-          <section className="version-strip" aria-label={t.installedVersionsLabel}>
-            {versionBadges.map(([name, version]) => (
-              <span key={name}>
-                {name} {version}
-              </span>
-            ))}
-          </section>
-        )}
-
-        <section className="service-grid-responsive">
-          {DASHBOARD_SERVICE_TYPES.map((serviceType) => {
-            const service = serviceMap[serviceType];
-            if (!service) return null;
-            const busyServiceCommand = busy?.endsWith(serviceType)
-              ? (busy.split(":")[0] as ServiceCommand)
-              : null;
-            return (
-              <ServiceCard
-                key={serviceType}
-                serviceType={serviceType}
-                state={service.state}
-                port={service.port}
-                error={service.error_message}
-                busy={Boolean(busyServiceCommand)}
-                busyLabel={
-                  busyServiceCommand
-                    ? t[SERVICE_COMMAND_COPY[busyServiceCommand].buttonLabelKey]
-                    : undefined
-                }
-                onStart={() => runServiceCommand("start_service", serviceType)}
-                onStop={() => runServiceCommand("stop_service", serviceType)}
-                onRestart={() => runServiceCommand("restart_service", serviceType)}
-              />
-            );
-          })}
-        </section>
+          </aside>
+        </div>
       </main>
 
       <StatusBar
@@ -716,15 +869,32 @@ export function Dashboard() {
         />
       )}
 
-      {showHelp && <HelpModal onClose={() => setShowHelp(false)} />}
+      {showHelp && (
+        <HelpModal
+          onClose={() => setShowHelp(false)}
+          onOpenGuide={() => {
+            setShowHelp(false);
+            setShowGuide(true);
+          }}
+        />
+      )}
 
-      {showProjectCreator && (
-        <TemplateSelector
+      {showGuide && <GuideModal onClose={() => setShowGuide(false)} />}
+
+      {doctorService && (
+        <LogDoctorModal
+          initialService={doctorService}
+          services={serviceMap}
           appPaths={appPaths}
-          installedVersions={installedVersions}
-          onClose={() => setShowProjectCreator(false)}
-          onProjectCreated={handleProjectCreated}
-          onError={handleProjectError}
+          onClose={() => setDoctorService(null)}
+          onOpenSettings={() => {
+            setDoctorService(null);
+            setShowSettings(true);
+          }}
+          onStartPhp={() => {
+            setDoctorService(null);
+            runServiceCommand("start_service", ServiceType.PhpFpm);
+          }}
         />
       )}
     </div>

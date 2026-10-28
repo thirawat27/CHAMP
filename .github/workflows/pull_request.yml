@@ -76,7 +76,7 @@ jobs:
         run: cargo fmt --check
 
       - name: Run Clippy
-        run: cargo clippy --all-targets
+        run: cargo clippy --all-targets -- -D warnings
 
-      - name: Test Rust library
-        run: cargo test --lib
+      - name: Test Rust
+        run: cargo test

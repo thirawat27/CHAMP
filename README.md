@@ -1,14 +1,14 @@
 <div align="center">
 
-<img src="src/assets/CHAMP.png" alt="CHAMP Logo" width="250"/>
+<img src="src/assets/CHAMP.png" alt="CHAMP Logo" width="220"/>
 
 ## **CHAMP By Thirawat27**
 
-*A modern, cross-platform local web development stack*
+*A light, self-updating local web development stack for Windows, macOS, and Linux*
 
-**C**addy + **H**TTP(S) + **A**dminer / phpmy**A**dmin + **M**ySQL + **P**HP
+**C**addy + **H**TTP(S) + **A**dminer / phpMy**A**dmin + **M**ySQL / PostgreSQL + **P**HP
 
-[Features](#-features) • [Installation](#-installation) • [Usage](#-usage) • [Keyboard Shortcuts](KEYBOARD_SHORTCUTS.md) • [Developer Experience](DX_FEATURES.md) • [Development](#-development) • [Configuration](#-configuration)
+[Features](#-features) • [Installation](#-installation) • [Usage](#-usage) • [AI agents](#-ai-agent-connector-mcp) • [Development](#-development) • [Releasing](#-releasing)
 
 </div>
 
@@ -16,372 +16,188 @@
 
 ## 📖 Overview
 
-CHAMP is a self-contained desktop application that provides a complete local web development environment. Unlike traditional solutions like XAMPP, CHAMP is designed to run **without administrator privileges** by keeping all runtime binaries, configurations, logs, and data in the user's writable app data folder.
+CHAMP is a desktop app that runs a complete PHP development stack **without administrator rights**. Binaries, configuration, logs, and databases live in your user data folder; nothing system-wide is changed.
 
-> **Note:** This project is a fork of [CAMPP](https://github.com/KarnYong/campp) by KarnYong, with enhancements and modifications by Thirawat27.
+> This project is a fork of [CAMPP](https://github.com/KarnYong/campp) by KarnYong, rebuilt and extended by Thirawat27.
 
-**Key Highlights:**
-- 🚀 **No Admin Required** - Runs entirely in user space with non-default ports
-- 📦 **Self-Contained** - All binaries bundled, no external dependencies
-- 🎯 **Cross-Platform** - Windows, macOS, and Linux support
-- 🔄 **Version Management** - Switch between multiple PHP, MySQL, and PostgreSQL versions, plus optional Node.js, Python, Go, and Ruby runtimes
-- 🎨 **Modern UI** - Built with React and Tauri for a native experience
-- ⚡ **Fast & Lightweight** - Rust-powered backend for optimal performance
-
----
-
-## 🛠️ Tech Stack
-
-### Current Versions
-
-| Component   | Version | Description                    |
-| ----------- | ------- | ------------------------------ |
-| **Caddy**      | 2.11.4  | Modern web server with HTTPS   |
-| **PHP**        | 8.5.7   | Latest PHP runtime (switchable)|
-| **MySQL**      | 9.7.1   | LTS database server            |
-| **PostgreSQL** | 18.4    | Stable database server         |
-| **phpMyAdmin** | 5.2.3   | Database management interface |
-| **Adminer**    | 5.4.2   | Lightweight database interface |
-
-### Alternative Options
-
-- **PHP**: 7.4.33 (EOL), 8.5.7 (Latest)
-- **Database UI**: phpMyAdmin 5.2.3 or Adminer 5.4.2
-- **Databases**: MySQL 9.7.1 or PostgreSQL 18.4
+- 🚀 **No admin required** — everything runs in user space on unprivileged ports
+- 🆕 **Always current** — PHP comes straight from php.net / windows.php.net, so installs and updates use the newest patch release (SHA-256 verified on Windows)
+- 🩺 **Log Doctor** — explains why a service failed and how to fix it, with an optional 8M-parameter offline AI model
+- 🤖 **AI agent connector** — a built-in MCP server for Claude Code, Cursor, and other coding agents
+- 🔄 **Self-updating** — signed updates from GitHub Releases
+- 🪶 **Light** — Rust backend, ~640 KB UI bundle, no Node.js/Python/Go runtimes to babysit
 
 ---
 
 ## ✨ Features
 
-### Core Functionality
-- ✅ **One-Click Service Management** - Start/stop/restart all services with a single click
-- ✅ **System Tray Integration** - Minimize to tray and control services from the system tray
-- ✅ **Auto-Start Services** - Optionally start services automatically on app launch
-- ✅ **Real-Time Status Monitoring** - Live service status updates and system metrics
-- ✅ **Port Configuration** - Customize ports to avoid conflicts
-- ✅ **Project Management** - Organize and access your web projects easily
-
-### Advanced Features
-- 🔄 **Multi-Version Support** - Install and switch between different PHP, MySQL, and PostgreSQL versions
-- 📦 **Package Selection** - Choose which components and optional runtimes to install during first run
-- 🔒 **Secure by Default** - Isolated user environment, no system-wide changes
-- 📊 **System Metrics** - Monitor CPU, memory, and disk usage
-- 🗂️ **Custom Configuration** - Advanced users can customize runtime configs
-- 🐛 **Debug Mode** - Developer menu with runtime folder access and reset options
-- ⌨️ **Keyboard Shortcuts** - Control the app without touching the mouse
+| Area | What you get |
+| --- | --- |
+| Stack | Caddy, PHP-FPM, MySQL or PostgreSQL, phpMyAdmin or Adminer; start / stop / restart everything or one service |
+| Dashboard | Live request path (browser → Caddy → PHP-FPM → database), status lights, port readouts, CPU / RAM / network |
+| PHP | Install, switch, and update PHP branches; the dashboard offers patch updates for the active PHP |
+| Projects | Every folder in `projects/` is served at `http://localhost:8080/<folder>/`; common `.htaccess` rules are translated to Caddy |
+| HTTPS Preview | Temporary public `https://*.trycloudflare.com` link via Cloudflare Quick Tunnel |
+| Log Doctor | 28 known failure patterns (ports, VC++ runtime, corrupted data, locks, permissions, …) with fixes and one-click actions |
+| AI agents | Local MCP server (127.0.0.1 + bearer token) with status, environment, logs, diagnosis, and service-control tools |
+| Updates | Daily update check, one-click install and restart, minisign-verified packages |
+| Guide | Detailed in-app guide in Thai and English (F1) |
+| Tray | Closing the window keeps the stack running; quit from the tray |
 
 ---
 
-## 🌐 Default URLs
+## 🌐 Default addresses
 
-| Service          | URL                                  |
-| ---------------- | ------------------------------------ |
-| **Web Server**   | http://localhost:8080                |
-| **Database Tool** | http://localhost:8080/phpmyadmin or http://localhost:8080/adminer |
-| **MySQL**        | 127.0.0.1:3306                       |
-| **PostgreSQL**   | 127.0.0.1:5432                       |
-| **PHP-FPM**      | 127.0.0.1:9000 (internal)            |
+| Service | Address |
+| --- | --- |
+| Website | http://localhost:8080 |
+| Database tool | http://localhost:8080/phpmyadmin or http://localhost:8080/adminer |
+| MySQL | 127.0.0.1:3306 — user `root`, empty password |
+| PostgreSQL | 127.0.0.1:5432 — user `postgres`, local trust |
+| PHP-FPM | 127.0.0.1:9000 (internal) |
+| AI agent connector | http://127.0.0.1:47823/mcp (off by default) |
 
-> **Note:** All ports can be customized in the Settings panel to avoid conflicts with other services.
+All ports can be changed in Settings. If a port is busy, CHAMP picks the next free one and tells you.
 
 ---
 
 ## 📥 Installation
 
-### Download Pre-Built Binaries
+Download the latest release from [Releases](https://github.com/thirawat27/CHAMP/releases):
 
-Download the latest release for your platform from the [Releases](https://github.com/thirawat27/CHAMP/releases) page:
+- **Windows**: `.msi` or `-setup.exe`
+- **macOS**: `.dmg` (Apple Silicon or Intel)
+- **Linux**: `.AppImage` (self-updating), `.deb`, or `.rpm`
 
-- **Windows**: `CHAMP_x.x.x_x64_en-US.msi` or `.exe`
-- **macOS**: `CHAMP_x.x.x_aarch64.dmg` (Apple Silicon) or `CHAMP_x.x.x_x64.dmg` (Intel)
-- **Linux**: `CHAMP_x.x.x_amd64.AppImage` or `.deb`
-
-### First Run Setup
-
-1. Launch CHAMP
-2. The **First-Run Wizard** will guide you through:
-   - System dependency checks
-   - Package selection (choose which components to install)
-   - Runtime binary downloads
-   - Initial configuration
-3. Once complete, you're ready to start developing!
+On first launch the setup wizard checks system libraries, lets you pick PHP / database versions (defaults are the newest), and downloads everything in parallel.
 
 ---
 
 ## 🚀 Usage
 
-### Starting Services
+1. Press **Start** (`Ctrl/Cmd + S`).
+2. Put a project in the projects folder (`Ctrl/Cmd + O`) and open `http://localhost:8080/<folder>/`.
+3. Open the database tool with `Ctrl/Cmd + D`.
+4. When a card turns red, press **Diagnose** for Log Doctor.
+5. Press **F1** for the full guide.
 
-1. Open CHAMP
-2. Click **Start All** to launch all services
-3. Access your projects at http://localhost:8080
-4. Manage your database at http://localhost:8080/phpmyadmin or http://localhost:8080/adminer, depending on the selected tool
+### Keyboard shortcuts
 
-### Managing Services
-
-- **Individual Control**: Start/stop/restart each service independently
-- **Bulk Operations**: Use "Start All" or "Stop All" for convenience
-- **Auto-Start**: Enable in Settings to start services on app launch
-
-### Keyboard Shortcuts
-
-CHAMP provides comprehensive keyboard shortcuts for efficient workflow:
-
-#### Service Control
 | Shortcut | Action |
-| -------- | ------ |
-| `Ctrl / Cmd + S` | Start all services |
-| `Ctrl / Cmd + R` | Restart all services |
-| `Ctrl / Cmd + X` | Stop all services |
+| --- | --- |
+| `Ctrl/Cmd + S` / `R` / `X` | Start / restart / stop the stack |
+| `Ctrl/Cmd + W` | Open the website |
+| `Ctrl/Cmd + D` | Open phpMyAdmin / Adminer |
+| `Ctrl/Cmd + O` / `L` | Open the projects / logs folder |
+| `Ctrl/Cmd + T` | Terminal with PHP, MySQL, and PostgreSQL on `PATH` |
+| `Ctrl/Cmd + ,` | Settings |
+| `F1` | Guide |
+| `?` | Shortcut help |
+| `Esc` | Close a dialog or notification |
 
-#### Quick Access
-| Shortcut | Action |
-| -------- | ------ |
-| `Ctrl / Cmd + W` | Open website (localhost) |
-| `Ctrl / Cmd + D` | Open database tool (phpMyAdmin/Adminer) |
-| `Ctrl / Cmd + O` | Open projects folder |
-| `Ctrl / Cmd + L` | Open logs folder |
-| `Ctrl / Cmd + T` | Open a terminal with CHAMP runtimes on PATH |
+Shortcuts use physical key positions, so they work with Thai and other keyboard layouts.
 
-#### UI Navigation
-| Shortcut | Action |
-| -------- | ------ |
-| `Ctrl / Cmd + ,` | Toggle Settings panel |
-| `?` | Show keyboard shortcuts help |
-| `Esc` | Dismiss notification or close Settings |
+---
 
-> **Language-Independent**: All shortcuts use physical key positions (`e.code`) so they work regardless of keyboard language (Thai, English, etc.).
+## 🤖 AI agent connector (MCP)
 
-📖 **[View Complete Keyboard Shortcuts Documentation](KEYBOARD_SHORTCUTS.md)**
+Turn it on in **Settings → AI agent connector**, then copy the ready-made command:
 
-### System Tray
+```bash
+claude mcp add --transport http champ http://127.0.0.1:47823/mcp --header "Authorization: Bearer <token>"
+```
 
-- **Minimize to Tray**: Close the window to minimize to system tray
-- **Quick Access**: Right-click the tray icon for quick actions
-- **Background Operation**: Services continue running when minimized
+For Cursor and other MCP clients, copy the JSON snippet from the same panel.
 
-### Switching PHP Versions
+| Tool | Purpose |
+| --- | --- |
+| `get_status` | State, port, and last error of every service, plus URLs |
+| `get_environment` | Database credentials, PHP version, document root, folders, versions |
+| `list_projects` | Project folders and their URLs |
+| `read_logs` | Recent log lines for a service |
+| `diagnose_service` | Log Doctor diagnosis |
+| `start_*` / `stop_*` / `restart_*` | Service control (hidden in read-only mode) |
 
-1. Open **Settings** panel
-2. Navigate to **PHP Version** section
-3. Select desired version from dropdown
-4. Click **Switch Version** (downloads if not installed)
-5. Restart PHP-FPM service
+Security: localhost-only, 256-bit bearer token compared in constant time, browser requests (any `Origin` header) refused, optional read-only mode, and a dashboard notification for every agent action.
+
+---
+
+## ⚙️ Data and configuration
+
+```text
+%LOCALAPPDATA%\CHAMP\          (Windows; the system user-data folder elsewhere)
+├── config/        settings.json, agent token, generated configs
+├── logs/          service logs
+├── models/        Log Doctor AI model (optional)
+├── mysql/data/    MySQL data
+├── postgresql/data/
+├── projects/      your websites
+└── runtime/       Caddy, PHP, databases, phpMyAdmin / Adminer
+```
+
+- **Portable mode**: place a file named `champ-portable` next to the app, or set `CHAMP_DATA_DIR`.
+- **Runtime catalog**: `src-tauri/runtime-config.json` is bundled and refreshed from upstream release feeds; see [CUSTOM_VERSIONS.md](src-tauri/CUSTOM_VERSIONS.md) to pin your own versions.
 
 ---
 
 ## 💻 Development
 
-### Prerequisites
-
-- **Node.js** 18+ and **pnpm** 11+
-- **Rust** 1.70+ (for Tauri backend)
-- **Platform-specific requirements**:
-  - Windows: WebView2 Runtime
-  - macOS: Xcode Command Line Tools
-  - Linux: webkit2gtk, libssl-dev
-
-### Setup
+Prerequisites: Node.js 22+, pnpm 11+, Rust (stable), and the [Tauri prerequisites](https://tauri.app/start/prerequisites/) for your OS.
 
 ```bash
-# Clone the repository
-git clone https://github.com/thirawat27/CHAMP.git
-cd CHAMP
-
-# Install dependencies
 pnpm install
-
-# Run in development mode
 pnpm tauri dev
 ```
 
-### Available Scripts
+| Command | Purpose |
+| --- | --- |
+| `pnpm dev` | Vite dev server; in a plain browser the Tauri backend is mocked for UI work |
+| `pnpm build` | Type-check (TypeScript 7) and build the UI |
+| `pnpm lint` | oxlint |
+| `pnpm test:run` | Vitest |
+| `cd src-tauri && cargo test` | Rust tests |
+| `cd src-tauri && cargo clippy --all-targets -- -D warnings` | Rust lint |
 
-#### Frontend (React + Vite)
-
-```bash
-pnpm dev          # Start Vite dev server (http://localhost:1420)
-pnpm build        # Build frontend for production
-pnpm preview      # Preview production build
-pnpm test         # Run tests with Vitest
-pnpm test:ui      # Run tests with UI
-pnpm lint         # Lint TypeScript files
-pnpm lint:fix     # Fix linting issues
-pnpm format       # Format code with Prettier
+```text
+src/                      React 19 UI (plain CSS design system in App.css)
+├── components/           Dashboard, ServiceCard, SettingsPanel, LogDoctorModal, GuideModal, …
+├── manual/content.ts     in-app guide (Thai + English)
+├── stores/               language and update state (zustand)
+└── hooks/                services, tunnel, Log Doctor model, agent connector
+src-tauri/src/
+├── commands.rs           IPC commands
+├── process/manager/      Caddy, PHP-FPM, MySQL, PostgreSQL lifecycle
+├── runtime/              catalog, PHP feeds, downloader, binary locator
+├── doctor/               Log Doctor knowledge base + Model2Vec runtime
+├── agent/                MCP server for AI agents
+└── tunnel.rs             HTTPS Preview (cloudflared)
 ```
-
-#### Backend (Rust + Tauri)
-
-```bash
-cd src-tauri
-
-cargo build       # Build Rust backend
-cargo test        # Run Rust tests
-cargo clippy      # Lint Rust code
-cargo fmt         # Format Rust code
-```
-
-#### Full Application
-
-```bash
-pnpm tauri dev    # Run full app in dev mode
-pnpm tauri build  # Build production app with installers
-```
-
-### Project Structure
-
-```
-CHAMP/
-├── src/                      # React frontend
-│   ├── components/           # UI components
-│   │   ├── Dashboard.tsx     # Main dashboard
-│   │   ├── ServiceCard.tsx   # Service control cards
-│   │   ├── FirstRunWizard.tsx # Setup wizard
-│   │   └── SettingsPanel.tsx # Settings UI
-│   ├── hooks/                # Custom React hooks
-│   ├── types/                # TypeScript definitions
-│   └── App.tsx               # Main app component
-├── src-tauri/                # Rust backend
-│   ├── src/
-│   │   ├── commands.rs       # Tauri IPC commands
-│   │   ├── process/          # Service process management
-│   │   ├── config/           # Configuration generation
-│   │   ├── runtime/          # Binary download & locator
-│   │   └── lib.rs            # Main library entry
-│   ├── runtime-config.json   # Runtime binary definitions
-│   └── tauri.conf.json       # Tauri app configuration
-└── package.json              # Node.js dependencies
-```
-
-### Architecture
-
-**Frontend (React + TypeScript)**
-- Modern React 19 with TypeScript
-- Tailwind CSS for styling
-- Lucide React for icons
-- Tauri IPC for backend communication
-
-**Backend (Rust + Tauri)**
-- Modular architecture with clear separation of concerns
-- Process management for service lifecycle
-- Configuration generation with Mustache templates
-- Runtime binary download and verification
-- Cross-platform path handling
 
 ---
 
-## ⚙️ Configuration
+## 📦 Releasing
 
-### User Data Directory
+Pushing a `v*` tag runs `.github/workflows/release.yml`, which builds every platform with `tauri-action`, signs the updater artifacts, and publishes them together with `latest.json`.
 
-CHAMP stores all data in platform-specific user directories:
+Required repository secrets:
 
-**Windows:**
-```
-%LOCALAPPDATA%\CHAMP\
-├── config\           # Generated service configs
-├── logs\             # Service logs
-├── mysql\data\       # MySQL database files
-├── projects\         # Your web projects
-└── runtime\          # Downloaded binaries
-```
+- `TAURI_SIGNING_PRIVATE_KEY` — contents of the private key whose public key is in `src-tauri/tauri.conf.json`
+- `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` — only if the key has a password
 
-**macOS/Linux:**
-```
-~/.campp/
-├── config/
-├── logs/
-├── mysql/data/
-├── projects/
-└── runtime/
-```
-
-### Runtime Configuration
-
-Advanced users can customize binary versions and download URLs by editing:
-- `runtime-config.json` - Default configuration (bundled with app)
-- `runtime-config.user.json` - User overrides (optional)
-
-See `runtime-config.schema.json` for the full configuration schema.
-
-### Settings
-
-Accessible via the Settings panel in the app (or press `Ctrl/Cmd + ,`):
-- **Ports**: Customize service ports
-- **Auto-Start**: Enable/disable automatic service startup
-- **Project Folder**: Set default project directory
-- **PHP Version**: Switch between installed PHP versions
-- **MySQL Version**: Switch between installed MySQL versions
-- **PostgreSQL Version**: Switch between installed PostgreSQL versions
-- **Additional Runtimes**: Install and manage Node.js, Python, Go, and Ruby versions
-
----
-
-## 🐛 Troubleshooting
-
-### Services Won't Start
-
-1. Check if ports are already in use
-2. Review service logs in `logs/` directory
-3. Verify runtime binaries are installed
-4. Try "Reset Installation" from Debug menu (dev mode)
-
-### Port Conflicts
-
-1. Open Settings panel
-2. Change conflicting ports
-3. Restart affected services
-
-### Reset Installation
-
-In development mode:
-1. Open Debug menu
-2. Select "Reset Installation"
-3. Re-run First-Run Wizard
-
----
-
-## 🤝 Contributing
-
-Contributions are welcome! Please feel free to submit a Pull Request.
-
-1. Fork the repository
-2. Create your feature branch (`git checkout -b feature/AmazingFeature`)
-3. Commit your changes (`git commit -m 'Add some AmazingFeature'`)
-4. Push to the branch (`git push origin feature/AmazingFeature`)
-5. Open a Pull Request
+Keep the private key out of the repository; losing it means existing installs can no longer verify updates.
 
 ---
 
 ## 📄 License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
-**License Holder:** Thirawat Sinlapasomsak
-
----
+MIT — see [LICENSE](LICENSE). License holder: Thirawat Sinlapasomsak.
 
 ## 🙏 Acknowledgments
 
-- **Original Project**: [CAMPP](https://github.com/KarnYong/campp) by KarnYong - The foundation and inspiration for this project
-- [Tauri](https://tauri.app/) - Desktop app framework
-- [Caddy](https://caddyserver.com/) - Modern web server
-- [PHP](https://www.php.net/) - Server-side scripting
-- [MySQL](https://www.mysql.com/) - Database server
-- [phpMyAdmin](https://www.phpmyadmin.net/) - Database management
-- [React](https://react.dev/) - UI framework
-
----
-
-## 📞 Support
-
-- **Issues**: [GitHub Issues](https://github.com/thirawat27/CHAMP/issues)
-- **Repository**: [github.com/thirawat27/CHAMP](https://github.com/thirawat27/CHAMP)
-
----
+[CAMPP](https://github.com/KarnYong/campp) by KarnYong · [Tauri](https://tauri.app/) · [Caddy](https://caddyserver.com/) · [PHP](https://www.php.net/) · [static-php-cli](https://static-php.dev/) · [MySQL](https://www.mysql.com/) · [PostgreSQL](https://www.postgresql.org/) · [phpMyAdmin](https://www.phpmyadmin.net/) · [Adminer](https://www.adminer.org/) · [Model2Vec](https://github.com/MinishLab/model2vec)
 
 <div align="center">
 
-Made with ❤️ by [Thirawat27](https://github.com/thirawat27)
+Made with ❤️ by [Thirawat27](https://github.com/thirawat27) · [Issues](https://github.com/thirawat27/CHAMP/issues)
 
 </div>

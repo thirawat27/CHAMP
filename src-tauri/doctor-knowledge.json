@@ -1,0 +1,937 @@
+{
+  "version": 1,
+  "issues": [
+    {
+      "id": "port-in-use",
+      "services": ["*"],
+      "signatures": [
+        "address already in use",
+        "only one usage of each socket address",
+        "bind on tcp/ip port",
+        "could not bind ipv4 address",
+        "could not bind ipv6 address",
+        "could not create any tcp/ip sockets",
+        "eaddrinuse",
+        "another mysqld server running on port"
+      ],
+      "examples": [
+        "listen tcp 127.0.0.1:8080: bind: address already in use",
+        "Can't start server: Bind on TCP/IP port: Address already in use",
+        "Do you already have another mysqld server running on port: 3306 ?",
+        "Only one usage of each socket address (protocol/network address/port) is normally permitted",
+        "could not bind IPv4 address 127.0.0.1: Address already in use"
+      ],
+      "title": {
+        "en": "Port is already in use",
+        "th": "พอร์ตถูกโปรแกรมอื่นใช้อยู่"
+      },
+      "cause": {
+        "en": "Another program is already listening on this service's port, for example another CHAMP window, XAMPP, IIS, Skype, a MySQL/PostgreSQL service installed on the system, or a development server.",
+        "th": "มีโปรแกรมอื่นใช้พอร์ตของบริการนี้อยู่แล้ว เช่น CHAMP อีกหน้าต่าง, XAMPP, IIS, Skype, MySQL/PostgreSQL ที่ติดตั้งไว้ในระบบ หรือ dev server ตัวอื่น"
+      },
+      "steps": {
+        "en": [
+          "Open Settings, press Check ports, and change this service to a free port.",
+          "Or stop the other program. Windows: run `netstat -ano | findstr :PORT` and end that PID in Task Manager. macOS/Linux: run `lsof -i :PORT`.",
+          "Start the service again."
+        ],
+        "th": [
+          "เปิด Settings กด Check ports แล้วเปลี่ยนบริการนี้ไปใช้พอร์ตที่ว่าง",
+          "หรือปิดโปรแกรมที่ใช้พอร์ตอยู่ Windows: รัน `netstat -ano | findstr :พอร์ต` แล้วปิด PID นั้นใน Task Manager ส่วน macOS/Linux: รัน `lsof -i :พอร์ต`",
+          "กด Start บริการอีกครั้ง"
+        ]
+      },
+      "action": "open_settings"
+    },
+    {
+      "id": "vcredist-missing",
+      "services": ["php-fpm", "mysql", "postgresql"],
+      "signatures": [
+        "vcruntime140",
+        "msvcp140",
+        "exit code -1073741515",
+        "exit code -1073741701",
+        "0xc0000135",
+        "0xc000007b",
+        "the code execution cannot proceed"
+      ],
+      "examples": [
+        "The code execution cannot proceed because VCRUNTIME140.dll was not found",
+        "PHP-FPM process exited unexpectedly (exit code -1073741515)",
+        "MSVCP140.dll is missing from your computer"
+      ],
+      "title": {
+        "en": "Microsoft Visual C++ Redistributable is missing",
+        "th": "เครื่องยังไม่มี Microsoft Visual C++ Redistributable"
+      },
+      "cause": {
+        "en": "The Windows builds of PHP, MySQL and PostgreSQL need the Visual C++ 2015-2022 runtime. Exit code -1073741515 (0xC0000135) means Windows could not find a required DLL.",
+        "th": "PHP, MySQL และ PostgreSQL บน Windows ต้องใช้ Visual C++ 2015-2022 runtime โค้ด -1073741515 (0xC0000135) แปลว่า Windows หาไฟล์ DLL ที่จำเป็นไม่เจอ"
+      },
+      "steps": {
+        "en": [
+          "Download and install vc_redist.x64.exe from Microsoft (use the button below).",
+          "Restart CHAMP.",
+          "Start the service again."
+        ],
+        "th": [
+          "ดาวน์โหลดและติดตั้ง vc_redist.x64.exe จาก Microsoft (กดปุ่มด้านล่าง)",
+          "ปิดแล้วเปิด CHAMP ใหม่",
+          "กด Start บริการอีกครั้ง"
+        ]
+      },
+      "action": "open_url",
+      "url": "https://aka.ms/vs/17/release/vc_redist.x64.exe"
+    },
+    {
+      "id": "php-unreachable",
+      "services": ["caddy"],
+      "signatures": [
+        "no connection could be made because the target machine actively refused it",
+        "connect: connection refused",
+        "dial tcp 127.0.0.1"
+      ],
+      "examples": [
+        "dial tcp 127.0.0.1:9000: connectex: No connection could be made because the target machine actively refused it.",
+        "reverse proxy: dial tcp 127.0.0.1:9000: connect: connection refused",
+        "502 Bad Gateway from php_fastcgi"
+      ],
+      "title": {
+        "en": "Caddy cannot reach PHP-FPM (502 Bad Gateway)",
+        "th": "Caddy ติดต่อ PHP-FPM ไม่ได้ (502 Bad Gateway)"
+      },
+      "cause": {
+        "en": "PHP pages are forwarded to PHP-FPM, but PHP-FPM is stopped, crashed, or listening on a different port.",
+        "th": "Caddy ส่งหน้า PHP ต่อไปให้ PHP-FPM แต่ PHP-FPM หยุดทำงาน ล่ม หรือฟังอยู่คนละพอร์ต"
+      },
+      "steps": {
+        "en": [
+          "Start PHP-FPM (button below) and check its card for an error.",
+          "If PHP-FPM keeps stopping, run Log Doctor on PHP-FPM.",
+          "Use Restart on the whole stack so Caddy picks up the current PHP port."
+        ],
+        "th": [
+          "กด Start PHP-FPM (ปุ่มด้านล่าง) แล้วดูว่าการ์ด PHP-FPM มี error หรือไม่",
+          "ถ้า PHP-FPM ยังหยุดเองอีก ให้ใช้ Log Doctor ตรวจ PHP-FPM",
+          "กด Restart ทั้ง stack เพื่อให้ Caddy ใช้พอร์ต PHP ปัจจุบัน"
+        ]
+      },
+      "action": "start_php"
+    },
+    {
+      "id": "caddyfile-invalid",
+      "services": ["caddy"],
+      "signatures": [
+        "adapting config using caddyfile",
+        "unrecognized directive",
+        "parsing caddyfile",
+        "wrong argument count",
+        "error during parsing"
+      ],
+      "examples": [
+        "Error: adapting config using caddyfile: Caddyfile:12 - Error during parsing: unrecognized directive: rewrite",
+        "parsing caddyfile tokens for 'handle': wrong argument count or unexpected line ending"
+      ],
+      "title": {
+        "en": "The generated Caddyfile is invalid",
+        "th": "Caddyfile ที่ CHAMP สร้างขึ้นไม่ถูกต้อง"
+      },
+      "cause": {
+        "en": "CHAMP converts .htaccess rules from your projects into Caddy rules. An unusual .htaccess rule produced syntax that Caddy cannot parse.",
+        "th": "CHAMP แปลงกฎ .htaccess ในโปรเจกต์เป็นกฎของ Caddy และมีกฎ .htaccess บางตัวที่แปลงแล้ว Caddy อ่านไม่ได้"
+      },
+      "steps": {
+        "en": [
+          "Read the Caddyfile line number in the log excerpt.",
+          "Find the project whose .htaccess caused it and rename that file to .htaccess.off.",
+          "Restart Caddy. Rewrite the rule in a simpler form if you still need it."
+        ],
+        "th": [
+          "ดูเลขบรรทัดของ Caddyfile ในส่วน log ด้านล่าง",
+          "หาโปรเจกต์ที่มี .htaccess ต้นเหตุ แล้วเปลี่ยนชื่อไฟล์เป็น .htaccess.off",
+          "Restart Caddy ถ้ายังต้องใช้กฎนั้น ให้เขียนใหม่ให้เรียบง่ายขึ้น"
+        ]
+      },
+      "action": "open_logs"
+    },
+    {
+      "id": "low-port-permission",
+      "services": ["caddy"],
+      "signatures": [
+        "listen tcp :80: bind: permission denied",
+        "listen tcp :443: bind: permission denied",
+        "bind: permission denied"
+      ],
+      "examples": [
+        "listen tcp :80: bind: permission denied",
+        "loading new config: http app module: start: listening on :443: bind: permission denied"
+      ],
+      "title": {
+        "en": "No permission to use a port below 1024",
+        "th": "ไม่มีสิทธิ์ใช้พอร์ตที่ต่ำกว่า 1024"
+      },
+      "cause": {
+        "en": "macOS and Linux only allow administrators to listen on ports below 1024, such as 80 and 443. CHAMP runs without administrator rights.",
+        "th": "macOS และ Linux อนุญาตให้เฉพาะผู้ดูแลระบบเปิดพอร์ตต่ำกว่า 1024 เช่น 80 และ 443 แต่ CHAMP ทำงานแบบไม่ใช้สิทธิ์ผู้ดูแลระบบ"
+      },
+      "steps": {
+        "en": [
+          "Open Settings and set the HTTP port to 1024 or higher (8080 is the default).",
+          "Use HTTPS Preview when you need a public HTTPS address."
+        ],
+        "th": [
+          "เปิด Settings แล้วตั้ง HTTP port เป็น 1024 ขึ้นไป (ค่าเริ่มต้นคือ 8080)",
+          "ถ้าต้องการลิงก์ HTTPS สาธารณะ ให้ใช้ HTTPS Preview"
+        ]
+      },
+      "action": "open_settings"
+    },
+    {
+      "id": "mysql-locked",
+      "services": ["mysql"],
+      "signatures": [
+        "unable to lock ./ibdata1",
+        "check that you do not already have another mysqld process",
+        "unable to lock"
+      ],
+      "examples": [
+        "InnoDB: Unable to lock ./ibdata1 error: 11",
+        "Check that you do not already have another mysqld process using the same InnoDB data or log files."
+      ],
+      "title": {
+        "en": "The MySQL data folder is locked by another mysqld",
+        "th": "โฟลเดอร์ข้อมูล MySQL ถูก mysqld ตัวอื่นล็อกอยู่"
+      },
+      "cause": {
+        "en": "Another MySQL server process (an old CHAMP process that did not exit, or a copy started elsewhere) is still using the same data files.",
+        "th": "ยังมี MySQL อีก process ใช้ไฟล์ข้อมูลชุดเดียวกันอยู่ เช่น process ของ CHAMP รอบก่อนที่ปิดไม่สนิท หรือมีคนเปิดจากที่อื่น"
+      },
+      "steps": {
+        "en": [
+          "Stop MySQL in CHAMP, then end any leftover mysqld process (Task Manager on Windows, `pkill mysqld` on macOS/Linux).",
+          "Wait a few seconds and start MySQL again."
+        ],
+        "th": [
+          "กด Stop MySQL ใน CHAMP แล้วปิด process mysqld ที่ค้างอยู่ (Windows ใช้ Task Manager, macOS/Linux ใช้ `pkill mysqld`)",
+          "รอสักครู่แล้วกด Start MySQL อีกครั้ง"
+        ]
+      }
+    },
+    {
+      "id": "mysql-corrupt",
+      "services": ["mysql"],
+      "signatures": [
+        "database page corruption",
+        "is marked as crashed",
+        "table 'mysql.plugin' doesn't exist",
+        "data dictionary initialization failed",
+        "failed to initialize dd storage engine",
+        "innodb: assertion failure",
+        "corrupt"
+      ],
+      "examples": [
+        "InnoDB: Database page corruption on disk or a failed file read of page",
+        "Data Dictionary initialization failed.",
+        "Table 'mysql.plugin' doesn't exist",
+        "Failed to initialize DD Storage Engine"
+      ],
+      "title": {
+        "en": "MySQL data files are damaged",
+        "th": "ไฟล์ข้อมูล MySQL เสียหาย"
+      },
+      "cause": {
+        "en": "This usually happens after the computer lost power, mysqld was killed, or the disk filled up while MySQL was writing.",
+        "th": "มักเกิดจากไฟดับ, mysqld ถูกปิดกะทันหัน หรือดิสก์เต็มระหว่างที่ MySQL กำลังเขียนข้อมูล"
+      },
+      "steps": {
+        "en": [
+          "Stop MySQL and copy the MySQL data folder somewhere safe before changing anything.",
+          "Try starting MySQL once more; small problems are sometimes repaired on startup.",
+          "If it still fails, rename the data folder (for example to data-broken). CHAMP creates a fresh one on the next start, then import your databases from SQL backups."
+        ],
+        "th": [
+          "Stop MySQL แล้วสำรองโฟลเดอร์ข้อมูล MySQL ไว้ที่อื่นก่อนแก้ไขใด ๆ",
+          "ลอง Start MySQL อีกครั้ง บางครั้งความเสียหายเล็กน้อยจะถูกซ่อมเองตอนเริ่ม",
+          "ถ้ายังไม่ได้ ให้เปลี่ยนชื่อโฟลเดอร์ data (เช่น data-broken) CHAMP จะสร้างใหม่ให้ตอน Start แล้วนำเข้าฐานข้อมูลจากไฟล์ SQL ที่สำรองไว้"
+        ]
+      },
+      "action": "open_mysql_data"
+    },
+    {
+      "id": "mysql-version-mismatch",
+      "services": ["mysql"],
+      "signatures": [
+        "upgrade after a crash is not supported",
+        "invalid mysql server downgrade",
+        "cannot upgrade from",
+        "downgrade is not supported",
+        "data directory has been created by a newer"
+      ],
+      "examples": [
+        "Upgrade after a crash is not supported. The redo log was created with MySQL 8.0",
+        "Invalid MySQL server downgrade: Cannot downgrade from 90100 to 80400"
+      ],
+      "title": {
+        "en": "MySQL data was created by another MySQL version",
+        "th": "ข้อมูล MySQL ถูกสร้างจาก MySQL คนละเวอร์ชัน"
+      },
+      "cause": {
+        "en": "The MySQL version was changed, but the existing data folder can only be opened by the version that created it.",
+        "th": "มีการเปลี่ยนเวอร์ชัน MySQL แต่โฟลเดอร์ข้อมูลเดิมเปิดได้เฉพาะเวอร์ชันที่สร้างมัน"
+      },
+      "steps": {
+        "en": [
+          "Switch back to the previous MySQL version and start it.",
+          "Export your databases (phpMyAdmin export or `mysqldump --all-databases`).",
+          "Rename the data folder, switch to the new version, start MySQL, and import the export."
+        ],
+        "th": [
+          "เปลี่ยนกลับไปใช้ MySQL เวอร์ชันเดิมแล้ว Start",
+          "Export ฐานข้อมูลออกมา (ใช้ phpMyAdmin หรือ `mysqldump --all-databases`)",
+          "เปลี่ยนชื่อโฟลเดอร์ data แล้วสลับไปเวอร์ชันใหม่ Start MySQL แล้ว import ไฟล์ที่ export ไว้"
+        ]
+      },
+      "action": "open_settings"
+    },
+    {
+      "id": "mysql-init-not-empty",
+      "services": ["mysql"],
+      "signatures": [
+        "data directory has files in it",
+        "--initialize specified but the data directory",
+        "failed to initialize data directory"
+      ],
+      "examples": [
+        "--initialize specified but the data directory has files in it. Aborting.",
+        "Failed to initialize data directory"
+      ],
+      "title": {
+        "en": "MySQL could not create its data folder",
+        "th": "MySQL สร้างโฟลเดอร์ข้อมูลไม่สำเร็จ"
+      },
+      "cause": {
+        "en": "A previous setup stopped halfway and left files in the MySQL data folder, or the folder is not writable.",
+        "th": "การติดตั้งครั้งก่อนหยุดกลางทางจนมีไฟล์ค้างในโฟลเดอร์ข้อมูล MySQL หรือโฟลเดอร์นั้นเขียนไม่ได้"
+      },
+      "steps": {
+        "en": [
+          "Open the MySQL data folder. If it has no databases you need, rename it.",
+          "Start MySQL again so CHAMP can initialize a clean folder.",
+          "If it still fails, add the CHAMP data folder to your antivirus exclusions."
+        ],
+        "th": [
+          "เปิดโฟลเดอร์ข้อมูล MySQL ถ้าไม่มีฐานข้อมูลที่ต้องใช้ ให้เปลี่ยนชื่อโฟลเดอร์ทิ้ง",
+          "กด Start MySQL ใหม่ CHAMP จะสร้างโฟลเดอร์ใหม่ให้",
+          "ถ้ายังไม่ได้ ให้เพิ่มโฟลเดอร์ข้อมูล CHAMP ในรายการยกเว้นของโปรแกรมแอนตี้ไวรัส"
+        ]
+      },
+      "action": "open_mysql_data"
+    },
+    {
+      "id": "mysql-access-denied",
+      "services": ["mysql", "php-fpm"],
+      "signatures": [
+        "access denied for user",
+        "sqlstate[hy000] [1045]"
+      ],
+      "examples": [
+        "Access denied for user 'root'@'localhost' (using password: YES)",
+        "SQLSTATE[HY000] [1045] Access denied for user"
+      ],
+      "title": {
+        "en": "MySQL rejected the username or password",
+        "th": "MySQL ไม่ยอมรับชื่อผู้ใช้หรือรหัสผ่าน"
+      },
+      "cause": {
+        "en": "CHAMP creates user root with an empty password. The project or tool is using a different password, or the root password was changed.",
+        "th": "CHAMP สร้างผู้ใช้ root แบบไม่มีรหัสผ่าน แต่โปรเจกต์หรือเครื่องมือใช้รหัสอื่น หรือรหัส root ถูกเปลี่ยนไปแล้ว"
+      },
+      "steps": {
+        "en": [
+          "Connect with user `root`, an empty password, host `127.0.0.1`, and the MySQL port shown on the dashboard.",
+          "If you set a root password yourself, use that password in your project's .env file.",
+          "If the password is lost, back up and rename the MySQL data folder to start fresh."
+        ],
+        "th": [
+          "เชื่อมต่อด้วยผู้ใช้ `root` รหัสผ่านว่าง host `127.0.0.1` และพอร์ต MySQL ที่แสดงบน Dashboard",
+          "ถ้าเคยตั้งรหัส root เอง ให้ใส่รหัสนั้นในไฟล์ .env ของโปรเจกต์",
+          "ถ้าลืมรหัส ให้สำรองแล้วเปลี่ยนชื่อโฟลเดอร์ข้อมูล MySQL เพื่อเริ่มใหม่"
+        ]
+      }
+    },
+    {
+      "id": "mysql-lower-case",
+      "services": ["mysql"],
+      "signatures": ["different lower_case_table_names settings"],
+      "examples": [
+        "Different lower_case_table_names settings for server ('1') and data dictionary ('0')."
+      ],
+      "title": {
+        "en": "MySQL lower_case_table_names does not match the data folder",
+        "th": "ค่า lower_case_table_names ไม่ตรงกับโฟลเดอร์ข้อมูล MySQL"
+      },
+      "cause": {
+        "en": "The data folder was created on another operating system or with a different setting, which MySQL 8+ refuses to open.",
+        "th": "โฟลเดอร์ข้อมูลถูกสร้างบนระบบปฏิบัติการอื่นหรือด้วยค่าตั้งต่างกัน ซึ่ง MySQL 8 ขึ้นไปจะไม่ยอมเปิด"
+      },
+      "steps": {
+        "en": [
+          "Export the databases on the machine that created the folder.",
+          "Rename the MySQL data folder here, start MySQL, and import the export."
+        ],
+        "th": [
+          "Export ฐานข้อมูลจากเครื่องที่สร้างโฟลเดอร์นั้น",
+          "เปลี่ยนชื่อโฟลเดอร์ข้อมูล MySQL ในเครื่องนี้ Start MySQL แล้ว import ไฟล์ที่ export มา"
+        ]
+      },
+      "action": "open_mysql_data"
+    },
+    {
+      "id": "mysql-packet-too-large",
+      "services": ["mysql", "php-fpm"],
+      "signatures": ["max_allowed_packet", "packet bigger than"],
+      "examples": ["Got a packet bigger than 'max_allowed_packet' bytes"],
+      "title": {
+        "en": "The import is larger than max_allowed_packet",
+        "th": "ไฟล์ที่นำเข้าใหญ่กว่า max_allowed_packet"
+      },
+      "cause": {
+        "en": "A single SQL statement or upload is bigger than MySQL accepts in one packet. This is common when importing large dumps through a web tool.",
+        "th": "คำสั่ง SQL หรือข้อมูลก้อนเดียวใหญ่กว่าที่ MySQL รับได้ต่อครั้ง มักเกิดตอน import ไฟล์ dump ขนาดใหญ่ผ่านหน้าเว็บ"
+      },
+      "steps": {
+        "en": [
+          "Open Terminal from CHAMP (Ctrl+T) and import with the MySQL client: `mysql -h 127.0.0.1 -P PORT -u root DBNAME < dump.sql`.",
+          "Or export the dump again with smaller INSERT statements."
+        ],
+        "th": [
+          "เปิด Terminal จาก CHAMP (Ctrl+T) แล้ว import ด้วย MySQL client: `mysql -h 127.0.0.1 -P พอร์ต -u root ชื่อฐานข้อมูล < dump.sql`",
+          "หรือ export ไฟล์ dump ใหม่ให้คำสั่ง INSERT แต่ละก้อนเล็กลง"
+        ]
+      }
+    },
+    {
+      "id": "postgres-pid-lock",
+      "services": ["postgresql"],
+      "signatures": [
+        "lock file \"postmaster.pid\" already exists",
+        "is another postmaster",
+        "postmaster.pid"
+      ],
+      "examples": [
+        "FATAL: lock file \"postmaster.pid\" already exists",
+        "HINT: Is another postmaster (PID 1234) running in data directory?"
+      ],
+      "title": {
+        "en": "PostgreSQL thinks another server is still running",
+        "th": "PostgreSQL คิดว่ายังมีเซิร์ฟเวอร์อีกตัวทำงานอยู่"
+      },
+      "cause": {
+        "en": "A previous PostgreSQL process did not exit cleanly and left postmaster.pid behind, or another postgres process is still running.",
+        "th": "PostgreSQL รอบก่อนปิดไม่สนิทจนเหลือไฟล์ postmaster.pid ค้างไว้ หรือยังมี postgres อีก process ทำงานอยู่"
+      },
+      "steps": {
+        "en": [
+          "Make sure no postgres process is running (Task Manager on Windows, `pgrep postgres` on macOS/Linux).",
+          "If none is running, delete postmaster.pid from the PostgreSQL data folder.",
+          "Start PostgreSQL again."
+        ],
+        "th": [
+          "ตรวจว่าไม่มี process postgres ทำงานอยู่ (Windows ใช้ Task Manager, macOS/Linux ใช้ `pgrep postgres`)",
+          "ถ้าไม่มี ให้ลบไฟล์ postmaster.pid ในโฟลเดอร์ข้อมูล PostgreSQL",
+          "กด Start PostgreSQL อีกครั้ง"
+        ]
+      },
+      "action": "open_postgresql_data"
+    },
+    {
+      "id": "postgres-version-mismatch",
+      "services": ["postgresql"],
+      "signatures": [
+        "database files are incompatible with server",
+        "the data directory was initialized by postgresql version"
+      ],
+      "examples": [
+        "FATAL: database files are incompatible with server",
+        "DETAIL: The data directory was initialized by PostgreSQL version 16, which is not compatible with this version 17.4."
+      ],
+      "title": {
+        "en": "PostgreSQL data was created by another major version",
+        "th": "ข้อมูล PostgreSQL ถูกสร้างจากเวอร์ชันหลักอื่น"
+      },
+      "cause": {
+        "en": "Each PostgreSQL major version uses its own data format, so a folder created by version 16 cannot be opened by version 17.",
+        "th": "PostgreSQL แต่ละเวอร์ชันหลักใช้รูปแบบข้อมูลต่างกัน โฟลเดอร์ที่สร้างจากเวอร์ชัน 16 จึงเปิดด้วยเวอร์ชัน 17 ไม่ได้"
+      },
+      "steps": {
+        "en": [
+          "Switch back to the previous PostgreSQL version and export with `pg_dumpall`.",
+          "Rename the data folder, switch to the new version, start PostgreSQL, and restore the dump with `psql`."
+        ],
+        "th": [
+          "เปลี่ยนกลับไปใช้ PostgreSQL เวอร์ชันเดิม แล้ว export ด้วย `pg_dumpall`",
+          "เปลี่ยนชื่อโฟลเดอร์ data สลับไปเวอร์ชันใหม่ Start PostgreSQL แล้ว restore ด้วย `psql`"
+        ]
+      },
+      "action": "open_settings"
+    },
+    {
+      "id": "postgres-permissions",
+      "services": ["postgresql"],
+      "signatures": [
+        "has invalid permissions",
+        "permissions should be u=rwx",
+        "has wrong ownership"
+      ],
+      "examples": [
+        "FATAL: data directory \"/home/user/CHAMP/postgresql/data\" has invalid permissions",
+        "DETAIL: Permissions should be u=rwx (0700) or u=rwx,g=rx (0750)."
+      ],
+      "title": {
+        "en": "PostgreSQL data folder permissions are wrong",
+        "th": "สิทธิ์ของโฟลเดอร์ข้อมูล PostgreSQL ไม่ถูกต้อง"
+      },
+      "cause": {
+        "en": "PostgreSQL only starts when its data folder is private to the current user.",
+        "th": "PostgreSQL จะเริ่มทำงานก็ต่อเมื่อโฟลเดอร์ข้อมูลเป็นของผู้ใช้ปัจจุบันและไม่เปิดให้คนอื่นเข้าถึง"
+      },
+      "steps": {
+        "en": [
+          "macOS/Linux: run `chmod 700` on the PostgreSQL data folder and make sure your user owns it.",
+          "Windows: keep the CHAMP data folder in your user profile, not in Program Files or a synced folder."
+        ],
+        "th": [
+          "macOS/Linux: รัน `chmod 700` กับโฟลเดอร์ข้อมูล PostgreSQL และตรวจว่าเป็นของผู้ใช้คุณ",
+          "Windows: เก็บโฟลเดอร์ข้อมูล CHAMP ไว้ในโฟลเดอร์ผู้ใช้ ไม่ใช่ใน Program Files หรือโฟลเดอร์ที่ซิงก์คลาวด์"
+        ]
+      },
+      "action": "open_postgresql_data"
+    },
+    {
+      "id": "postgres-run-as-root",
+      "services": ["postgresql"],
+      "signatures": [
+        "execution of the postgresql server is not permitted",
+        "cannot be run as root",
+        "must be run as the user that will own the server process"
+      ],
+      "examples": [
+        "\"root\" execution of the PostgreSQL server is not permitted.",
+        "initdb: error: cannot be run as root"
+      ],
+      "title": {
+        "en": "PostgreSQL refuses to run as root or Administrator",
+        "th": "PostgreSQL ไม่ยอมทำงานด้วยสิทธิ์ root หรือ Administrator"
+      },
+      "cause": {
+        "en": "For security, PostgreSQL will not start from an administrator account.",
+        "th": "ด้วยเหตุผลด้านความปลอดภัย PostgreSQL จะไม่ทำงานจากบัญชีผู้ดูแลระบบ"
+      },
+      "steps": {
+        "en": [
+          "Close CHAMP and open it again as a normal user (no sudo and no Run as administrator)."
+        ],
+        "th": [
+          "ปิด CHAMP แล้วเปิดใหม่ด้วยผู้ใช้ปกติ (ไม่ใช้ sudo และไม่ใช้ Run as administrator)"
+        ]
+      }
+    },
+    {
+      "id": "postgres-shared-memory",
+      "services": ["postgresql"],
+      "signatures": [
+        "could not create shared memory segment",
+        "could not map anonymous shared memory",
+        "could not reserve shared memory region"
+      ],
+      "examples": [
+        "FATAL: could not create shared memory segment: No space left on device",
+        "could not map anonymous shared memory: Cannot allocate memory"
+      ],
+      "title": {
+        "en": "PostgreSQL could not reserve shared memory",
+        "th": "PostgreSQL จองหน่วยความจำร่วมไม่ได้"
+      },
+      "cause": {
+        "en": "The system is low on memory or its shared-memory limit is too small.",
+        "th": "เครื่องหน่วยความจำเหลือน้อย หรือขีดจำกัด shared memory ของระบบต่ำเกินไป"
+      },
+      "steps": {
+        "en": [
+          "Close memory-heavy programs and start PostgreSQL again.",
+          "Restart the computer if the error continues."
+        ],
+        "th": [
+          "ปิดโปรแกรมที่ใช้หน่วยความจำมาก แล้ว Start PostgreSQL ใหม่",
+          "ถ้ายังเป็นอยู่ ให้รีสตาร์ทเครื่อง"
+        ]
+      }
+    },
+    {
+      "id": "postgres-locale",
+      "services": ["postgresql"],
+      "signatures": [
+        "invalid locale name",
+        "invalid locale settings",
+        "encoding mismatch"
+      ],
+      "examples": [
+        "initdb: error: invalid locale settings; check LANG and LC_* environment variables",
+        "initdb: error: invalid locale name \"th_TH.UTF-8\""
+      ],
+      "title": {
+        "en": "PostgreSQL does not accept the system locale",
+        "th": "PostgreSQL ไม่รองรับ locale ของระบบ"
+      },
+      "cause": {
+        "en": "initdb uses the operating system locale, and the current LANG/LC_* value is not installed or not supported.",
+        "th": "initdb ใช้ locale ของระบบปฏิบัติการ แต่ค่า LANG/LC_* ปัจจุบันไม่ได้ติดตั้งไว้หรือไม่รองรับ"
+      },
+      "steps": {
+        "en": [
+          "Linux: install a UTF-8 locale (for example `sudo locale-gen en_US.UTF-8`) and set `LANG=en_US.UTF-8`.",
+          "Rename the partly created PostgreSQL data folder and start PostgreSQL again."
+        ],
+        "th": [
+          "Linux: ติดตั้ง locale แบบ UTF-8 (เช่น `sudo locale-gen en_US.UTF-8`) แล้วตั้ง `LANG=en_US.UTF-8`",
+          "เปลี่ยนชื่อโฟลเดอร์ข้อมูล PostgreSQL ที่สร้างค้างไว้ แล้ว Start PostgreSQL ใหม่"
+        ]
+      },
+      "action": "open_postgresql_data"
+    },
+    {
+      "id": "php-extension-missing",
+      "services": ["php-fpm"],
+      "signatures": [
+        "unable to load dynamic library",
+        "php startup: unable to load",
+        "the specified module could not be found"
+      ],
+      "examples": [
+        "PHP Warning:  PHP Startup: Unable to load dynamic library 'pdo_pgsql'",
+        "The specified module could not be found"
+      ],
+      "title": {
+        "en": "A PHP extension could not be loaded",
+        "th": "โหลด PHP extension ไม่สำเร็จ"
+      },
+      "cause": {
+        "en": "The extension file, or a DLL it depends on, is missing from this PHP build.",
+        "th": "ไฟล์ extension หรือ DLL ที่ extension นั้นต้องใช้ ไม่มีใน PHP ชุดนี้"
+      },
+      "steps": {
+        "en": [
+          "Note the extension name in the log excerpt.",
+          "Reinstall this PHP version or switch to another one in Settings.",
+          "For pdo_pgsql/pgsql on Windows, make sure PostgreSQL is installed so its client DLLs exist."
+        ],
+        "th": [
+          "ดูชื่อ extension ในส่วน log ด้านล่าง",
+          "ติดตั้ง PHP เวอร์ชันนี้ใหม่ หรือสลับไปเวอร์ชันอื่นใน Settings",
+          "ถ้าเป็น pdo_pgsql/pgsql บน Windows ให้ติดตั้ง PostgreSQL ด้วย เพื่อให้มี DLL ฝั่ง client"
+        ]
+      },
+      "action": "open_settings"
+    },
+    {
+      "id": "php-memory-limit",
+      "services": ["php-fpm"],
+      "signatures": ["allowed memory size of", "out of memory (allocated"],
+      "examples": [
+        "PHP Fatal error:  Allowed memory size of 268435456 bytes exhausted (tried to allocate 20480 bytes)"
+      ],
+      "title": {
+        "en": "A PHP script ran out of memory",
+        "th": "สคริปต์ PHP ใช้หน่วยความจำเกินกำหนด"
+      },
+      "cause": {
+        "en": "CHAMP sets memory_limit to 256M. The script needs more memory or is stuck in a loop.",
+        "th": "CHAMP ตั้ง memory_limit ไว้ที่ 256M สคริปต์ต้องใช้มากกว่านั้น หรือวนลูปไม่รู้จบ"
+      },
+      "steps": {
+        "en": [
+          "Check the file and line from the error for an endless loop or very large query results.",
+          "For one heavy page, call `ini_set('memory_limit', '512M');` at the top of that script.",
+          "For CLI tasks (Composer, imports), run `php -d memory_limit=-1 script.php` from the CHAMP terminal."
+        ],
+        "th": [
+          "ดูไฟล์และบรรทัดจาก error ว่ามีลูปไม่รู้จบหรือดึงข้อมูลจำนวนมากเกินไปหรือไม่",
+          "ถ้าเป็นหน้าเดียวที่หนัก ให้ใส่ `ini_set('memory_limit', '512M');` ไว้ต้นสคริปต์นั้น",
+          "งาน CLI (Composer, import) ให้รัน `php -d memory_limit=-1 script.php` จาก Terminal ของ CHAMP"
+        ]
+      },
+      "action": "open_logs"
+    },
+    {
+      "id": "php-timeout",
+      "services": ["php-fpm"],
+      "signatures": ["maximum execution time of"],
+      "examples": ["PHP Fatal error:  Maximum execution time of 300 seconds exceeded"],
+      "title": {
+        "en": "A PHP script took longer than max_execution_time",
+        "th": "สคริปต์ PHP ทำงานนานเกิน max_execution_time"
+      },
+      "cause": {
+        "en": "CHAMP allows web requests to run for 300 seconds. Slow queries, remote API calls, or large imports can exceed it.",
+        "th": "CHAMP ให้แต่ละ request ทำงานได้ 300 วินาที query ช้า เรียก API ภายนอก หรือ import ข้อมูลใหญ่อาจเกินเวลานี้"
+      },
+      "steps": {
+        "en": [
+          "Optimize the slow part, or call `set_time_limit(0);` in scripts that are meant to run long.",
+          "Run long jobs from the CHAMP terminal instead: the PHP CLI has no time limit."
+        ],
+        "th": [
+          "ปรับส่วนที่ช้า หรือใส่ `set_time_limit(0);` ในสคริปต์ที่ตั้งใจให้ทำงานนาน",
+          "งานที่ใช้เวลานานให้รันจาก Terminal ของ CHAMP แทน เพราะ PHP CLI ไม่มีเวลาจำกัด"
+        ]
+      }
+    },
+    {
+      "id": "php-database-connection",
+      "services": ["php-fpm"],
+      "signatures": [
+        "sqlstate[hy000] [2002]",
+        "sqlstate[08006]",
+        "php_network_getaddresses",
+        "could not connect to server",
+        "(hy000/2002)"
+      ],
+      "examples": [
+        "SQLSTATE[HY000] [2002] Connection refused",
+        "SQLSTATE[08006] [7] could not connect to server: Connection refused",
+        "mysqli_connect(): (HY000/2002): No such file or directory"
+      ],
+      "title": {
+        "en": "PHP cannot connect to the database",
+        "th": "PHP เชื่อมต่อฐานข้อมูลไม่ได้"
+      },
+      "cause": {
+        "en": "The database is not running, or the project uses the wrong host or port. On macOS/Linux, `localhost` makes PHP look for a socket file instead of TCP.",
+        "th": "ฐานข้อมูลไม่ได้เปิดอยู่ หรือโปรเจกต์ตั้ง host/พอร์ตผิด บน macOS/Linux ถ้าใช้ `localhost` PHP จะไปหาไฟล์ socket แทนการต่อแบบ TCP"
+      },
+      "steps": {
+        "en": [
+          "Start the database service used by your project.",
+          "Use host `127.0.0.1` (not `localhost`) and the port shown on the database card.",
+          "Check the database name exists, then reload the page."
+        ],
+        "th": [
+          "Start บริการฐานข้อมูลที่โปรเจกต์ใช้",
+          "ตั้ง host เป็น `127.0.0.1` (ไม่ใช่ `localhost`) และใช้พอร์ตที่แสดงบนการ์ดฐานข้อมูล",
+          "ตรวจว่ามีฐานข้อมูลชื่อนั้นจริง แล้วโหลดหน้าเว็บใหม่"
+        ]
+      }
+    },
+    {
+      "id": "runtime-files-missing",
+      "services": ["*"],
+      "signatures": [
+        "the system cannot find the file specified",
+        "the system cannot find the path specified",
+        "binary not found",
+        "runtime directory not found",
+        "(os error 2)",
+        "no such file or directory"
+      ],
+      "examples": [
+        "Failed to start PHP: The system cannot find the file specified. (os error 2)",
+        "PostgreSQL binary not found in runtime. Please ensure runtime binaries are downloaded.",
+        "Runtime directory not found. Please download runtime binaries first."
+      ],
+      "title": {
+        "en": "Runtime files are missing or incomplete",
+        "th": "ไฟล์ runtime หายหรือติดตั้งไม่ครบ"
+      },
+      "cause": {
+        "en": "A download was interrupted, an antivirus quarantined a file, or files in the CHAMP runtime folder were moved or deleted.",
+        "th": "การดาวน์โหลดถูกขัดจังหวะ, แอนตี้ไวรัสกักไฟล์ไว้ หรือไฟล์ในโฟลเดอร์ runtime ของ CHAMP ถูกย้ายหรือลบ"
+      },
+      "steps": {
+        "en": [
+          "Open Settings and install the selected PHP version or database tool again.",
+          "Add the CHAMP data folder to your antivirus exclusions, then retry.",
+          "If several components are missing, use Reset Installation (Ctrl+Shift+D) and run the setup wizard again."
+        ],
+        "th": [
+          "เปิด Settings แล้วติดตั้ง PHP เวอร์ชันที่เลือกหรือเครื่องมือฐานข้อมูลใหม่อีกครั้ง",
+          "เพิ่มโฟลเดอร์ข้อมูล CHAMP ในรายการยกเว้นของแอนตี้ไวรัส แล้วลองใหม่",
+          "ถ้าหายหลายส่วน ให้ใช้ Reset Installation (Ctrl+Shift+D) แล้วทำตาม setup wizard ใหม่"
+        ]
+      },
+      "action": "open_runtime"
+    },
+    {
+      "id": "permission-denied",
+      "services": ["*"],
+      "signatures": [
+        "permission denied",
+        "access is denied",
+        "operation not permitted",
+        "eacces",
+        "(os error 5)"
+      ],
+      "examples": [
+        "Failed to create log file: Access is denied. (os error 5)",
+        "open /CHAMP/logs/caddy.log: permission denied",
+        "Operation not permitted"
+      ],
+      "title": {
+        "en": "Permission denied",
+        "th": "ไม่มีสิทธิ์เข้าถึงไฟล์หรือโฟลเดอร์"
+      },
+      "cause": {
+        "en": "The folder is not writable for your user (for example Program Files, a synced cloud folder, or files created while CHAMP ran as administrator), or an antivirus blocked access.",
+        "th": "ผู้ใช้ปัจจุบันเขียนโฟลเดอร์นั้นไม่ได้ (เช่น Program Files, โฟลเดอร์ซิงก์คลาวด์ หรือไฟล์ที่สร้างตอนเปิด CHAMP แบบ administrator) หรือแอนตี้ไวรัสบล็อกไว้"
+      },
+      "steps": {
+        "en": [
+          "Keep CHAMP data in its default user folder, or point CHAMP_DATA_DIR to a folder you own.",
+          "Do not switch between running CHAMP as administrator and as a normal user.",
+          "Add the CHAMP data folder to your antivirus exclusions."
+        ],
+        "th": [
+          "เก็บข้อมูล CHAMP ไว้ในโฟลเดอร์ผู้ใช้ตามค่าเริ่มต้น หรือตั้ง CHAMP_DATA_DIR ไปยังโฟลเดอร์ที่เป็นของคุณ",
+          "อย่าสลับระหว่างเปิด CHAMP แบบ administrator กับผู้ใช้ปกติ",
+          "เพิ่มโฟลเดอร์ข้อมูล CHAMP ในรายการยกเว้นของแอนตี้ไวรัส"
+        ]
+      },
+      "action": "open_logs"
+    },
+    {
+      "id": "file-in-use",
+      "services": ["*"],
+      "signatures": [
+        "being used by another process",
+        "(os error 32)",
+        "sharing violation"
+      ],
+      "examples": [
+        "The process cannot access the file because it is being used by another process. (os error 32)"
+      ],
+      "title": {
+        "en": "A file is locked by another program",
+        "th": "ไฟล์ถูกโปรแกรมอื่นล็อกไว้"
+      },
+      "cause": {
+        "en": "Another program, an antivirus scan, or a previous CHAMP process still has the file open.",
+        "th": "ยังมีโปรแกรมอื่น การสแกนของแอนตี้ไวรัส หรือ process ของ CHAMP รอบก่อนเปิดไฟล์นั้นค้างไว้"
+      },
+      "steps": {
+        "en": [
+          "Close other local server tools (XAMPP, Laragon, another CHAMP) and try again after a few seconds.",
+          "Quit CHAMP from the tray icon and open it again.",
+          "Restart the computer if the file stays locked."
+        ],
+        "th": [
+          "ปิดเครื่องมือเซิร์ฟเวอร์อื่น (XAMPP, Laragon, CHAMP อีกตัว) แล้วรอสักครู่ค่อยลองใหม่",
+          "สั่ง Quit CHAMP จากไอคอนถาดระบบแล้วเปิดใหม่",
+          "ถ้าไฟล์ยังถูกล็อกอยู่ ให้รีสตาร์ทเครื่อง"
+        ]
+      }
+    },
+    {
+      "id": "disk-full",
+      "services": ["*"],
+      "signatures": [
+        "no space left on device",
+        "not enough space on the disk",
+        "errcode: 28",
+        "(os error 112)",
+        "disk full"
+      ],
+      "examples": [
+        "Error writing file (Errcode: 28 - No space left on device)",
+        "There is not enough space on the disk. (os error 112)"
+      ],
+      "title": {
+        "en": "The disk is full",
+        "th": "พื้นที่ดิสก์เต็ม"
+      },
+      "cause": {
+        "en": "There is no free space left for logs, temporary files, or database data.",
+        "th": "ไม่มีพื้นที่ว่างเหลือสำหรับ log ไฟล์ชั่วคราว หรือข้อมูลฐานข้อมูล"
+      },
+      "steps": {
+        "en": [
+          "Free disk space, for example by emptying the trash and deleting old downloads.",
+          "Delete large old files in the CHAMP logs folder.",
+          "Start the service again."
+        ],
+        "th": [
+          "เคลียร์พื้นที่ดิสก์ เช่น ล้างถังขยะและลบไฟล์ดาวน์โหลดเก่า",
+          "ลบไฟล์ log เก่าขนาดใหญ่ในโฟลเดอร์ logs ของ CHAMP",
+          "กด Start บริการอีกครั้ง"
+        ]
+      },
+      "action": "open_logs"
+    },
+    {
+      "id": "linux-shared-library",
+      "services": ["*"],
+      "signatures": [
+        "error while loading shared libraries",
+        "cannot open shared object file",
+        "version `glibc_"
+      ],
+      "examples": [
+        "mysqld: error while loading shared libraries: libaio.so.1: cannot open shared object file: No such file or directory",
+        "/lib/x86_64-linux-gnu/libc.so.6: version `GLIBC_2.28' not found"
+      ],
+      "title": {
+        "en": "A system library is missing (Linux)",
+        "th": "ระบบยังขาด library ที่จำเป็น (Linux)"
+      },
+      "cause": {
+        "en": "The portable MySQL/PostgreSQL/PHP binaries need a few libraries from your Linux distribution.",
+        "th": "ไฟล์ MySQL/PostgreSQL/PHP แบบพกพาต้องใช้ library บางตัวจาก Linux ที่ใช้อยู่"
+      },
+      "steps": {
+        "en": [
+          "Install the library named in the log. Ubuntu/Debian example: `sudo apt install libaio1t64 libnuma1 libncurses6` (older releases use `libaio1`).",
+          "Fedora example: `sudo dnf install libaio numactl-libs ncurses-libs`.",
+          "Start the service again."
+        ],
+        "th": [
+          "ติดตั้ง library ตามชื่อที่อยู่ใน log ตัวอย่าง Ubuntu/Debian: `sudo apt install libaio1t64 libnuma1 libncurses6` (รุ่นเก่าใช้ `libaio1`)",
+          "ตัวอย่าง Fedora: `sudo dnf install libaio numactl-libs ncurses-libs`",
+          "กด Start บริการอีกครั้ง"
+        ]
+      }
+    },
+    {
+      "id": "macos-quarantine",
+      "services": ["*"],
+      "signatures": [
+        "cannot be opened because the developer cannot be verified",
+        "com.apple.quarantine",
+        "killed: 9",
+        "code signature invalid"
+      ],
+      "examples": [
+        "\"mysqld\" cannot be opened because the developer cannot be verified.",
+        "Process exited unexpectedly (signal 9)"
+      ],
+      "title": {
+        "en": "macOS blocked a downloaded binary",
+        "th": "macOS บล็อกไฟล์ที่ดาวน์โหลดมา"
+      },
+      "cause": {
+        "en": "Gatekeeper marks downloaded files as quarantined and may stop them from running.",
+        "th": "Gatekeeper ของ macOS ติดป้ายกักกันให้ไฟล์ที่ดาวน์โหลดมาและอาจไม่ยอมให้รัน"
+      },
+      "steps": {
+        "en": [
+          "Run `xattr -dr com.apple.quarantine \"PATH_TO_CHAMP/runtime\"` in Terminal (use the runtime folder opened by the button below).",
+          "Or allow the blocked file in System Settings, Privacy & Security.",
+          "Start the service again."
+        ],
+        "th": [
+          "รัน `xattr -dr com.apple.quarantine \"ที่อยู่โฟลเดอร์/runtime\"` ใน Terminal (ใช้โฟลเดอร์ runtime ที่เปิดจากปุ่มด้านล่าง)",
+          "หรืออนุญาตไฟล์นั้นใน System Settings > Privacy & Security",
+          "กด Start บริการอีกครั้ง"
+        ]
+      },
+      "action": "open_runtime"
+    }
+  ]
+}

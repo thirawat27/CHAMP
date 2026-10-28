@@ -1,5 +1,10 @@
 name: Release
 
+# Builds signed installers for every platform and publishes them, together with
+# the `latest.json` manifest used by CHAMP's built-in updater, to a GitHub
+# release. Requires the repository secret TAURI_SIGNING_PRIVATE_KEY (and
+# TAURI_SIGNING_PRIVATE_KEY_PASSWORD when the key has a password).
+
 on:
   push:
     tags:
@@ -32,31 +37,34 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - name: Windows
+          - name: Windows x64
             os: windows-latest
-            artifact_name: champ-windows
-            bundle_path: src-tauri/target/release/bundle
-            package_ext: zip
-            bundle_args: ""
-          - name: macOS
+            rust_targets: ""
+            args: ""
+          - name: macOS Apple Silicon
             os: macos-latest
-            artifact_name: champ-macos
-            bundle_path: src-tauri/target/release/bundle
-            package_ext: tar.gz
-            bundle_args: ""
-          - name: Linux
-            os: ubuntu-latest
-            artifact_name: champ-linux
-            bundle_path: src-tauri/target/release/bundle
-            package_ext: tar.gz
-            bundle_args: "--bundles deb,rpm"
+            rust_targets: aarch64-apple-darwin
+            args: --target aarch64-apple-darwin
+          - name: macOS Intel
+            os: macos-latest
+            rust_targets: x86_64-apple-darwin
+            args: --target x86_64-apple-darwin
+          - name: Linux x64
+            os: ubuntu-22.04
+            rust_targets: ""
+            # AppImage is the Linux format the updater can replace in place.
+            args: --bundles deb,rpm,appimage
 
     env:
       RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag_name || github.ref_name }}
+      RELEASE_NAME: ${{ github.event_name == 'workflow_dispatch' && inputs.release_name || '' }}
+      RELEASE_DRAFT: ${{ github.event_name == 'workflow_dispatch' && inputs.draft || false }}
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          ref: ${{ env.RELEASE_TAG }}
 
       - name: Install Linux Tauri dependencies
         if: runner.os == 'Linux'
@@ -84,6 +92,8 @@ jobs:
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.rust_targets }}
 
       - name: Cache Rust build
         uses: Swatinem/rust-cache@v2
@@ -94,52 +104,17 @@ jobs:
       - name: Install frontend dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Build Tauri app
+      - name: Build, sign, and publish
+        uses: tauri-apps/tauri-action@v0
         env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
           APPLE_SIGNING_IDENTITY: "-"
-        run: pnpm tauri build ${{ matrix.bundle_args }}
-
-      - name: Package bundle (Windows)
-        if: runner.os == 'Windows'
-        shell: pwsh
-        run: |
-          New-Item -ItemType Directory -Force -Path release-assets | Out-Null
-          Compress-Archive -Path "${{ matrix.bundle_path }}\*" -DestinationPath "release-assets\${{ matrix.artifact_name }}-${{ env.RELEASE_TAG }}.zip" -Force
-
-      - name: Package bundle (Unix)
-        if: runner.os != 'Windows'
-        shell: bash
-        run: |
-          mkdir -p release-assets
-          tar -czf "release-assets/${{ matrix.artifact_name }}-${{ env.RELEASE_TAG }}.${{ matrix.package_ext }}" -C "${{ matrix.bundle_path }}" .
-
-      - name: Upload packaged bundle
-        uses: actions/upload-artifact@v4
         with:
-          name: ${{ matrix.artifact_name }}
-          path: release-assets/*
-          if-no-files-found: error
-
-  publish:
-    name: Publish GitHub Release
-    needs: build
-    runs-on: ubuntu-latest
-    env:
-      RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag_name || github.ref_name }}
-      RELEASE_NAME: ${{ github.event_name == 'workflow_dispatch' && inputs.release_name || '' }}
-      RELEASE_DRAFT: ${{ github.event_name == 'workflow_dispatch' && inputs.draft || false }}
-    steps:
-      - name: Download release assets
-        uses: actions/download-artifact@v4
-        with:
-          path: release-assets
-          merge-multiple: true
-
-      - name: Publish release
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: ${{ env.RELEASE_TAG }}
-          name: ${{ env.RELEASE_NAME != '' && env.RELEASE_NAME || env.RELEASE_TAG }}
-          draft: ${{ env.RELEASE_DRAFT == 'true' }}
-          generate_release_notes: true
-          files: release-assets/*
+          tagName: ${{ env.RELEASE_TAG }}
+          releaseName: ${{ env.RELEASE_NAME != '' && env.RELEASE_NAME || format('CHAMP {0}', env.RELEASE_TAG) }}
+          releaseDraft: ${{ env.RELEASE_DRAFT == 'true' }}
+          generateReleaseNotes: true
+          includeUpdaterJson: true
+          args: ${{ matrix.args }}

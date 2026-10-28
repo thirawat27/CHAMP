@@ -111,7 +111,9 @@ export async function initializeLanguage(): Promise<void> {
   }
 
   try {
-    const settings = await invoke<{ language: Language; sound_enabled: boolean }>("get_language_settings");
+    const settings = await invoke<{ language: Language; sound_enabled: boolean }>(
+      "get_language_settings"
+    );
     const store = useLanguageStore.getState();
 
     if (settings.language && settings.language !== store.language) {

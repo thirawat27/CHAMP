@@ -10,12 +10,18 @@ CHAMP loads runtime package metadata from `runtime-config.json`. Advanced users 
 - PostgreSQL
 - phpMyAdmin
 - Adminer
-- Node.js
-- Python
-- Go
-- Ruby
 
 `cloudflared` for HTTPS Preview is installed separately from GitHub latest-release binaries when the feature is first used.
+
+## PHP is refreshed automatically
+
+PHP entries are rebuilt from the official feeds whenever the catalog refreshes (setup wizard, Settings, installing or updating PHP):
+
+- `https://www.php.net/releases/states.php` decides which branches are supported (others are kept but marked EOL).
+- `https://windows.php.net/downloads/releases/releases.json` provides the exact Windows zip and its SHA-256.
+- The static-php-cli bulk listing provides the newest Linux/macOS FPM build that exists.
+
+The refreshed catalog is written to `config/runtime-config.json` in the CHAMP data folder. Entries that use an official branch id such as `php-8.5` are replaced on every refresh; give a custom build its own id (for example `php-8.5-custom`) to keep it (it is listed with an EOL badge).
 
 ## Search Order
 
@@ -25,8 +31,7 @@ CHAMP searches for runtime config files in several locations, including:
 - CHAMP data directory, for example `%LOCALAPPDATA%\CHAMP\runtime-config.json`
 - `CHAMP_DATA_DIR` or `CHAMP_PORTABLE_DIR`
 - Tauri resource directory
-- Current working directory
-- `src-tauri/runtime-config.json` during development
+- Current working directory and `src-tauri/runtime-config.json` (development builds only)
 
 The first readable file is used. If no file is found, CHAMP falls back to the embedded runtime config.
 
@@ -90,7 +95,6 @@ Leave unsupported platforms empty or `null`.
 - Set one version per component to `"selected": true`.
 - If multiple versions are selected, CHAMP uses the first selected entry.
 - If no version is selected, CHAMP falls back to the first version in that component list.
-- Optional runtimes can be selected in Settings or the first-run wizard.
 
 ## Supported Archive Types
 
@@ -99,7 +103,6 @@ CHAMP currently supports:
 - `.zip`
 - `.tar.gz`
 - `.tar.xz`
-- `.7z`
 - `.php` for Adminer-style single-file packages
 
 ## Useful Sources
@@ -111,10 +114,6 @@ CHAMP currently supports:
 - PostgreSQL: `https://get.enterprisedb.com/postgresql/`
 - phpMyAdmin: `https://www.phpmyadmin.net/downloads/`
 - Adminer: `https://www.adminer.org/`
-- Node.js: `https://nodejs.org/dist/`
-- Python standalone builds: `https://github.com/astral-sh/python-build-standalone/releases`
-- Go: `https://go.dev/dl/`
-- RubyInstaller: `https://github.com/oneclick/rubyinstaller2/releases`
 
 ## Troubleshooting
 

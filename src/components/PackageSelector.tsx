@@ -7,19 +7,10 @@ import {
   MySQLPackage,
   PhpMyAdminPackage,
   EMPTY_PACKAGE_SELECTION,
-  getDatabaseDisplayName,
   hasPackageUrlForPlatform,
   isAdminerSelected,
 } from "../types/services";
 import { useTranslation } from "../stores/languageStore";
-
-// Helper to detect platform
-const detectPlatform = (): string => {
-  const userAgent = window.navigator.userAgent.toLowerCase();
-  if (userAgent.includes("win")) return "windows";
-  if (userAgent.includes("mac")) return "darwin";
-  return "linux";
-};
 
 interface PackageSelectorProps {
   onSelectionChange: (selection: PackageSelection) => void;
@@ -30,7 +21,6 @@ export function PackageSelector({ onSelectionChange, initialSelection }: Package
   const { t } = useTranslation();
   const [packages, setPackages] = useState<PackagesConfig | null>(null);
   const [loading, setLoading] = useState(true);
-  const [currentPlatform, setCurrentPlatform] = useState<string>("");
   const [runtimePlatformKey, setRuntimePlatformKey] = useState<string>("");
   const [selection, setSelection] = useState<PackageSelection>(
     initialSelection || EMPTY_PACKAGE_SELECTION
@@ -54,9 +44,8 @@ export function PackageSelector({ onSelectionChange, initialSelection }: Package
   const loadPackages = useCallback(async () => {
     try {
       const [data, platformKey] = await Promise.all([
-        invoke<PackagesConfig>("refresh_runtime_catalog").catch(() =>
-          invoke<PackagesConfig>("get_available_packages_cmd")
-        ),
+        // The wizard refreshes the catalog on open; read the cached result.
+        invoke<PackagesConfig>("get_available_packages_cmd"),
         invoke<string>("get_runtime_platform"),
       ]);
       setPackages(data);
@@ -73,8 +62,6 @@ export function PackageSelector({ onSelectionChange, initialSelection }: Package
 
   useEffect(() => {
     loadPackages();
-    // Detect platform for database display name
-    setCurrentPlatform(detectPlatform());
   }, [loadPackages]);
 
   useEffect(() => {
@@ -115,11 +102,7 @@ export function PackageSelector({ onSelectionChange, initialSelection }: Package
       nextSelection.php !== selection.php ||
       nextSelection.mysql !== selection.mysql ||
       nextSelection.postgresql !== selection.postgresql ||
-      nextSelection.phpmyadmin !== selection.phpmyadmin ||
-      nextSelection.node !== selection.node ||
-      nextSelection.python !== selection.python ||
-      nextSelection.go !== selection.go ||
-      nextSelection.ruby !== selection.ruby
+      nextSelection.phpmyadmin !== selection.phpmyadmin
     ) {
       setSelection(nextSelection);
       return;
@@ -177,9 +160,7 @@ export function PackageSelector({ onSelectionChange, initialSelection }: Package
     hasPackageUrlForPlatform(pkg, runtimePlatformKey)
   );
   const adminerSelected = isAdminerSelected(selection);
-  const activeDatabaseName = adminerSelected
-    ? "PostgreSQL"
-    : getDatabaseDisplayName(currentPlatform);
+  const activeDatabaseName = adminerSelected ? "PostgreSQL" : "MySQL";
   const activeDatabasePackages = adminerSelected
     ? availablePostgreSQLPackages
     : availableMysqlPackages;

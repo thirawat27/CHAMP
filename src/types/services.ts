@@ -31,9 +31,26 @@ export interface AppSettings {
   mysql_port: number;
   postgresql_port: number;
   php_port: number;
-  project_root: string;
   auto_start_services?: boolean;
+  auto_check_updates?: boolean;
   package_selection?: PackageSelection;
+}
+
+export interface AgentConnectorStatus {
+  enabled: boolean;
+  running: boolean;
+  read_only: boolean;
+  port: number;
+  url: string;
+  token: string | null;
+  error: string | null;
+}
+
+export interface AgentActivity {
+  tool: string;
+  service: ServiceType | null;
+  ok: boolean;
+  error: string | null;
 }
 
 export interface DownloadProgress {
@@ -45,22 +62,6 @@ export interface DownloadProgress {
   totalComponents: number;
   downloadedBytes: number;
   totalBytes: number;
-}
-
-// Generic Package (Node, Python, Go, Ruby)
-export interface GenericPackage {
-  id: string;
-  version: string;
-  display_name: string;
-  windowsX64: string;
-  windowsArm64: string;
-  linuxX64: string;
-  linuxArm64: string;
-  macOSX64: string;
-  macOSArm64: string;
-  eol: boolean;
-  lts: boolean;
-  recommended: boolean;
 }
 
 // Package selection types
@@ -109,10 +110,6 @@ export interface PackagesConfig {
   mysql: MySQLPackage[];
   postgresql: MySQLPackage[];
   phpmyadmin: PhpMyAdminPackage[];
-  node?: GenericPackage[];
-  python?: GenericPackage[];
-  go?: GenericPackage[];
-  ruby?: GenericPackage[];
 }
 
 export interface PackageSelection {
@@ -120,10 +117,6 @@ export interface PackageSelection {
   mysql: string;
   postgresql: string;
   phpmyadmin: string;
-  node?: string;
-  python?: string;
-  go?: string;
-  ruby?: string;
 }
 
 export const EMPTY_PACKAGE_SELECTION: PackageSelection = {
@@ -131,10 +124,6 @@ export const EMPTY_PACKAGE_SELECTION: PackageSelection = {
   mysql: "",
   postgresql: "",
   phpmyadmin: "",
-  node: "",
-  python: "",
-  go: "",
-  ruby: "",
 };
 
 export const isAdminerSelected = (
@@ -150,12 +139,7 @@ export const getStackServiceTypes = (
 ): ServiceType[] => [ServiceType.Caddy, ServiceType.PhpFpm, getActiveDatabaseService(selection)];
 
 export type RuntimePlatformKey =
-  | "windowsX64"
-  | "windowsArm64"
-  | "linuxX64"
-  | "linuxArm64"
-  | "macOSX64"
-  | "macOSArm64";
+  "windowsX64" | "windowsArm64" | "linuxX64" | "linuxArm64" | "macOSX64" | "macOSArm64";
 
 export const getPackageUrlForPlatform = (
   pkg: Pick<
@@ -190,28 +174,6 @@ export const hasPackageUrlForPlatform = (
   platformKey: string
 ): boolean => getPackageUrlForPlatform(pkg, platformKey).trim().length > 0;
 
-export const isSupportedRuntimeArchiveUrl = (url: string): boolean => {
-  const pathname = url.split(/[?#]/, 1)[0].toLowerCase();
-  return (
-    pathname.endsWith(".zip") ||
-    pathname.endsWith(".tar.gz") ||
-    pathname.endsWith(".tar.xz") ||
-    pathname.endsWith(".7z") ||
-    pathname.endsWith(".php")
-  );
-};
-
-export const hasInstallablePackageForPlatform = (
-  pkg: Pick<
-    PhpPackage,
-    "windowsX64" | "windowsArm64" | "linuxX64" | "linuxArm64" | "macOSX64" | "macOSArm64"
-  >,
-  platformKey: string
-): boolean => {
-  const url = getPackageUrlForPlatform(pkg, platformKey).trim();
-  return url.length > 0 && isSupportedRuntimeArchiveUrl(url);
-};
-
 export interface InstalledPhpVersion {
   id: string;
   version: string;
@@ -222,6 +184,10 @@ export interface InstalledPhpVersion {
   lts: boolean;
   recommended: boolean;
   path: string | null;
+  /** Newest patch release of this branch in the catalog */
+  latest_version: string;
+  /** Installed, but older than latest_version */
+  update_available: boolean;
 }
 
 export interface AppPaths {
@@ -264,12 +230,6 @@ export const SERVICE_DISPLAY_NAMES = {
   [ServiceType.PostgreSQL]: "PostgreSQL",
 } as const;
 
-// CHAMP currently ships official MySQL portable packages for supported platforms.
-export const getDatabaseDisplayName = (platform?: string): string => {
-  void platform;
-  return "MySQL";
-};
-
 export const SERVICE_DESCRIPTIONS = {
   [ServiceType.Caddy]: "Web Server",
   [ServiceType.PhpFpm]: "PHP Runtime",
@@ -294,4 +254,58 @@ export interface DependencyCheckResult {
   dependencies: Dependency[];
   all_satisfied: boolean;
   platform_notes: string;
+}
+
+// Log Doctor
+export interface LocalizedText {
+  en: string;
+  th: string;
+}
+
+export interface LocalizedSteps {
+  en: string[];
+  th: string[];
+}
+
+export type LogDoctorAction =
+  | "open_settings"
+  | "open_logs"
+  | "open_url"
+  | "start_php"
+  | "open_mysql_data"
+  | "open_postgresql_data"
+  | "open_runtime";
+
+export interface DiagnosisMatch {
+  id: string;
+  title: LocalizedText;
+  cause: LocalizedText;
+  steps: LocalizedSteps;
+  confidence: number;
+  evidence: string;
+  method: "signature" | "ai";
+  action: LogDoctorAction | null;
+  url: string | null;
+}
+
+export interface Diagnosis {
+  service: ServiceType;
+  ai_used: boolean;
+  matches: DiagnosisMatch[];
+  excerpt: string[];
+  log_files: string[];
+}
+
+export interface LogDoctorStatus {
+  installed: boolean;
+  downloading: boolean;
+  model_name: string;
+  parameters: string;
+  download_bytes: number;
+}
+
+export interface LogDoctorProgress {
+  downloaded_bytes: number;
+  total_bytes: number;
+  percent: number;
 }

@@ -102,14 +102,12 @@ export function playStartSound(): void {
   const now = ctx.currentTime;
 
   const phrase = [
-    { freq: 523.25, t: 0.00 },  // C5
-    { freq: 659.25, t: 0.15 },  // E5
-    { freq: 880.00, t: 0.30 },  // A5
+    { freq: 523.25, t: 0.0 }, // C5
+    { freq: 659.25, t: 0.15 }, // E5
+    { freq: 880.0, t: 0.3 }, // A5
   ];
 
-  phrase.forEach(({ freq, t }) =>
-    playNote(ctx, freq, now + t, 0.05, 1.2, 0.18)
-  );
+  phrase.forEach(({ freq, t }) => playNote(ctx, freq, now + t, 0.05, 1.2, 0.18));
 }
 
 /**
@@ -124,14 +122,12 @@ export function playRestartSound(): void {
   const now = ctx.currentTime;
 
   const phrase = [
-    { freq: 659.25, t: 0.00 },  // E5
-    { freq: 523.25, t: 0.15 },  // C5
-    { freq: 659.25, t: 0.30 },  // E5
+    { freq: 659.25, t: 0.0 }, // E5
+    { freq: 523.25, t: 0.15 }, // C5
+    { freq: 659.25, t: 0.3 }, // E5
   ];
 
-  phrase.forEach(({ freq, t }) =>
-    playNote(ctx, freq, now + t, 0.05, 1.0, 0.16)
-  );
+  phrase.forEach(({ freq, t }) => playNote(ctx, freq, now + t, 0.05, 1.0, 0.16));
 }
 
 /**
@@ -146,14 +142,12 @@ export function playStopSound(): void {
   const now = ctx.currentTime;
 
   const phrase = [
-    { freq: 440.00, t: 0.00 },  // A4
-    { freq: 329.63, t: 0.18 },  // E4
-    { freq: 261.63, t: 0.36 },  // C4
+    { freq: 440.0, t: 0.0 }, // A4
+    { freq: 329.63, t: 0.18 }, // E4
+    { freq: 261.63, t: 0.36 }, // C4
   ];
 
-  phrase.forEach(({ freq, t }) =>
-    playNote(ctx, freq, now + t, 0.08, 1.4, 0.15)
-  );
+  phrase.forEach(({ freq, t }) => playNote(ctx, freq, now + t, 0.08, 1.4, 0.15));
 }
 
 /**
@@ -168,15 +162,13 @@ export function playCompleteSound(): void {
   const now = ctx.currentTime;
 
   const phrase = [
-    { freq: 261.63, t: 0.00 },  // C4
-    { freq: 329.63, t: 0.12 },  // E4
-    { freq: 392.00, t: 0.24 },  // G4
-    { freq: 523.25, t: 0.36 },  // C5 – final note longer resonance
+    { freq: 261.63, t: 0.0 }, // C4
+    { freq: 329.63, t: 0.12 }, // E4
+    { freq: 392.0, t: 0.24 }, // G4
+    { freq: 523.25, t: 0.36 }, // C5 – final note longer resonance
   ];
 
-  phrase.forEach(({ freq, t }, i) =>
-    playNote(ctx, freq, now + t, 0.05, i === 3 ? 1.8 : 0.8, 0.18)
-  );
+  phrase.forEach(({ freq, t }, i) => playNote(ctx, freq, now + t, 0.05, i === 3 ? 1.8 : 0.8, 0.18));
 }
 
 /**
@@ -191,13 +183,11 @@ export function playErrorSound(): void {
   const now = ctx.currentTime;
 
   const phrase = [
-    { freq: 659.25, t: 0.00 },  // E5
-    { freq: 622.25, t: 0.20 },  // D#5
+    { freq: 659.25, t: 0.0 }, // E5
+    { freq: 622.25, t: 0.2 }, // D#5
   ];
 
-  phrase.forEach(({ freq, t }) =>
-    playNote(ctx, freq, now + t, 0.06, 1.0, 0.16)
-  );
+  phrase.forEach(({ freq, t }) => playNote(ctx, freq, now + t, 0.06, 1.0, 0.16));
 }
 
 // ---------------------------------------------------------------------------
@@ -222,8 +212,8 @@ export function playToggleSound(): void {
   const ctx = getAudioContext();
   if (!ctx) return;
   const now = ctx.currentTime;
-  playNote(ctx, 880.00, now,        0.02, 0.15, 0.10); // A5
-  playNote(ctx, 659.25, now + 0.10, 0.02, 0.20, 0.08); // E5
+  playNote(ctx, 880.0, now, 0.02, 0.15, 0.1); // A5
+  playNote(ctx, 659.25, now + 0.1, 0.02, 0.2, 0.08); // E5
 }
 
 /**
@@ -244,7 +234,7 @@ export function playLoadingPulseSound(): void {
   if (!isSoundEnabled()) return;
   const ctx = getAudioContext();
   if (!ctx) return;
-  playNote(ctx, 329.63, ctx.currentTime, 0.05, 0.6, 0.10); // E4
+  playNote(ctx, 329.63, ctx.currentTime, 0.05, 0.6, 0.1); // E4
 }
 
 /**
@@ -255,7 +245,7 @@ export function playLoadingStreamSound(progress: number): void {
   const ctx = getAudioContext();
   if (!ctx) return;
   // G4 (392 Hz) rising gently to C5 (523 Hz)
-  const freq = 392.00 + (progress / 100) * (523.25 - 392.00);
+  const freq = 392.0 + (progress / 100) * (523.25 - 392.0);
   playNote(ctx, freq, ctx.currentTime, 0.03, 0.15, 0.06);
 }
 
@@ -293,8 +283,14 @@ export function playNotificationSound(
     return;
   }
   // info
-  if (action === "start")   { playStartSound();   return; }
-  if (action === "restart") { playRestartSound();  return; }
+  if (action === "start") {
+    playStartSound();
+    return;
+  }
+  if (action === "restart") {
+    playRestartSound();
+    return;
+  }
   // info + stop → silent (user already heard the stop click)
 }
 
@@ -304,34 +300,35 @@ export function playNotificationSound(
 
 export const AudioManager = {
   // Service lifecycle
-  playStart:    playStartSound,
-  playRestart:  playRestartSound,
-  playStop:     playStopSound,
+  playStart: playStartSound,
+  playRestart: playRestartSound,
+  playStop: playStopSound,
   playComplete: playCompleteSound,
 
   // Loading / wizard
-  playLoadingPulse:  playLoadingPulseSound,
+  playLoadingPulse: playLoadingPulseSound,
   playLoadingStream: playLoadingStreamSound,
 
   // UI interactions
-  playClick:  playClickSound,
+  playClick: playClickSound,
   playToggle: playToggleSound,
-  playHover:  playHoverSound,
+  playHover: playHoverSound,
 
   // Notification banner
   playNotification: playNotificationSound,
 
   // Legacy aliases
   playSuccess: playCompleteSound,
-  playError:   playErrorSound,
+  playError: playErrorSound,
 
   isSupported: () =>
     typeof window !== "undefined" &&
-    !!(window.AudioContext ||
-      (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext),
+    !!(
+      window.AudioContext ||
+      (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext
+    ),
 
   initialize: getAudioContext,
 };
 
 export default AudioManager;
-

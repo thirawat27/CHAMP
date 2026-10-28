@@ -25,70 +25,78 @@
       "versions": [
         {
           "id": "php-8.5",
-          "version": "8.5.7",
+          "version": "8.5.12",
           "selected": true,
           "display_name": "PHP 8.5",
           "eol": false,
           "lts": false,
-          "recommended": true,
-          "checksums": {},
+          "checksums": {
+            "windowsX64": "2a36a2edcb7a5b9252f638fd5e4cf84d7f6e066092654220dc0b63e5cf4e9723"
+          },
           "urls": {
-            "windowsX64": "https://windows.php.net/downloads/releases/php-8.5.7-nts-Win32-vs17-x64.zip",
-            "linuxX64": "https://dl.static-php.dev/static-php-cli/bulk/php-8.5.7-fpm-linux-x86_64.tar.gz",
-            "linuxArm64": "https://dl.static-php.dev/static-php-cli/bulk/php-8.5.7-fpm-linux-aarch64.tar.gz",
-            "macOSX64": "https://dl.static-php.dev/static-php-cli/bulk/php-8.5.7-fpm-macos-x86_64.tar.gz",
-            "macOSArm64": "https://dl.static-php.dev/static-php-cli/bulk/php-8.5.7-fpm-macos-aarch64.tar.gz"
+            "windowsX64": "https://windows.php.net/downloads/releases/php-8.5.12-1-nts-Win32-vs17-x64.zip",
+            "windowsArm64": null,
+            "linuxX64": "https://dl.static-php.dev/static-php-cli/bulk/php-8.5.8-fpm-linux-x86_64.tar.gz",
+            "linuxArm64": "https://dl.static-php.dev/static-php-cli/bulk/php-8.5.8-fpm-linux-aarch64.tar.gz",
+            "macOSX64": "https://dl.static-php.dev/static-php-cli/bulk/php-8.5.8-fpm-macos-x86_64.tar.gz",
+            "macOSArm64": "https://dl.static-php.dev/static-php-cli/bulk/php-8.5.8-fpm-macos-aarch64.tar.gz"
           }
         },
         {
           "id": "php-8.4",
-          "version": "8.4.22",
+          "version": "8.4.27",
           "selected": false,
           "display_name": "PHP 8.4",
           "eol": false,
           "lts": false,
-          "recommended": false,
-          "checksums": {},
+          "checksums": {
+            "windowsX64": "dbae154a0a89791f36c3d48e68bae797878333e7d6cb5721e74617de59b63ab7"
+          },
           "urls": {
-            "windowsX64": "https://windows.php.net/downloads/releases/php-8.4.22-nts-Win32-vs17-x64.zip",
-            "linuxX64": "https://dl.static-php.dev/static-php-cli/bulk/php-8.4.22-fpm-linux-x86_64.tar.gz",
-            "linuxArm64": "https://dl.static-php.dev/static-php-cli/bulk/php-8.4.22-fpm-linux-aarch64.tar.gz",
-            "macOSX64": "https://dl.static-php.dev/static-php-cli/bulk/php-8.4.22-fpm-macos-x86_64.tar.gz",
-            "macOSArm64": "https://dl.static-php.dev/static-php-cli/bulk/php-8.4.22-fpm-macos-aarch64.tar.gz"
+            "windowsX64": "https://windows.php.net/downloads/releases/php-8.4.27-1-nts-Win32-vs17-x64.zip",
+            "windowsArm64": null,
+            "linuxX64": "https://dl.static-php.dev/static-php-cli/bulk/php-8.4.23-fpm-linux-x86_64.tar.gz",
+            "linuxArm64": "https://dl.static-php.dev/static-php-cli/bulk/php-8.4.23-fpm-linux-aarch64.tar.gz",
+            "macOSX64": "https://dl.static-php.dev/static-php-cli/bulk/php-8.4.23-fpm-macos-x86_64.tar.gz",
+            "macOSArm64": "https://dl.static-php.dev/static-php-cli/bulk/php-8.4.23-fpm-macos-aarch64.tar.gz"
           }
         },
         {
           "id": "php-8.3",
-          "version": "8.3.31",
+          "version": "8.3.36",
           "selected": false,
-          "display_name": "PHP 8.3 (LTS)",
+          "display_name": "PHP 8.3",
           "eol": false,
-          "lts": true,
-          "recommended": false,
-          "checksums": {},
+          "lts": false,
+          "checksums": {
+            "windowsX64": "1a097d52b7a68622cdc723073b61cc70caf79c941218ff65b2d8441dbc6b10d4"
+          },
           "urls": {
-            "windowsX64": "https://windows.php.net/downloads/releases/php-8.3.31-nts-Win32-vs16-x64.zip",
-            "linuxX64": "https://dl.static-php.dev/static-php-cli/bulk/php-8.3.30-fpm-linux-x86_64.tar.gz",
-            "linuxArm64": "https://dl.static-php.dev/static-php-cli/bulk/php-8.3.30-fpm-linux-aarch64.tar.gz",
-            "macOSX64": "https://dl.static-php.dev/static-php-cli/bulk/php-8.3.30-fpm-macos-x86_64.tar.gz",
-            "macOSArm64": "https://dl.static-php.dev/static-php-cli/bulk/php-8.3.30-fpm-macos-aarch64.tar.gz"
+            "windowsX64": "https://windows.php.net/downloads/releases/php-8.3.36-1-nts-Win32-vs16-x64.zip",
+            "windowsArm64": null,
+            "linuxX64": "https://dl.static-php.dev/static-php-cli/bulk/php-8.3.32-fpm-linux-x86_64.tar.gz",
+            "linuxArm64": "https://dl.static-php.dev/static-php-cli/bulk/php-8.3.32-fpm-linux-aarch64.tar.gz",
+            "macOSX64": "https://dl.static-php.dev/static-php-cli/bulk/php-8.3.32-fpm-macos-x86_64.tar.gz",
+            "macOSArm64": "https://dl.static-php.dev/static-php-cli/bulk/php-8.3.32-fpm-macos-aarch64.tar.gz"
           }
         },
         {
           "id": "php-8.2",
-          "version": "8.2.31",
+          "version": "8.2.35",
           "selected": false,
           "display_name": "PHP 8.2",
           "eol": false,
           "lts": false,
-          "recommended": false,
-          "checksums": {},
+          "checksums": {
+            "windowsX64": "ebe75134c03869826cb1714d31fd5eb96afefa6d9fd35d786971c03020e7bce2"
+          },
           "urls": {
-            "windowsX64": "https://windows.php.net/downloads/releases/php-8.2.31-nts-Win32-vs16-x64.zip",
-            "linuxX64": "https://dl.static-php.dev/static-php-cli/bulk/php-8.2.30-fpm-linux-x86_64.tar.gz",
-            "linuxArm64": "https://dl.static-php.dev/static-php-cli/bulk/php-8.2.30-fpm-linux-aarch64.tar.gz",
-            "macOSX64": "https://dl.static-php.dev/static-php-cli/bulk/php-8.2.30-fpm-macos-x86_64.tar.gz",
-            "macOSArm64": "https://dl.static-php.dev/static-php-cli/bulk/php-8.2.30-fpm-macos-aarch64.tar.gz"
+            "windowsX64": "https://windows.php.net/downloads/releases/php-8.2.35-1-nts-Win32-vs16-x64.zip",
+            "windowsArm64": null,
+            "linuxX64": "https://dl.static-php.dev/static-php-cli/bulk/php-8.2.32-fpm-linux-x86_64.tar.gz",
+            "linuxArm64": "https://dl.static-php.dev/static-php-cli/bulk/php-8.2.32-fpm-linux-aarch64.tar.gz",
+            "macOSX64": "https://dl.static-php.dev/static-php-cli/bulk/php-8.2.32-fpm-macos-x86_64.tar.gz",
+            "macOSArm64": "https://dl.static-php.dev/static-php-cli/bulk/php-8.2.32-fpm-macos-aarch64.tar.gz"
           }
         },
         {
@@ -327,206 +335,6 @@
           "lts": false,
           "checksum": null,
           "url": "https://www.adminer.org/static/download/5.4.2/adminer-5.4.2.php"
-        }
-      ]
-    },
-    "node": {
-      "versions": [
-        {
-          "id": "node-26",
-          "version": "26.4.0",
-          "selected": false,
-          "display_name": "Node.js 26.4.0 (Stable)",
-          "eol": false,
-          "lts": false,
-          "checksums": {},
-          "urls": {
-            "windowsX64": "https://nodejs.org/dist/v26.4.0/node-v26.4.0-win-x64.zip",
-            "windowsArm64": "https://nodejs.org/dist/v26.4.0/node-v26.4.0-win-arm64.zip",
-            "linuxX64": "https://nodejs.org/dist/v26.4.0/node-v26.4.0-linux-x64.tar.xz",
-            "linuxArm64": "https://nodejs.org/dist/v26.4.0/node-v26.4.0-linux-arm64.tar.xz",
-            "macOSX64": "https://nodejs.org/dist/v26.4.0/node-v26.4.0-darwin-x64.tar.gz",
-            "macOSArm64": "https://nodejs.org/dist/v26.4.0/node-v26.4.0-darwin-arm64.tar.gz"
-          }
-        },
-        {
-          "id": "node-24",
-          "version": "24.18.0",
-          "selected": true,
-          "display_name": "Node.js 24.18.0 (LTS)",
-          "eol": false,
-          "lts": true,
-          "checksums": {},
-          "urls": {
-            "windowsX64": "https://nodejs.org/dist/v24.18.0/node-v24.18.0-win-x64.zip",
-            "windowsArm64": "https://nodejs.org/dist/v24.18.0/node-v24.18.0-win-arm64.zip",
-            "linuxX64": "https://nodejs.org/dist/v24.18.0/node-v24.18.0-linux-x64.tar.xz",
-            "linuxArm64": "https://nodejs.org/dist/v24.18.0/node-v24.18.0-linux-arm64.tar.xz",
-            "macOSX64": "https://nodejs.org/dist/v24.18.0/node-v24.18.0-darwin-x64.tar.gz",
-            "macOSArm64": "https://nodejs.org/dist/v24.18.0/node-v24.18.0-darwin-arm64.tar.gz"
-          }
-        },
-        {
-          "id": "node-22",
-          "version": "22.23.1",
-          "selected": false,
-          "display_name": "Node.js 22.23.1 (LTS)",
-          "eol": false,
-          "lts": true,
-          "checksums": {},
-          "urls": {
-            "windowsX64": "https://nodejs.org/dist/v22.23.1/node-v22.23.1-win-x64.zip",
-            "windowsArm64": "https://nodejs.org/dist/v22.23.1/node-v22.23.1-win-arm64.zip",
-            "linuxX64": "https://nodejs.org/dist/v22.23.1/node-v22.23.1-linux-x64.tar.xz",
-            "linuxArm64": "https://nodejs.org/dist/v22.23.1/node-v22.23.1-linux-arm64.tar.xz",
-            "macOSX64": "https://nodejs.org/dist/v22.23.1/node-v22.23.1-darwin-x64.tar.gz",
-            "macOSArm64": "https://nodejs.org/dist/v22.23.1/node-v22.23.1-darwin-arm64.tar.gz"
-          }
-        },
-        {
-          "id": "node-20",
-          "version": "20.20.2",
-          "selected": false,
-          "display_name": "Node.js 20.20.2 (LTS)",
-          "eol": false,
-          "lts": true,
-          "checksums": {},
-          "urls": {
-            "windowsX64": "https://nodejs.org/dist/v20.20.2/node-v20.20.2-win-x64.zip",
-            "windowsArm64": "https://nodejs.org/dist/v20.20.2/node-v20.20.2-win-arm64.zip",
-            "linuxX64": "https://nodejs.org/dist/v20.20.2/node-v20.20.2-linux-x64.tar.xz",
-            "linuxArm64": "https://nodejs.org/dist/v20.20.2/node-v20.20.2-linux-arm64.tar.xz",
-            "macOSX64": "https://nodejs.org/dist/v20.20.2/node-v20.20.2-darwin-x64.tar.gz",
-            "macOSArm64": "https://nodejs.org/dist/v20.20.2/node-v20.20.2-darwin-arm64.tar.gz"
-          }
-        }
-      ]
-    },
-    "python": {
-      "versions": [
-        {
-          "id": "python-3.14",
-          "version": "3.14.6",
-          "selected": true,
-          "display_name": "Python 3.14.6 (Stable)",
-          "eol": false,
-          "lts": false,
-          "checksums": {},
-          "urls": {
-            "windowsX64": "https://www.python.org/ftp/python/3.14.6/python-3.14.6-embed-amd64.zip",
-            "windowsArm64": "https://www.python.org/ftp/python/3.14.6/python-3.14.6-embed-arm64.zip",
-            "linuxX64": "https://github.com/astral-sh/python-build-standalone/releases/download/20260623/cpython-3.14.6+20260623-x86_64-unknown-linux-gnu-install_only.tar.gz",
-            "linuxArm64": "https://github.com/astral-sh/python-build-standalone/releases/download/20260623/cpython-3.14.6+20260623-aarch64-unknown-linux-gnu-install_only.tar.gz",
-            "macOSX64": "https://github.com/astral-sh/python-build-standalone/releases/download/20260623/cpython-3.14.6+20260623-x86_64-apple-darwin-install_only.tar.gz",
-            "macOSArm64": "https://github.com/astral-sh/python-build-standalone/releases/download/20260623/cpython-3.14.6+20260623-aarch64-apple-darwin-install_only.tar.gz"
-          }
-        },
-        {
-          "id": "python-3.13",
-          "version": "3.13.14",
-          "selected": false,
-          "display_name": "Python 3.13.14 (Stable)",
-          "eol": false,
-          "lts": false,
-          "checksums": {},
-          "urls": {
-            "windowsX64": "https://www.python.org/ftp/python/3.13.14/python-3.13.14-embed-amd64.zip",
-            "windowsArm64": "https://www.python.org/ftp/python/3.13.14/python-3.13.14-embed-arm64.zip",
-            "linuxX64": "https://github.com/astral-sh/python-build-standalone/releases/download/20260623/cpython-3.13.14+20260623-x86_64-unknown-linux-gnu-install_only.tar.gz",
-            "linuxArm64": "https://github.com/astral-sh/python-build-standalone/releases/download/20260623/cpython-3.13.14+20260623-aarch64-unknown-linux-gnu-install_only.tar.gz",
-            "macOSX64": "https://github.com/astral-sh/python-build-standalone/releases/download/20260623/cpython-3.13.14+20260623-x86_64-apple-darwin-install_only.tar.gz",
-            "macOSArm64": "https://github.com/astral-sh/python-build-standalone/releases/download/20260623/cpython-3.13.14+20260623-aarch64-apple-darwin-install_only.tar.gz"
-          }
-        }
-      ]
-    },
-    "go": {
-      "versions": [
-        {
-          "id": "go-1.26",
-          "version": "1.26.4",
-          "selected": true,
-          "display_name": "Go 1.26.4 (Stable)",
-          "eol": false,
-          "lts": false,
-          "checksums": {},
-          "urls": {
-            "windowsX64": "https://go.dev/dl/go1.26.4.windows-amd64.zip",
-            "windowsArm64": "https://go.dev/dl/go1.26.4.windows-arm64.zip",
-            "linuxX64": "https://go.dev/dl/go1.26.4.linux-amd64.tar.gz",
-            "linuxArm64": "https://go.dev/dl/go1.26.4.linux-arm64.tar.gz",
-            "macOSX64": "https://go.dev/dl/go1.26.4.darwin-amd64.tar.gz",
-            "macOSArm64": "https://go.dev/dl/go1.26.4.darwin-arm64.tar.gz"
-          }
-        },
-        {
-          "id": "go-1.25",
-          "version": "1.25.11",
-          "selected": false,
-          "display_name": "Go 1.25.11 (Stable)",
-          "eol": false,
-          "lts": false,
-          "checksums": {},
-          "urls": {
-            "windowsX64": "https://go.dev/dl/go1.25.11.windows-amd64.zip",
-            "windowsArm64": "https://go.dev/dl/go1.25.11.windows-arm64.zip",
-            "linuxX64": "https://go.dev/dl/go1.25.11.linux-amd64.tar.gz",
-            "linuxArm64": "https://go.dev/dl/go1.25.11.linux-arm64.tar.gz",
-            "macOSX64": "https://go.dev/dl/go1.25.11.darwin-amd64.tar.gz",
-            "macOSArm64": "https://go.dev/dl/go1.25.11.darwin-arm64.tar.gz"
-          }
-        }
-      ]
-    },
-    "ruby": {
-      "versions": [
-        {
-          "id": "ruby-4.0",
-          "version": "4.0.5",
-          "selected": true,
-          "display_name": "Ruby 4.0.5 (Stable)",
-          "eol": false,
-          "lts": false,
-          "checksums": {},
-          "urls": {
-            "windowsX64": "https://github.com/oneclick/rubyinstaller2/releases/download/RubyInstaller-4.0.5-1/rubyinstaller-4.0.5-1-x64.7z",
-            "linuxX64": "https://cache.ruby-lang.org/pub/ruby/4.0/ruby-4.0.5.tar.xz",
-            "linuxArm64": "https://cache.ruby-lang.org/pub/ruby/4.0/ruby-4.0.5.tar.xz",
-            "macOSX64": "https://cache.ruby-lang.org/pub/ruby/4.0/ruby-4.0.5.tar.xz",
-            "macOSArm64": "https://cache.ruby-lang.org/pub/ruby/4.0/ruby-4.0.5.tar.xz"
-          }
-        },
-        {
-          "id": "ruby-3.4",
-          "version": "3.4.9",
-          "selected": false,
-          "display_name": "Ruby 3.4.9 (Stable)",
-          "eol": false,
-          "lts": false,
-          "checksums": {},
-          "urls": {
-            "windowsX64": "https://github.com/oneclick/rubyinstaller2/releases/download/RubyInstaller-3.4.9-1/rubyinstaller-3.4.9-1-x64.7z",
-            "linuxX64": "https://cache.ruby-lang.org/pub/ruby/3.4/ruby-3.4.9.tar.xz",
-            "linuxArm64": "https://cache.ruby-lang.org/pub/ruby/3.4/ruby-3.4.9.tar.xz",
-            "macOSX64": "https://cache.ruby-lang.org/pub/ruby/3.4/ruby-3.4.9.tar.xz",
-            "macOSArm64": "https://cache.ruby-lang.org/pub/ruby/3.4/ruby-3.4.9.tar.xz"
-          }
-        },
-        {
-          "id": "ruby-3.3",
-          "version": "3.3.7",
-          "selected": false,
-          "display_name": "Ruby 3.3.7 (Stable)",
-          "eol": false,
-          "lts": false,
-          "checksums": {},
-          "urls": {
-            "windowsX64": "https://github.com/oneclick/rubyinstaller2/releases/download/RubyInstaller-3.3.7-1/rubyinstaller-3.3.7-1-x64.7z",
-            "linuxX64": "https://cache.ruby-lang.org/pub/ruby/3.3/ruby-3.3.7.tar.xz",
-            "linuxArm64": "https://cache.ruby-lang.org/pub/ruby/3.3/ruby-3.3.7.tar.xz",
-            "macOSX64": "https://cache.ruby-lang.org/pub/ruby/3.3/ruby-3.3.7.tar.xz",
-            "macOSArm64": "https://cache.ruby-lang.org/pub/ruby/3.3/ruby-3.3.7.tar.xz"
-          }
         }
       ]
     }

@@ -1,15 +1,13 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "Default capability for the main window. Includes core permissions for all custom commands and opener plugin for file operations.",
+  "description": "Least-privilege capability for the main window: custom CHAMP commands and events, opening http(s) links, and installing signed updates.",
   "windows": ["main"],
   "permissions": [
     "core:default",
-    "core:event:allow-emit",
-    "core:event:allow-listen",
-    "core:event:allow-unlisten",
-    "opener:default",
-    "opener:allow-reveal-item-in-dir",
-    "opener:allow-open-url"
+    "opener:allow-open-url",
+    "opener:allow-default-urls",
+    "updater:default",
+    "process:allow-restart"
   ]
 }

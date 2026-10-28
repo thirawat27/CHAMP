@@ -1,12 +1,21 @@
 /**
  * ServiceCard Component
  *
- * Displays a service's status, port, and control buttons.
- * Shows real-time state updates and error messages.
+ * One module of the local stack: status light, port readout, last error, and
+ * the start/stop/restart controls.
  */
 
 import { openUrl } from "@tauri-apps/plugin-opener";
-import { Database, Globe2, LoaderCircle, Play, RefreshCw, Square, Terminal } from "lucide-react";
+import {
+  Database,
+  FileCode2,
+  Globe2,
+  LoaderCircle,
+  Play,
+  RotateCw,
+  Square,
+  Stethoscope,
+} from "lucide-react";
 import { useTranslation } from "../stores/languageStore";
 import { AudioManager } from "../utils/audioManager";
 import {
@@ -17,68 +26,42 @@ import {
   ServiceType,
 } from "../types/services";
 
-/**
- * Props for the ServiceCard component
- */
+const SERVICE_ICONS = {
+  [ServiceType.Caddy]: Globe2,
+  [ServiceType.PhpFpm]: FileCode2,
+  [ServiceType.MySQL]: Database,
+  [ServiceType.PostgreSQL]: Database,
+};
+
 interface ServiceCardProps {
-  /** Type of service (Caddy, PHP-FPM, or MySQL) */
   serviceType: ServiceType;
-  /** Current state of the service */
   state: ServiceState;
-  /** Port number the service is running on */
   port?: number;
-  /** Error message if service is in error state */
   error?: string;
   /** Whether the service is currently processing a command */
   busy?: boolean;
   /** Label to show when busy (e.g., "Starting...", "Stopping...") */
   busyLabel?: string;
-  /** Callback when start button is clicked */
+  /** True for the database that is not part of the selected stack */
+  standby?: boolean;
   onStart: () => void;
-  /** Callback when stop button is clicked */
   onStop: () => void;
-  /** Callback when restart button is clicked */
   onRestart: () => void;
-  /** Additional HTML attributes */
+  /** Open Log Doctor for this service (shown on errors) */
+  onDiagnose?: () => void;
   [key: string]: unknown;
 }
 
-/**
- * Icon mapping for each service type
- */
-const SERVICE_ICONS = {
-  [ServiceType.Caddy]: Globe2,
-  [ServiceType.PhpFpm]: Terminal,
-  [ServiceType.MySQL]: Database,
-  [ServiceType.PostgreSQL]: Database,
-};
-
-/**
- * Generate the service URL based on service type and port
- *
- * @param serviceType - The type of service
- * @param port - The port number
- * @returns The service URL string
- */
-function getServiceUrl(serviceType: ServiceType, port: number) {
+/** Address shown under the port: a link for the web server, plain text otherwise. */
+function serviceAddress(serviceType: ServiceType, port: number) {
   return {
     [ServiceType.Caddy]: `http://localhost:${port}`,
-    [ServiceType.PhpFpm]: `tcp://127.0.0.1:${port}`,
-    [ServiceType.MySQL]: `mysql://127.0.0.1:${port}`,
-    [ServiceType.PostgreSQL]: `postgresql://127.0.0.1:${port}`,
+    [ServiceType.PhpFpm]: `127.0.0.1:${port}`,
+    [ServiceType.MySQL]: `127.0.0.1:${port}`,
+    [ServiceType.PostgreSQL]: `127.0.0.1:${port}`,
   }[serviceType];
 }
 
-/**
- * ServiceCard component displays a service's status and controls
- *
- * Shows the service name, description, current state, port, and URL.
- * Provides buttons to start, stop, and restart the service.
- * Displays error messages when the service is in an error state.
- *
- * @param props - Component props
- * @returns ServiceCard component
- */
 export function ServiceCard({
   serviceType,
   state,
@@ -86,31 +69,23 @@ export function ServiceCard({
   error,
   busy = false,
   busyLabel,
+  standby = false,
   onStart,
   onStop,
   onRestart,
+  onDiagnose,
   ...props
 }: ServiceCardProps) {
   const { t } = useTranslation();
+  const address = serviceAddress(serviceType, port);
   const Icon = SERVICE_ICONS[serviceType];
-  const displayName = SERVICE_DISPLAY_NAMES[serviceType];
-  const description = SERVICE_DESCRIPTIONS[serviceType];
-  const serviceUrl = getServiceUrl(serviceType, port);
   const isRunning = state === ServiceState.Running;
   const isTransitioning =
     busy || state === ServiceState.Starting || state === ServiceState.Stopping;
   const isError = state === ServiceState.Error;
   const actionLabel = busyLabel || (state === ServiceState.Stopping ? t.stopping : t.starting);
-  const statusClass = {
-    [ServiceState.Stopped]: "status-gray",
-    [ServiceState.Starting]: "status-blue",
-    [ServiceState.Running]: "status-green",
-    [ServiceState.Stopping]: "status-orange",
-    [ServiceState.Error]: "status-red",
-  }[state];
 
-  // Map service states to translation keys
-  const stateTranslations: Record<ServiceState, string> = {
+  const stateLabels: Record<ServiceState, string> = {
     [ServiceState.Stopped]: t.stopped,
     [ServiceState.Starting]: t.starting,
     [ServiceState.Running]: t.running,
@@ -120,59 +95,73 @@ export function ServiceCard({
 
   return (
     <article
-      className={`service-card ${isError ? "has-error" : ""}`}
+      className={`service-card state-${state}${standby ? " is-standby" : ""}`}
       data-testid={`service-card-${serviceType}`}
       {...props}
     >
-      <div className="service-card-header">
+      <header className="service-card-header">
+        <span className="service-icon" aria-hidden="true">
+          <Icon size={17} />
+          <span className="service-led" />
+        </span>
         <div className="service-identity">
-          <span className="service-icon">
-            <Icon size={18} />
-          </span>
-          <div>
-            <h3>{displayName}</h3>
-            <p>{description}</p>
-          </div>
+          <h3>{SERVICE_DISPLAY_NAMES[serviceType]}</h3>
+          <p>{SERVICE_DESCRIPTIONS[serviceType]}</p>
         </div>
-        <span
-          className={`status-pill ${state} ${statusClass}`}
-          data-testid={`service-state-${serviceType}`}
-        >
-          {stateTranslations[state]}
+        <span className={`status-pill ${state}`} data-testid={`service-state-${serviceType}`}>
+          {stateLabels[state]}
         </span>
-      </div>
+      </header>
 
-      <div className="service-meta">
-        <span>
-          {t.port}: {port}
+      <div className="service-readout">
+        <span className="readout-label">{t.port}</span>
+        <span className="readout-value" data-testid={`service-port-${serviceType}`}>
+          {port}
         </span>
-        <span>
-          URL:{" "}
+        {serviceType === ServiceType.Caddy ? (
           <button
             type="button"
-            className="service-url-button"
+            className="readout-address link"
             onClick={() => {
               AudioManager.playClick();
-              openUrl(serviceUrl).catch((openError) =>
+              openUrl(address).catch((openError) =>
                 console.error("Failed to open service URL:", openError)
               );
             }}
-            onMouseEnter={() => AudioManager.playHover()}
           >
-            {serviceUrl}
+            {address}
           </button>
-        </span>
+        ) : (
+          <code className="readout-address">{address}</code>
+        )}
       </div>
+
+      {standby && !isRunning && <p className="service-standby">{t.notInStack}</p>}
 
       {isError && error && (
         <div className="service-error" title={error}>
-          {error.length > 180 ? `${error.substring(0, 180)}...` : error}
+          {error.length > 180 ? `${error.substring(0, 180)}…` : error}
         </div>
       )}
 
       <div className="service-actions">
+        {isError && onDiagnose && (
+          <button
+            type="button"
+            onClick={() => {
+              AudioManager.playClick();
+              onDiagnose();
+            }}
+            className="btn-diagnose"
+            data-testid={`diagnose-button-${serviceType}`}
+          >
+            <Stethoscope size={15} />
+            {t.diagnose}
+          </button>
+        )}
         {!isRunning ? (
           <button
+            type="button"
             onClick={() => {
               AudioManager.playClick();
               onStart();
@@ -180,7 +169,6 @@ export function ServiceCard({
             disabled={isTransitioning}
             className="btn-start"
             data-testid={`start-button-${serviceType}`}
-            onMouseEnter={() => AudioManager.playHover()}
           >
             {isTransitioning ? (
               <LoaderCircle size={15} className="spin-icon" />
@@ -192,6 +180,7 @@ export function ServiceCard({
         ) : (
           <>
             <button
+              type="button"
               onClick={() => {
                 AudioManager.playClick();
                 onStop();
@@ -199,16 +188,16 @@ export function ServiceCard({
               disabled={isTransitioning}
               className="btn-stop"
               data-testid={`stop-button-${serviceType}`}
-              onMouseEnter={() => AudioManager.playHover()}
             >
               {isTransitioning ? (
                 <LoaderCircle size={14} className="spin-icon" />
               ) : (
-                <Square size={14} />
+                <Square size={13} />
               )}
               {isTransitioning ? actionLabel : t.stop}
             </button>
             <button
+              type="button"
               onClick={() => {
                 AudioManager.playClick();
                 onRestart();
@@ -216,10 +205,10 @@ export function ServiceCard({
               disabled={isTransitioning}
               className="btn-restart"
               data-testid={`restart-button-${serviceType}`}
-              onMouseEnter={() => AudioManager.playHover()}
+              aria-label={busy ? t.restarting : t.restart}
+              title={t.restart}
             >
-              {busy ? <LoaderCircle size={15} className="spin-icon" /> : <RefreshCw size={15} />}
-              {busy ? t.restarting : t.restart}
+              {busy ? <LoaderCircle size={15} className="spin-icon" /> : <RotateCw size={15} />}
             </button>
           </>
         )}

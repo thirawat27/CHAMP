@@ -1,7 +1,9 @@
 // Modules
+mod agent;
 mod commands;
 mod config;
 mod constants;
+mod doctor;
 mod error;
 mod process;
 mod runtime;
@@ -43,6 +45,8 @@ impl Default for AppState {
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
+        .plugin(tauri_plugin_process::init())
         .manage(AppState::new())
         .on_menu_event(handle_menu_event)
         .setup(|app| {
@@ -106,16 +110,18 @@ pub fn run() {
                 Err(e) => eprintln!("Warning: failed to get Tauri resource dir: {e}"),
             }
 
+            if crate::config::AppSettings::load().agent_connector_enabled {
+                let app_handle = app.handle().clone();
+                tauri::async_runtime::spawn(async move {
+                    agent::apply(&app_handle).await;
+                });
+            }
+
             if crate::config::AppSettings::load().auto_start_services {
                 let app_handle = app.handle().clone();
                 tauri::async_runtime::spawn(async move {
-                    if let Some(state) = app_handle.try_state::<AppState>() {
-                        let mut manager = state
-                            .process_manager
-                            .lock()
-                            .unwrap_or_else(std::sync::PoisonError::into_inner);
-                        let _ = manager.start_all();
-                    }
+                    let _ = commands::run_with_manager(&app_handle, |manager| manager.start_all())
+                        .await;
                 });
             }
 
@@ -155,6 +161,7 @@ pub fn run() {
             commands::download_runtime_with_skip,
             commands::get_available_packages_cmd,
             commands::refresh_runtime_catalog,
+            commands::refresh_php_catalog,
             commands::get_runtime_platform,
             commands::update_package_selection,
             commands::get_installed_php_versions,
@@ -165,14 +172,21 @@ pub fn run() {
             commands::check_existing_components,
             commands::get_runtime_dir,
             commands::get_app_paths,
-            commands::create_project_template,
             commands::get_system_metrics,
             commands::get_download_dir,
             commands::open_folder,
             commands::open_project_terminal,
-            commands::open_manual,
             commands::reset_installation,
-            commands::cleanup_all_services,
+            commands::prepare_for_update,
+            // AI agent connector (MCP)
+            agent::get_agent_connector_status,
+            agent::configure_agent_connector,
+            agent::regenerate_agent_token,
+            // Log Doctor
+            doctor::diagnose_service,
+            doctor::get_log_doctor_status,
+            doctor::download_log_doctor_model,
+            doctor::remove_log_doctor_model,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
@@ -198,13 +212,7 @@ fn handle_menu_event(app: &AppHandle, event: MenuEvent) {
         "reset-installation" => {
             let app = app.clone();
             tauri::async_runtime::spawn(async move {
-                if let Some(state) = app.try_state::<AppState>() {
-                    let mut manager = state
-                        .process_manager
-                        .lock()
-                        .unwrap_or_else(std::sync::PoisonError::into_inner);
-                    let _ = manager.stop_all();
-                }
+                let _ = commands::run_with_manager(&app, |manager| manager.stop_all()).await;
                 if commands::reset_runtime_dir().await.is_ok() {
                     let _ = app.emit("show-wizard", ());
                 }
@@ -241,17 +249,10 @@ fn handle_menu_event(app: &AppHandle, event: MenuEvent) {
 }
 
 fn setup_system_tray(app: &tauri::App) -> std::result::Result<(), Box<dyn std::error::Error>> {
-    // Embed the icon directly in the binary to ensure it's always available
-    // Use the main icon.png which should contain the CHAMP logo
-    let icon_bytes = include_bytes!("../icons/icon.png");
-
-    // Load and decode the embedded image — fall back to a blank 1×1 icon on failure
-    let tray_icon = match image::load_from_memory(icon_bytes) {
-        Ok(img) => {
-            let rgba = img.to_rgba8();
-            let (w, h) = rgba.dimensions();
-            Image::new_owned(rgba.into_raw(), w, h)
-        }
+    // Embed a tray-sized icon in the binary so it is always available. 64px
+    // stays sharp on HiDPI trays without shipping the 190 KB master icon.
+    let tray_icon = match Image::from_bytes(include_bytes!("../icons/64x64.png")) {
+        Ok(icon) => icon,
         Err(e) => {
             eprintln!("Warning: failed to decode tray icon: {e}. Using blank icon.");
             // 1×1 transparent RGBA fallback so the app still starts

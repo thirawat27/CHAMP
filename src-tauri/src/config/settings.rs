@@ -3,8 +3,6 @@ use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::PathBuf;
 
-const APP_DIR_NAME: &str = "CHAMP";
-
 pub const DEFAULT_PORTS: Ports = Ports {
     web: 8080,
     php: 9000,
@@ -27,15 +25,25 @@ pub struct AppSettings {
     pub mysql_port: u16,
     #[serde(default = "default_postgresql_port")]
     pub postgresql_port: u16,
-    pub project_root: String,
     #[serde(default)]
     pub auto_start_services: bool,
     #[serde(default)]
     pub package_selection: PackageSelection,
     #[serde(default = "default_language")]
     pub language: String,
-    #[serde(default = "default_sound_enabled")]
+    #[serde(default = "default_true")]
     pub sound_enabled: bool,
+    /// Check GitHub Releases for a newer CHAMP once a day on startup.
+    #[serde(default = "default_true")]
+    pub auto_check_updates: bool,
+    /// Local MCP server for AI coding agents (see `agent` module).
+    #[serde(default)]
+    pub agent_connector_enabled: bool,
+    /// Hide and refuse agent tools that start/stop services.
+    #[serde(default)]
+    pub agent_connector_read_only: bool,
+    #[serde(default = "default_agent_connector_port")]
+    pub agent_connector_port: u16,
 }
 
 impl Default for AppSettings {
@@ -45,11 +53,14 @@ impl Default for AppSettings {
             php_port: DEFAULT_PORTS.php,
             mysql_port: DEFAULT_PORTS.mysql,
             postgresql_port: DEFAULT_PORTS.postgresql,
-            project_root: default_project_root().to_string_lossy().to_string(),
             auto_start_services: false,
             package_selection: PackageSelection::default(),
             language: default_language(),
-            sound_enabled: default_sound_enabled(),
+            sound_enabled: true,
+            auto_check_updates: true,
+            agent_connector_enabled: false,
+            agent_connector_read_only: false,
+            agent_connector_port: default_agent_connector_port(),
         }
     }
 }
@@ -111,15 +122,6 @@ impl AppSettings {
     pub fn validate(&self) -> Result<Vec<String>, Vec<String>> {
         let mut warnings = Vec::new();
         let mut errors = Vec::new();
-
-        // Check if project root exists
-        let project_path = PathBuf::from(&self.project_root);
-        if !project_path.exists() {
-            warnings.push(format!(
-                "Project root '{}' does not exist. It will be created when services start.",
-                self.project_root
-            ));
-        }
 
         // Check for port conflicts using the shared availability primitive.
         if !crate::config::is_port_available(self.web_port) {
@@ -194,19 +196,12 @@ fn default_language() -> String {
     "en".to_string()
 }
 
-fn default_sound_enabled() -> bool {
+fn default_true() -> bool {
     true
 }
 
-fn default_project_root() -> PathBuf {
-    get_app_data_paths()
-        .map(|paths| paths.projects_dir)
-        .unwrap_or_else(|_| {
-            dirs::data_local_dir()
-                .unwrap_or_else(|| dirs::home_dir().unwrap_or_default())
-                .join(APP_DIR_NAME)
-                .join("projects")
-        })
+fn default_agent_connector_port() -> u16 {
+    47823
 }
 
 #[cfg(test)]

@@ -1,15 +1,6 @@
 import { HttpsTunnelStatus } from "../../types/services";
 
-export interface AppPaths {
-  base_dir: string;
-  portable: boolean;
-  runtime_dir: string;
-  config_dir: string;
-  mysql_data_dir: string;
-  postgresql_data_dir: string;
-  logs_dir: string;
-  projects_dir: string;
-}
+export type { AppPaths } from "../../types/services";
 
 export const SOURCE_REPO_URL = "https://github.com/thirawat27/CHAMP";
 

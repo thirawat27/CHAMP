@@ -18,28 +18,20 @@ export interface Translations {
   warning: string;
   info: string;
   confirm: string;
-  yes: string;
   no: string;
   retry: string;
-  delete: string;
-  edit: string;
-  add: string;
   remove: string;
   refresh: string;
   more: string;
   search: string;
   filter: string;
-  sort: string;
   back: string;
   next: string;
-  previous: string;
-  finish: string;
   done: string;
   install: string;
   installed: string;
   available: string;
   active: string;
-  inactive: string;
   enabled: string;
   disabled: string;
   version: string;
@@ -59,8 +51,6 @@ export interface Translations {
   stopped: string;
   failed: string;
   pending: string;
-  inProgress: string;
-  completed: string;
 
   // App
   appName: string;
@@ -69,17 +59,12 @@ export interface Translations {
   // Dashboard
   dashboard: string;
   services: string;
-  serviceStatus: string;
-  allServices: string;
-  webServer: string;
   php: string;
   mysql: string;
   database: string;
   phpMyAdmin: string;
   adminer: string;
   caddy: string;
-  phpFPM: string;
-  mariaDB: string;
   projects: string;
   logs: string;
   website: string;
@@ -88,6 +73,79 @@ export interface Translations {
   openDatabaseTool: string;
   openProjectsFolder: string;
   openLogsFolder: string;
+  network: string;
+  phpUpdateTo: string;
+  phpUpdateNow: string;
+  phpUpdating: string;
+  phpUpdated: string;
+  manual: string;
+  manualTitle: string;
+  manualSearch: string;
+  manualNoResults: string;
+  manualContents: string;
+  stack: string;
+  requestPath: string;
+  browser: string;
+  shortcuts: string;
+  notInStack: string;
+  agentActivityTitle: string;
+  agentActivityDone: string;
+  updateAvailableTitle: string;
+  updateRestartNote: string;
+  updateInstalling: string;
+  updateInstall: string;
+  updateLater: string;
+  updatesTitle: string;
+  updateCheck: string;
+  updateChecking: string;
+  updateCurrent: string;
+  updateLastChecked: string;
+  updateNeverChecked: string;
+  updateReleaseNotes: string;
+  updateFailed: string;
+  autoCheckUpdates: string;
+  agentConnectorTitle: string;
+  agentConnectorDescription: string;
+  agentConnectorEnable: string;
+  agentConnectorRunning: string;
+  agentConnectorStopped: string;
+  agentConnectorReadOnly: string;
+  agentConnectorReadOnlyHint: string;
+  agentConnectorControlHint: string;
+  agentConnectorPort: string;
+  agentConnectorEndpoint: string;
+  agentConnectorClaudeCode: string;
+  agentConnectorJson: string;
+  agentConnectorCopy: string;
+  agentConnectorCopied: string;
+  agentConnectorTokenHint: string;
+  agentConnectorRegenerate: string;
+  diagnose: string;
+  logDoctor: string;
+  logDoctorDescription: string;
+  logDoctorReading: string;
+  logDoctorRecheck: string;
+  logDoctorNoMatch: string;
+  logDoctorNoMatchHint: string;
+  logDoctorNoLogs: string;
+  logDoctorEvidence: string;
+  logDoctorSteps: string;
+  logDoctorLogLines: string;
+  logDoctorKnownError: string;
+  logDoctorAiMatch: string;
+  logDoctorAiReady: string;
+  logDoctorAiOff: string;
+  logDoctorEnableAi: string;
+  logDoctorDownloading: string;
+  logDoctorRemoveAi: string;
+  logDoctorAiTitle: string;
+  logDoctorAiSettingsDescription: string;
+  logDoctorAiNotInstalled: string;
+  doctorActionOpenSettings: string;
+  doctorActionOpenUrl: string;
+  doctorActionStartPhp: string;
+  doctorActionOpenMysqlData: string;
+  doctorActionOpenPostgresqlData: string;
   httpsPreview: string;
   publicHttpsDomain: string;
   httpsTunnelDescription: string;
@@ -104,44 +162,13 @@ export interface Translations {
   httpsTunnelDevOnly: string;
   terminal: string;
   openTerminal: string;
-  projectTemplates: string;
-  createProject: string;
-  tools: string;
-  developerTools: string;
-  smartTerminal: string;
-  smartTerminalDescription: string;
-  runtimeInventory: string;
-  runtimeInventoryDescription: string;
-  configFolder: string;
   openConfigFolder: string;
-  projectName: string;
-  projectNameRequired: string;
-  projectCreated: string;
-  projectCreateFailed: string;
-  staticTemplate: string;
-  staticTemplateDescription: string;
-  phpTemplate: string;
-  phpTemplateDescription: string;
-  nodeTemplate: string;
-  nodeTemplateDescription: string;
-  pythonTemplate: string;
-  pythonTemplateDescription: string;
-  goTemplate: string;
-  goTemplateDescription: string;
-  rubyTemplate: string;
-  rubyTemplateDescription: string;
   startAllServices: string;
   stopAllServices: string;
   restartAllServices: string;
-  allServicesStarted: string;
-  allServicesStopped: string;
-  allServicesRestarted: string;
   serviceStarted: string;
   serviceStopped: string;
   serviceRestarted: string;
-  serviceFailedToStart: string;
-  serviceFailedToStop: string;
-  serviceFailedToRestart: string;
 
   // Settings
   settingsTitle: string;
@@ -160,16 +187,11 @@ export interface Translations {
   installSelected: string;
   switchPhp: string;
   working: string;
-  workspace: string;
-  projectsFolder: string;
-  selectProjectsFolder: string;
   startup: string;
   autoStartServices: string;
   autoStartDescription: string;
   language: string;
-  selectLanguage: string;
   thai: string;
-  english: string;
   soundEffects: string;
   enableSoundEffects: string;
   soundEffectsDescription: string;
@@ -210,23 +232,11 @@ export interface Translations {
   activePhpChanged: string;
   failedToInstallPhpVersion: string;
   failedToSwitchPhpVersion: string;
-  additionalRuntimes: string;
-  additionalRuntimesDescription: string;
-  noAdditionalRuntimes: string;
-  notInstalled: string;
-  runtimeUnavailableForPlatform: string;
-  runtimeInstalledSuccessfully: string;
-  failedToInstallRuntime: string;
   databaseUsedWhenStartingStack: string;
-  runtimeCatalogRefreshing: string;
-  runtimeCatalogUpdated: string;
   runtimeCatalogUpdateFailed: string;
   ltsBadge: string;
   stableBadge: string;
   eolBadge: string;
-  selectedVersion: string;
-  runtimeTerminalHint: string;
-  installedVersion: string;
   debugMenu: string;
   viewDownloadFolder: string;
   resetInstallation: string;
@@ -236,9 +246,7 @@ export interface Translations {
   showFirstRunWizard: string;
 
   // Keyboard Shortcuts
-  keyboardShortcuts: string;
   shortcutsTitle: string;
-  shortcutsDescription: string;
   shortcutStart: string;
   shortcutRestart: string;
   shortcutStop: string;
@@ -251,27 +259,14 @@ export interface Translations {
   quickAccess: string;
 
   // Notifications
-  notificationInfo: string;
-  notificationSuccess: string;
-  notificationError: string;
   copiedToClipboard: string;
   copyFailed: string;
-  copyError: string;
 
   // First Run Wizard
   welcome: string;
-  welcomeTitle: string;
-  welcomeDescription: string;
-  selectPackages: string;
-  packagesDescription: string;
-  downloadProgress: string;
   downloading: string;
   extracting: string;
-  finalizing: string;
-  downloadComplete: string;
   installationComplete: string;
-  readyToUse: string;
-  startUsingChamp: string;
   wizardRuntimeOverview: string;
   wizardPackagesStep: string;
   wizardChooseVersions: string;
@@ -313,29 +308,20 @@ export interface Translations {
   wizardReadyToStartStack: string;
   wizardContinueToDashboard: string;
   wizardNoExistingInstallation: string;
-  wizardPostgreSqlVersion: string;
   wizardRecommended: string;
   wizardLoadingPackages: string;
   wizardFailedToLoadPackages: string;
   wizardDefault: string;
   wizardNote: string;
   wizardEolNote: string;
-  wizardNotSelected: string;
 
   // Errors
   genericError: string;
-  loadError: string;
-  saveError: string;
-  networkError: string;
   unknownError: string;
-  validationError: string;
-  notFound: string;
-  accessDenied: string;
 
   // Footer / Status
   ready: string;
   processing: string;
-  showShortcuts: string;
 }
 
 const th: Translations = {
@@ -352,28 +338,20 @@ const th: Translations = {
   warning: "คำเตือน",
   info: "ข้อมูล",
   confirm: "ยืนยัน",
-  yes: "ใช่",
   no: "ไม่",
   retry: "ลองใหม่",
-  delete: "ลบ",
-  edit: "แก้ไข",
-  add: "เพิ่ม",
   remove: "นำออก",
   refresh: "รีเฟรช",
   more: "เพิ่มเติม",
   search: "ค้นหา",
   filter: "กรอง",
-  sort: "เรียง",
   back: "ย้อนกลับ",
   next: "ถัดไป",
-  previous: "ก่อนหน้า",
-  finish: "เสร็จสิ้น",
   done: "เสร็จแล้ว",
   install: "ติดตั้ง",
   installed: "ติดตั้งแล้ว",
   available: "พร้อมใช้งาน",
   active: "ใช้งานอยู่",
-  inactive: "ไม่ใช้งาน",
   enabled: "เปิดใช้งาน",
   disabled: "ปิดใช้งาน",
   version: "เวอร์ชัน",
@@ -393,8 +371,6 @@ const th: Translations = {
   stopped: "หยุดทำงาน",
   failed: "ล้มเหลว",
   pending: "รอดำเนินการ",
-  inProgress: "กำลังดำเนินการ",
-  completed: "เสร็จสมบูรณ์",
 
   // App
   appName: "CHAMP",
@@ -403,17 +379,12 @@ const th: Translations = {
   // Dashboard
   dashboard: "แดชบอร์ด",
   services: "บริการ",
-  serviceStatus: "สถานะบริการ",
-  allServices: "บริการทั้งหมด",
-  webServer: "เว็บเซิร์ฟเวอร์",
   php: "PHP",
   mysql: "MySQL",
   database: "ฐานข้อมูล",
   phpMyAdmin: "phpMyAdmin",
   adminer: "Adminer",
   caddy: "Caddy",
-  phpFPM: "PHP-FPM",
-  mariaDB: "MariaDB",
   projects: "โปรเจกต์",
   logs: "บันทึก",
   website: "เว็บไซต์",
@@ -422,6 +393,83 @@ const th: Translations = {
   openDatabaseTool: "เปิดเครื่องมือฐานข้อมูล",
   openProjectsFolder: "เปิดโฟลเดอร์โปรเจกต์",
   openLogsFolder: "เปิดโฟลเดอร์ Log",
+  network: "เครือข่าย",
+  phpUpdateTo: "อัปเดตเป็น {version}",
+  phpUpdateNow: "อัปเดต",
+  phpUpdating: "กำลังอัปเดต PHP",
+  phpUpdated: "อัปเดต PHP เป็น {version} แล้ว",
+  manual: "คู่มือ",
+  manualTitle: "คู่มือการใช้งาน CHAMP",
+  manualSearch: "ค้นหาในคู่มือ",
+  manualNoResults: "ไม่พบหัวข้อที่ตรงกับคำค้น",
+  manualContents: "สารบัญ",
+  stack: "stack",
+  requestPath: "เส้นทาง request",
+  browser: "เบราว์เซอร์",
+  shortcuts: "ทางลัด",
+  notInStack: "ไม่ได้ใช้ใน stack ปัจจุบัน เปลี่ยนเครื่องมือฐานข้อมูลใน Settings เพื่อใช้ตัวนี้",
+  agentActivityTitle: "AI agent สั่งงาน CHAMP",
+  agentActivityDone: "{action}: {target}",
+  updateAvailableTitle: "CHAMP v{version} พร้อมติดตั้ง",
+  updateRestartNote: "บริการทั้งหมดจะหยุดระหว่างที่ CHAMP รีสตาร์ท",
+  updateInstalling: "กำลังดาวน์โหลดและติดตั้ง CHAMP จะรีสตาร์ทเอง",
+  updateInstall: "ติดตั้งและรีสตาร์ท",
+  updateLater: "ไว้ทีหลัง",
+  updatesTitle: "อัปเดต",
+  updateCheck: "ตรวจหาอัปเดต",
+  updateChecking: "กำลังตรวจ...",
+  updateCurrent: "คุณใช้เวอร์ชันล่าสุดแล้ว",
+  updateLastChecked: "ตรวจล่าสุด {time}",
+  updateNeverChecked: "ยังไม่เคยตรวจหาอัปเดต",
+  updateReleaseNotes: "มีอะไรใหม่",
+  updateFailed: "อัปเดตไม่สำเร็จ",
+  autoCheckUpdates: "ตรวจหาอัปเดตจาก GitHub วันละครั้งตอนเปิดโปรแกรม",
+  agentConnectorTitle: "AI Agent Connector",
+  agentConnectorDescription:
+    "เปิด MCP server ในเครื่อง ให้ AI coding agent อย่าง Claude Code, Cursor หรือ Codex ดูสถานะ อ่าน log ใช้ Log Doctor และสั่งเปิด/ปิดบริการได้ ฟังเฉพาะ 127.0.0.1 และต้องใช้ token",
+  agentConnectorEnable: "เปิด AI Agent Connector",
+  agentConnectorRunning: "ทำงานอยู่",
+  agentConnectorStopped: "ไม่ได้ทำงาน",
+  agentConnectorReadOnly: "อ่านอย่างเดียว",
+  agentConnectorReadOnlyHint: "agent ดูสถานะ log และผลวิเคราะห์ได้ แต่สั่งเปิด/ปิดบริการไม่ได้",
+  agentConnectorControlHint:
+    "agent สั่ง start, stop และ restart บริการได้ ทุกครั้งที่สั่งจะมีแจ้งเตือนในหน้าหลัก",
+  agentConnectorPort: "พอร์ต",
+  agentConnectorEndpoint: "Endpoint",
+  agentConnectorClaudeCode: "Claude Code (รันใน terminal)",
+  agentConnectorJson: "Cursor และ agent อื่น (JSON)",
+  agentConnectorCopy: "คัดลอก",
+  agentConnectorCopied: "คัดลอกแล้ว",
+  agentConnectorTokenHint: "คำสั่งที่คัดลอกมี token ลับอยู่ อย่าแชร์ ถ้าหลุดให้สร้าง token ใหม่",
+  agentConnectorRegenerate: "สร้าง token ใหม่",
+  diagnose: "วิเคราะห์",
+  logDoctor: "Log Doctor",
+  logDoctorDescription: "อ่าน log ของบริการ แล้วบอกสาเหตุที่น่าจะเป็นพร้อมวิธีแก้",
+  logDoctorReading: "กำลังอ่าน log...",
+  logDoctorRecheck: "ตรวจอีกครั้ง",
+  logDoctorNoMatch: "ยังไม่พบสาเหตุที่รู้จัก",
+  logDoctorNoMatchHint: "บรรทัดด้านล่างคือคำเตือนล่าสุดใน log เปิดโฟลเดอร์ Log เพื่อดูไฟล์เต็ม",
+  logDoctorNoLogs: "ยังไม่มี log ของบริการนี้ ลอง Start บริการก่อนแล้วตรวจอีกครั้ง",
+  logDoctorEvidence: "บรรทัด log ที่ตรงกัน",
+  logDoctorSteps: "วิธีแก้",
+  logDoctorLogLines: "บรรทัด log ล่าสุด",
+  logDoctorKnownError: "error ที่รู้จัก",
+  logDoctorAiMatch: "AI วิเคราะห์",
+  logDoctorAiReady: "โมเดล AI {name} ({params} พารามิเตอร์) พร้อมใช้ ทำงานออฟไลน์ในเครื่อง",
+  logDoctorAiOff:
+    "โหมด error ที่รู้จัก เปิด AI ออฟไลน์เพื่อให้เข้าใจข้อความ error ที่เขียนต่างออกไปด้วย",
+  logDoctorEnableAi: "เปิดใช้ AI ({size})",
+  logDoctorDownloading: "กำลังดาวน์โหลดโมเดล AI {percent}%",
+  logDoctorRemoveAi: "ลบโมเดล AI",
+  logDoctorAiTitle: "Log Doctor AI",
+  logDoctorAiSettingsDescription:
+    "โมเดลขนาดเล็กแบบออฟไลน์ (~8M พารามิเตอร์) ช่วยให้ Log Doctor เข้าใจข้อความ error ได้ดีขึ้น ไม่มีข้อมูลถูกส่งออกจากเครื่อง ถ้าไม่ติดตั้ง Log Doctor ยังตรวจ error ที่รู้จักได้ตามปกติ",
+  logDoctorAiNotInstalled: "ยังไม่ติดตั้ง",
+  doctorActionOpenSettings: "เปิด Settings",
+  doctorActionOpenUrl: "เปิดหน้าดาวน์โหลด",
+  doctorActionStartPhp: "Start PHP-FPM",
+  doctorActionOpenMysqlData: "เปิดโฟลเดอร์ข้อมูล MySQL",
+  doctorActionOpenPostgresqlData: "เปิดโฟลเดอร์ข้อมูล PostgreSQL",
   httpsPreview: "พรีวิว HTTPS",
   publicHttpsDomain: "โดเมน HTTPS ฟรีสำหรับทดสอบเว็บ",
   httpsTunnelDescription:
@@ -439,48 +487,17 @@ const th: Translations = {
   httpsTunnelDevOnly: "ลิงก์นี้เหมาะสำหรับทดสอบและพัฒนาเท่านั้น",
   terminal: "เทอร์มินัล",
   openTerminal: "เปิดเทอร์มินัลในโฟลเดอร์โปรเจกต์",
-  projectTemplates: "เทมเพลตโปรเจกต์",
-  createProject: "สร้างโปรเจกต์",
-  tools: "เครื่องมือ",
-  developerTools: "เครื่องมือนักพัฒนา",
-  smartTerminal: "เทอร์มินัลพร้อมรันไทม์",
-  smartTerminalDescription: "เปิดพร้อม PATH ของ PHP, Node, Python, Go และ Ruby",
-  runtimeInventory: "รันไทม์ที่พร้อมใช้งาน",
-  runtimeInventoryDescription: "คำสั่งเหล่านี้ใช้ได้ในเทอร์มินัลของ CHAMP",
-  configFolder: "โฟลเดอร์ config",
   openConfigFolder: "เปิดโฟลเดอร์ config",
-  projectName: "ชื่อโปรเจกต์",
-  projectNameRequired: "กรุณาใส่ชื่อโปรเจกต์",
-  projectCreated: "สร้างโปรเจกต์แล้ว",
-  projectCreateFailed: "สร้างโปรเจกต์ไม่สำเร็จ",
-  staticTemplate: "Static",
-  staticTemplateDescription: "HTML, CSS, JS",
-  phpTemplate: "PHP",
-  phpTemplateDescription: "PHP entry file",
-  nodeTemplate: "Node",
-  nodeTemplateDescription: "Node workspace",
-  pythonTemplate: "Python",
-  pythonTemplateDescription: "Python workspace",
-  goTemplate: "Go",
-  goTemplateDescription: "Go workspace",
-  rubyTemplate: "Ruby",
-  rubyTemplateDescription: "Ruby workspace",
   startAllServices: "เริ่มบริการทั้งหมด",
   stopAllServices: "หยุดบริการทั้งหมด",
   restartAllServices: "รีสตาร์ทบริการทั้งหมด",
-  allServicesStarted: "เริ่มบริการทั้งหมดแล้ว",
-  allServicesStopped: "หยุดบริการทั้งหมดแล้ว",
-  allServicesRestarted: "รีสตาร์ทบริการทั้งหมดแล้ว",
   serviceStarted: "เริ่มบริการแล้ว",
   serviceStopped: "หยุดบริการแล้ว",
   serviceRestarted: "รีสตาร์ทบริการแล้ว",
-  serviceFailedToStart: "ไม่สามารถเริ่มบริการได้",
-  serviceFailedToStop: "ไม่สามารถหยุดบริการได้",
-  serviceFailedToRestart: "ไม่สามารถรีสตาร์ทบริการได้",
 
   // Settings
   settingsTitle: "การตั้งค่า",
-  settingsDescription: "พอร์ต โฟลเดอร์โปรเจกต์ และพฤติกรรมการเริ่มต้น",
+  settingsDescription: "พอร์ต เวอร์ชัน PHP เครื่องมือฐานข้อมูล Log Doctor และการเริ่มต้น",
   ports: "พอร์ต",
   port: "พอร์ต",
   httpPort: "HTTP",
@@ -495,16 +512,11 @@ const th: Translations = {
   installSelected: "ติดตั้งที่เลือก",
   switchPhp: "สลับ PHP",
   working: "กำลังทำงาน...",
-  workspace: "พื้นที่ทำงาน",
-  projectsFolder: "โฟลเดอร์โปรเจกต์",
-  selectProjectsFolder: "เลือกโฟลเดอร์โปรเจกต์",
   startup: "การเริ่มต้น",
   autoStartServices: "เริ่มบริการอัตโนมัติ",
   autoStartDescription: "เริ่มบริการทั้งหมดเมื่อเปิด CHAMP",
   language: "ภาษา",
-  selectLanguage: "เลือกภาษา",
   thai: "ไทย",
-  english: "English",
   soundEffects: "เสียงเอฟเฟกต์",
   enableSoundEffects: "เปิดใช้งานเสียงเอฟเฟกต์",
   soundEffectsDescription: "เล่นเสียงเมื่อกดปุ่มและดำเนินการต่างๆ",
@@ -545,24 +557,11 @@ const th: Translations = {
   activePhpChanged: "เปลี่ยน PHP ที่ใช้งานอยู่แล้ว",
   failedToInstallPhpVersion: "ติดตั้งเวอร์ชัน PHP ไม่สำเร็จ",
   failedToSwitchPhpVersion: "สลับเวอร์ชัน PHP ไม่สำเร็จ",
-  additionalRuntimes: "รันไทม์เพิ่มเติม",
-  additionalRuntimesDescription: "เลือกและดาวน์โหลดรันไทม์ภาษาอื่นสำหรับเครื่องมือในโปรเจกต์",
-  noAdditionalRuntimes: "ไม่มีรันไทม์เพิ่มเติมที่รองรับบนแพลตฟอร์มนี้",
-  notInstalled: "ยังไม่ได้ติดตั้ง",
-  runtimeUnavailableForPlatform: "{name} ยังไม่มีแพ็กเกจแบบ portable ที่รองรับบนแพลตฟอร์มนี้",
-  runtimeInstalledSuccessfully: "ติดตั้ง {name} สำเร็จ",
-  failedToInstallRuntime: "ติดตั้ง {name} ไม่สำเร็จ",
   databaseUsedWhenStartingStack: "จะใช้ {name} เมื่อเริ่มสแต็กหลัก",
-  runtimeCatalogRefreshing: "กำลังตรวจสอบเวอร์ชันรันไทม์ล่าสุด",
-  runtimeCatalogUpdated: "อัปเดตรายการรันไทม์ล่าสุดแล้ว",
   runtimeCatalogUpdateFailed: "ตรวจสอบเวอร์ชันรันไทม์ล่าสุดไม่สำเร็จ ใช้รายการในเครื่องแทน",
   ltsBadge: "LTS",
   stableBadge: "Stable",
   eolBadge: "EOL",
-  selectedVersion: "เวอร์ชันที่เลือก",
-  runtimeTerminalHint:
-    "หลังติดตั้งแล้ว เปิดเมนูเพิ่มเติม > เทอร์มินัล เพื่อใช้คำสั่งจากรันไทม์นี้ใน PATH",
-  installedVersion: "เวอร์ชันที่ติดตั้ง",
   debugMenu: "เมนูดีบัก",
   viewDownloadFolder: "เปิดโฟลเดอร์ดาวน์โหลด",
   resetInstallation: "รีเซ็ตการติดตั้ง",
@@ -573,9 +572,7 @@ const th: Translations = {
   showFirstRunWizard: "แสดงตัวช่วยติดตั้งครั้งแรก",
 
   // Keyboard Shortcuts
-  keyboardShortcuts: "คีย์ลัด",
   shortcutsTitle: "คีย์ลัดแป้นพิมพ์",
-  shortcutsDescription: "คีย์ลัดที่ใช้ได้ทั่วทั้งแอป",
   shortcutStart: "เริ่มบริการทั้งหมด",
   shortcutRestart: "รีสตาร์ทบริการทั้งหมด",
   shortcutStop: "หยุดบริการทั้งหมด",
@@ -588,27 +585,14 @@ const th: Translations = {
   quickAccess: "เปิดใช้งานด่วน",
 
   // Notifications
-  notificationInfo: "ข้อมูล",
-  notificationSuccess: "สำเร็จ",
-  notificationError: "ข้อผิดพลาด",
   copiedToClipboard: "คัดลอกไปยังคลิปบอร์ดแล้ว",
   copyFailed: "ไม่สามารถคัดลอกได้",
-  copyError: "ไม่สามารถคัดลอกข้อผิดพลาดได้",
 
   // First Run Wizard
   welcome: "ยินดีต้อนรับ",
-  welcomeTitle: "ยินดีต้อนรับสู่ CHAMP",
-  welcomeDescription: "เลือกแพ็คเกจที่ต้องการติดตั้งสำหรับเว็บเซิร์ฟเวอร์ของคุณ",
-  selectPackages: "เลือกแพ็คเกจ",
-  packagesDescription: "เลือกเวอร์ชันที่ต้องการติดตั้ง",
-  downloadProgress: "ความคืบหน้าการดาวน์โหลด",
   downloading: "กำลังดาวน์โหลด",
   extracting: "กำลังแตกไฟล์",
-  finalizing: "กำลังสร้างขั้นตอนสุดท้าย",
-  downloadComplete: "ดาวน์โหลดเสร็จสมบูรณ์",
   installationComplete: "การติดตั้งเสร็จสมบูรณ์",
-  readyToUse: "CHAMP พร้อมใช้งานแล้ว!",
-  startUsingChamp: "เริ่มใช้งาน CHAMP",
   wizardRuntimeOverview: "ภาพรวมรันไทม์",
   wizardPackagesStep: "แพ็กเกจ",
   wizardChooseVersions: "เลือกเวอร์ชัน",
@@ -653,7 +637,6 @@ const th: Translations = {
   wizardContinueToDashboard: "ไปที่แดชบอร์ด",
   wizardNoExistingInstallation:
     "ไม่พบการติดตั้งเดิม โปรดดาวน์โหลดคอมโพเนนต์รันไทม์เพื่อดำเนินการต่อ",
-  wizardPostgreSqlVersion: "เวอร์ชัน PostgreSQL",
   wizardRecommended: "แนะนำ",
   wizardLoadingPackages: "กำลังโหลดแพ็กเกจที่มี...",
   wizardFailedToLoadPackages: "ไม่สามารถโหลดแพ็กเกจที่มีได้",
@@ -661,22 +644,14 @@ const th: Translations = {
   wizardNote: "หมายเหตุ",
   wizardEolNote:
     "เวอร์ชัน EOL ไม่ได้รับการซัพพอร์ตและอาจมีช่องโหว่ด้านความปลอดภัย PHP 5.5-7.3 ใช้ได้เฉพาะบน Windows",
-  wizardNotSelected: "ไม่ติดตั้ง",
 
   // Errors
   genericError: "เกิดข้อผิดพลาด",
-  loadError: "ไม่สามารถโหลดข้อมูลได้",
-  saveError: "ไม่สามารถบันทึกข้อมูลได้",
-  networkError: "ข้อผิดพลาดเครือข่าย",
   unknownError: "ข้อผิดพลาดที่ไม่รู้จัก",
-  validationError: "ข้อมูลไม่ถูกต้อง",
-  notFound: "ไม่พบข้อมูล",
-  accessDenied: "การเข้าถึงถูกปฏิเสธ",
 
   // Footer / Status
   ready: "พร้อม",
   processing: "กำลังประมวลผล",
-  showShortcuts: "กด ? เพื่อดูคีย์ลัด",
 };
 
 const en: Translations = {
@@ -693,28 +668,20 @@ const en: Translations = {
   warning: "Warning",
   info: "Info",
   confirm: "Confirm",
-  yes: "Yes",
   no: "No",
   retry: "Retry",
-  delete: "Delete",
-  edit: "Edit",
-  add: "Add",
   remove: "Remove",
   refresh: "Refresh",
   more: "More",
   search: "Search",
   filter: "Filter",
-  sort: "Sort",
   back: "Back",
   next: "Next",
-  previous: "Previous",
-  finish: "Finish",
   done: "Done",
   install: "Install",
   installed: "Installed",
   available: "Available",
   active: "Active",
-  inactive: "Inactive",
   enabled: "Enabled",
   disabled: "Disabled",
   version: "Version",
@@ -734,8 +701,6 @@ const en: Translations = {
   stopped: "Stopped",
   failed: "Failed",
   pending: "Pending",
-  inProgress: "In Progress",
-  completed: "Completed",
 
   // App
   appName: "CHAMP",
@@ -744,17 +709,12 @@ const en: Translations = {
   // Dashboard
   dashboard: "Dashboard",
   services: "Services",
-  serviceStatus: "Service Status",
-  allServices: "All Services",
-  webServer: "Web Server",
   php: "PHP",
   mysql: "MySQL",
   database: "Database",
   phpMyAdmin: "phpMyAdmin",
   adminer: "Adminer",
   caddy: "Caddy",
-  phpFPM: "PHP-FPM",
-  mariaDB: "MariaDB",
   projects: "Projects",
   logs: "Logs",
   website: "Website",
@@ -763,6 +723,85 @@ const en: Translations = {
   openDatabaseTool: "Open Database Tool",
   openProjectsFolder: "Open Projects Folder",
   openLogsFolder: "Open Logs Folder",
+  network: "Network",
+  phpUpdateTo: "Update to {version}",
+  phpUpdateNow: "Update",
+  phpUpdating: "Updating PHP",
+  phpUpdated: "PHP updated to {version}",
+  manual: "Guide",
+  manualTitle: "CHAMP guide",
+  manualSearch: "Search the guide",
+  manualNoResults: "No topics match your search",
+  manualContents: "Contents",
+  stack: "stack",
+  requestPath: "Request path",
+  browser: "Browser",
+  shortcuts: "Shortcuts",
+  notInStack: "Not part of the current stack. Switch the database tool in Settings to use it.",
+  agentActivityTitle: "AI agent used CHAMP",
+  agentActivityDone: "{action}: {target}",
+  updateAvailableTitle: "CHAMP v{version} is available",
+  updateRestartNote: "All services stop while CHAMP restarts.",
+  updateInstalling: "Downloading and installing. CHAMP restarts when it is done.",
+  updateInstall: "Install and restart",
+  updateLater: "Later",
+  updatesTitle: "Updates",
+  updateCheck: "Check for updates",
+  updateChecking: "Checking...",
+  updateCurrent: "You have the latest version.",
+  updateLastChecked: "Last checked {time}",
+  updateNeverChecked: "Not checked yet.",
+  updateReleaseNotes: "What's new",
+  updateFailed: "Update failed",
+  autoCheckUpdates: "Check GitHub for updates once a day at startup",
+  agentConnectorTitle: "AI agent connector",
+  agentConnectorDescription:
+    "Runs a local MCP server so AI coding agents such as Claude Code, Cursor, or Codex can check status, read logs, run Log Doctor, and start or stop services. It listens on 127.0.0.1 only and requires a token.",
+  agentConnectorEnable: "Turn on the agent connector",
+  agentConnectorRunning: "Running",
+  agentConnectorStopped: "Not running",
+  agentConnectorReadOnly: "Read-only",
+  agentConnectorReadOnlyHint:
+    "Agents can see status, logs, and diagnoses but cannot start or stop services.",
+  agentConnectorControlHint:
+    "Agents can start, stop, and restart services. Each action shows a notification on the dashboard.",
+  agentConnectorPort: "Port",
+  agentConnectorEndpoint: "Endpoint",
+  agentConnectorClaudeCode: "Claude Code (run in a terminal)",
+  agentConnectorJson: "Cursor and other agents (JSON)",
+  agentConnectorCopy: "Copy",
+  agentConnectorCopied: "Copied",
+  agentConnectorTokenHint:
+    "Copied commands include the secret token. Keep it private and create a new one if it leaks.",
+  agentConnectorRegenerate: "Create new token",
+  diagnose: "Diagnose",
+  logDoctor: "Log Doctor",
+  logDoctorDescription: "Reads service logs and explains the most likely cause and fix",
+  logDoctorReading: "Reading logs...",
+  logDoctorRecheck: "Check again",
+  logDoctorNoMatch: "No known cause found",
+  logDoctorNoMatchHint:
+    "The lines below are the latest warnings in the log. Open the logs folder for the full files.",
+  logDoctorNoLogs: "This service has no log yet. Start it, then check again.",
+  logDoctorEvidence: "Matched log line",
+  logDoctorSteps: "How to fix",
+  logDoctorLogLines: "Recent log lines",
+  logDoctorKnownError: "Known error",
+  logDoctorAiMatch: "AI match",
+  logDoctorAiReady: "AI model {name} ({params} parameters) is ready and runs offline",
+  logDoctorAiOff: "Known-error mode. Enable the offline AI to also understand reworded errors.",
+  logDoctorEnableAi: "Enable AI ({size})",
+  logDoctorDownloading: "Downloading AI model {percent}%",
+  logDoctorRemoveAi: "Remove AI model",
+  logDoctorAiTitle: "Log Doctor AI",
+  logDoctorAiSettingsDescription:
+    "A small offline model (~8M parameters) that helps Log Doctor understand error messages. Nothing leaves your computer, and Log Doctor still recognises known errors without it.",
+  logDoctorAiNotInstalled: "Not installed",
+  doctorActionOpenSettings: "Open Settings",
+  doctorActionOpenUrl: "Open download page",
+  doctorActionStartPhp: "Start PHP-FPM",
+  doctorActionOpenMysqlData: "Open MySQL data folder",
+  doctorActionOpenPostgresqlData: "Open PostgreSQL data folder",
   httpsPreview: "HTTPS Preview",
   publicHttpsDomain: "Free HTTPS domain for website testing",
   httpsTunnelDescription:
@@ -780,48 +819,17 @@ const en: Translations = {
   httpsTunnelDevOnly: "This link is intended for testing and development only.",
   terminal: "Terminal",
   openTerminal: "Open Terminal in Projects",
-  projectTemplates: "Project Templates",
-  createProject: "Create Project",
-  tools: "Tools",
-  developerTools: "Developer Tools",
-  smartTerminal: "Runtime Terminal",
-  smartTerminalDescription: "Opens with PHP, Node, Python, Go, and Ruby on PATH",
-  runtimeInventory: "Runtime Inventory",
-  runtimeInventoryDescription: "These commands are available in the CHAMP terminal",
-  configFolder: "Config folder",
   openConfigFolder: "Open config folder",
-  projectName: "Project name",
-  projectNameRequired: "Enter a project name",
-  projectCreated: "Project created",
-  projectCreateFailed: "Project creation failed",
-  staticTemplate: "Static",
-  staticTemplateDescription: "HTML, CSS, JS",
-  phpTemplate: "PHP",
-  phpTemplateDescription: "PHP entry file",
-  nodeTemplate: "Node",
-  nodeTemplateDescription: "Node workspace",
-  pythonTemplate: "Python",
-  pythonTemplateDescription: "Python workspace",
-  goTemplate: "Go",
-  goTemplateDescription: "Go workspace",
-  rubyTemplate: "Ruby",
-  rubyTemplateDescription: "Ruby workspace",
   startAllServices: "Start All Services",
   stopAllServices: "Stop All Services",
   restartAllServices: "Restart All Services",
-  allServicesStarted: "All services started",
-  allServicesStopped: "All services stopped",
-  allServicesRestarted: "All services restarted",
   serviceStarted: "Service started",
   serviceStopped: "Service stopped",
   serviceRestarted: "Service restarted",
-  serviceFailedToStart: "Failed to start service",
-  serviceFailedToStop: "Failed to stop service",
-  serviceFailedToRestart: "Failed to restart service",
 
   // Settings
   settingsTitle: "Settings",
-  settingsDescription: "Ports, project folder, and startup behavior",
+  settingsDescription: "Ports, PHP versions, database tool, Log Doctor, and startup",
   ports: "Ports",
   port: "Port",
   httpPort: "HTTP",
@@ -836,16 +844,11 @@ const en: Translations = {
   installSelected: "Install Selected",
   switchPhp: "Switch PHP",
   working: "Working...",
-  workspace: "Workspace",
-  projectsFolder: "Projects folder",
-  selectProjectsFolder: "Select projects folder",
   startup: "Startup",
   autoStartServices: "Start stack when CHAMP opens",
   autoStartDescription: "Automatically start all services when CHAMP opens",
   language: "Language",
-  selectLanguage: "Select Language",
   thai: "ไทย",
-  english: "English",
   soundEffects: "Sound Effects",
   enableSoundEffects: "Enable sound effects",
   soundEffectsDescription: "Play sounds when pressing buttons and performing actions",
@@ -887,26 +890,11 @@ const en: Translations = {
   activePhpChanged: "Active PHP version changed",
   failedToInstallPhpVersion: "Failed to install PHP version",
   failedToSwitchPhpVersion: "Failed to switch PHP version",
-  additionalRuntimes: "Additional Runtimes",
-  additionalRuntimesDescription:
-    "Select and download additional language runtimes for your projects.",
-  noAdditionalRuntimes: "No additional runtimes are available for this platform.",
-  notInstalled: "Not installed",
-  runtimeUnavailableForPlatform:
-    "{name} does not have a supported portable package for this platform.",
-  runtimeInstalledSuccessfully: "{name} installed successfully",
-  failedToInstallRuntime: "Failed to install {name}",
   databaseUsedWhenStartingStack: "{name} will be used when starting the main stack.",
-  runtimeCatalogRefreshing: "Checking latest runtime versions",
-  runtimeCatalogUpdated: "Runtime catalog updated",
   runtimeCatalogUpdateFailed: "Could not check latest runtime versions. Using local catalog.",
   ltsBadge: "LTS",
   stableBadge: "Stable",
   eolBadge: "EOL",
-  selectedVersion: "Selected version",
-  runtimeTerminalHint:
-    "After installing, open More > Terminal to use this runtime on the injected PATH.",
-  installedVersion: "Installed version",
   debugMenu: "Debug Menu",
   viewDownloadFolder: "View Download Folder",
   resetInstallation: "Reset Installation",
@@ -917,9 +905,7 @@ const en: Translations = {
   showFirstRunWizard: "Show First-Run Wizard",
 
   // Keyboard Shortcuts
-  keyboardShortcuts: "Shortcuts",
   shortcutsTitle: "Keyboard Shortcuts",
-  shortcutsDescription: "Shortcuts available throughout the app",
   shortcutStart: "Start all services",
   shortcutRestart: "Restart all services",
   shortcutStop: "Stop all services",
@@ -932,27 +918,14 @@ const en: Translations = {
   quickAccess: "Quick Access",
 
   // Notifications
-  notificationInfo: "Info",
-  notificationSuccess: "Success",
-  notificationError: "Error",
   copiedToClipboard: "Copied to clipboard",
   copyFailed: "Failed to copy",
-  copyError: "Failed to copy error",
 
   // First Run Wizard
   welcome: "Welcome",
-  welcomeTitle: "Welcome to CHAMP",
-  welcomeDescription: "Select the packages you want to install for your web server",
-  selectPackages: "Select Packages",
-  packagesDescription: "Select the versions you want to install",
-  downloadProgress: "Download Progress",
   downloading: "Downloading",
   extracting: "Extracting",
-  finalizing: "Finalizing setup",
-  downloadComplete: "Download complete",
   installationComplete: "Installation complete",
-  readyToUse: "CHAMP is ready to use!",
-  startUsingChamp: "Start using CHAMP",
   wizardRuntimeOverview: "Runtime overview",
   wizardPackagesStep: "Packages",
   wizardChooseVersions: "Choose versions",
@@ -997,7 +970,6 @@ const en: Translations = {
   wizardContinueToDashboard: "Continue to Dashboard",
   wizardNoExistingInstallation:
     "No existing installation found. Please download the runtime components to continue.",
-  wizardPostgreSqlVersion: "PostgreSQL Version",
   wizardRecommended: "Recommended",
   wizardLoadingPackages: "Loading available packages...",
   wizardFailedToLoadPackages: "Failed to load available packages",
@@ -1005,22 +977,14 @@ const en: Translations = {
   wizardNote: "Note",
   wizardEolNote:
     "EOL versions are unsupported and may have security vulnerabilities. PHP 5.5-7.3 are available on Windows only.",
-  wizardNotSelected: "Do not install",
 
   // Errors
   genericError: "An error occurred",
-  loadError: "Failed to load data",
-  saveError: "Failed to save data",
-  networkError: "Network error",
   unknownError: "Unknown error",
-  validationError: "Validation error",
-  notFound: "Not found",
-  accessDenied: "Access denied",
 
   // Footer / Status
   ready: "Ready",
   processing: "Processing",
-  showShortcuts: "Press ? for shortcuts",
 };
 
 export const translations: Record<Language, Translations> = { th, en };

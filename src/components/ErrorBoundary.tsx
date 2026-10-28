@@ -12,10 +12,10 @@ interface State {
 
 /**
  * Error Boundary Component
- * 
+ *
  * Catches JavaScript errors anywhere in the child component tree,
  * logs those errors, and displays a fallback UI instead of crashing the whole app.
- * 
+ *
  * Usage:
  * ```tsx
  * <ErrorBoundary>
@@ -37,7 +37,7 @@ export class ErrorBoundary extends Component<Props, State> {
     // Log error details for debugging
     console.error("Uncaught error:", error);
     console.error("Error info:", errorInfo);
-    
+
     this.setState({
       error,
       errorInfo,
@@ -73,10 +73,16 @@ export class ErrorBoundary extends Component<Props, State> {
               boxShadow: "0 4px 12px rgba(0, 0, 0, 0.1)",
             }}
           >
-            <h1 style={{ fontSize: "1.5rem", marginBottom: "1rem", color: "var(--color-error, #ef4444)" }}>
+            <h1
+              style={{
+                fontSize: "1.5rem",
+                marginBottom: "1rem",
+                color: "var(--color-error, #ef4444)",
+              }}
+            >
               Something went wrong
             </h1>
-            
+
             <p style={{ marginBottom: "1rem", fontSize: "0.875rem" }}>
               {this.state.error?.message || "An unexpected error occurred"}
             </p>

@@ -301,48 +301,85 @@ describe("Dashboard Component", () => {
     });
   });
 
-  describe("Project templates", () => {
-    it("should create a selected project template", async () => {
-      vi.mocked(invoke).mockImplementation(async (cmd: string) => {
-        switch (cmd) {
-          case "get_all_statuses":
-            return mockServiceMap;
-          case "get_app_paths":
-            return mockAppPaths;
-          case "get_installed_versions":
-            return { node: "v22.0.0" };
-          case "get_settings":
-            return {};
-          case "get_system_metrics":
-            return mockSystemMetrics;
-          case "create_project_template":
-            return {
-              name: "demo-node",
-              template: "node",
-              path: "C:\\CHAMP\\projects\\demo-node",
-              entry_file: "C:\\CHAMP\\projects\\demo-node\\README.md",
-            };
-          default:
-            return {};
-        }
-      });
+  describe("Log Doctor", () => {
+    const failedMap = {
+      ...mockServiceMap,
+      [ServiceType.MySQL]: {
+        ...mockServiceMap[ServiceType.MySQL],
+        state: ServiceState.Error,
+        error_message: "Can't start server: Bind on TCP/IP port: Address already in use",
+      },
+    };
+    const diagnosis = {
+      service: ServiceType.MySQL,
+      ai_used: false,
+      matches: [
+        {
+          id: "port-in-use",
+          title: { en: "Port is already in use", th: "พอร์ตถูกโปรแกรมอื่นใช้อยู่" },
+          cause: { en: "Another program uses the port.", th: "มีโปรแกรมอื่นใช้พอร์ต" },
+          steps: { en: ["Pick a free port in `Settings`."], th: ["เปลี่ยนพอร์ตใน `Settings`"] },
+          confidence: 0.93,
+          evidence: "Bind on TCP/IP port: Address already in use",
+          method: "signature",
+          action: "open_settings",
+          url: null,
+        },
+      ],
+      excerpt: ["Bind on TCP/IP port: Address already in use"],
+      log_files: ["C:\\CHAMP\\logs\\mysql.log"],
+    };
+
+    const mockDoctor = async (cmd: string) => {
+      switch (cmd) {
+        case "get_all_statuses":
+          return failedMap;
+        case "get_app_paths":
+          return mockAppPaths;
+        case "get_installed_versions":
+          return {};
+        case "get_settings":
+          return {};
+        case "get_system_metrics":
+          return mockSystemMetrics;
+        case "get_log_doctor_status":
+          return {
+            installed: false,
+            downloading: false,
+            model_name: "potion-base-8M",
+            parameters: "7.6M",
+            download_bytes: 30920426,
+          };
+        case "diagnose_service":
+          return diagnosis;
+        default:
+          return {};
+      }
+    };
+
+    it("should diagnose a failed service from its card", async () => {
+      vi.mocked(invoke).mockImplementation(mockDoctor);
 
       render(<Dashboard />);
 
-      fireEvent.click(await screen.findByRole("button", { name: /^more$/i }));
-      fireEvent.click(await screen.findByRole("menuitem", { name: /^create project$/i }));
-      fireEvent.click(await screen.findByRole("button", { name: /node/i }));
-      fireEvent.change(screen.getByPlaceholderText("Project name"), {
-        target: { value: "demo-node" },
-      });
-      const createButtons = screen.getAllByRole("button", { name: /^create project$/i });
-      fireEvent.click(createButtons[createButtons.length - 1]);
+      fireEvent.click(await screen.findByTestId(`diagnose-button-${ServiceType.MySQL}`));
+
+      expect(await screen.findByText("Port is already in use")).toBeInTheDocument();
+      expect(invoke).toHaveBeenCalledWith("diagnose_service", { service: ServiceType.MySQL });
+      expect(screen.getByRole("button", { name: /enable ai \(29 mb\)/i })).toBeInTheDocument();
+    });
+
+    it("should open settings from the suggested fix", async () => {
+      vi.mocked(invoke).mockImplementation(mockDoctor);
+
+      render(<Dashboard />);
+
+      fireEvent.click(await screen.findByTestId(`diagnose-button-${ServiceType.MySQL}`));
+      fireEvent.click(await screen.findByRole("button", { name: /open settings/i }));
 
       await waitFor(() => {
-        expect(invoke).toHaveBeenCalledWith("create_project_template", {
-          projectName: "demo-node",
-          template: "node",
-        });
+        expect(screen.queryByTestId("log-doctor")).not.toBeInTheDocument();
+        expect(screen.getByRole("dialog", { name: /settings/i })).toBeInTheDocument();
       });
     });
   });

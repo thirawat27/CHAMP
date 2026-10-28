@@ -14,21 +14,14 @@ export default defineConfig(async () => ({
   clearScreen: false,
   // 2. tauri expects a fixed port, fail if that port is not available
   build: {
+    // The bundle is loaded from disk by the Tauri webview, so a single chunk
+    // is fastest; target the modern WebView2/WebKit engines Tauri requires.
+    target: ["es2022", "chrome110", "safari16"],
     rolldownOptions: {
       checks: {
         pluginTimings: false,
       },
     },
-    // Code splitting for better performance
-    rollupOptions: {
-      output: {
-        manualChunks: {
-          'react-vendor': ['react', 'react-dom'],
-          'tauri-vendor': ['@tauri-apps/api'],
-        },
-      },
-    },
-    chunkSizeWarningLimit: 600,
   },
   server: {
     port: 1420,

@@ -12,40 +12,6 @@ pub struct PackagesConfig {
     pub mysql: Vec<MySQLPackage>,
     pub postgresql: Vec<PostgreSQLPackage>,
     pub phpmyadmin: Vec<PhpMyAdminPackage>,
-    #[serde(default)]
-    pub node: Vec<GenericPackage>,
-    #[serde(default)]
-    pub python: Vec<GenericPackage>,
-    #[serde(default)]
-    pub go: Vec<GenericPackage>,
-    #[serde(default)]
-    pub ruby: Vec<GenericPackage>,
-}
-
-/// Generic package with version and download URLs
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct GenericPackage {
-    pub id: String,
-    pub version: String,
-    pub display_name: String,
-    #[serde(rename = "windowsX64")]
-    pub windows_x64: String,
-    #[serde(rename = "windowsArm64")]
-    pub windows_arm64: String,
-    #[serde(rename = "linuxX64")]
-    pub linux_x64: String,
-    #[serde(rename = "linuxArm64")]
-    pub linux_arm64: String,
-    #[serde(rename = "macOSX64")]
-    pub macos_x64: String,
-    #[serde(rename = "macOSArm64")]
-    pub macos_arm64: String,
-    #[serde(default)]
-    pub eol: bool,
-    #[serde(default)]
-    pub lts: bool,
-    #[serde(default)]
-    pub recommended: bool,
 }
 
 /// PHP package with version and download URLs
@@ -150,14 +116,6 @@ pub struct PackageSelection {
     #[serde(default = "default_postgresql_selection")]
     pub postgresql: String,
     pub phpmyadmin: String,
-    #[serde(default)]
-    pub node: Option<String>,
-    #[serde(default)]
-    pub python: Option<String>,
-    #[serde(default)]
-    pub go: Option<String>,
-    #[serde(default)]
-    pub ruby: Option<String>,
 }
 
 fn default_postgresql_selection() -> String {
@@ -189,14 +147,6 @@ pub struct BinariesConfig {
     pub postgresql: BinaryConfig,
     #[serde(rename = "phpmyadmin")]
     pub phpmyadmin: PhpMyAdminConfig,
-    #[serde(rename = "node", default)]
-    pub node: Option<BinaryConfig>,
-    #[serde(rename = "python", default)]
-    pub python: Option<BinaryConfig>,
-    #[serde(rename = "go", default)]
-    pub go: Option<BinaryConfig>,
-    #[serde(rename = "ruby", default)]
-    pub ruby: Option<BinaryConfig>,
 }
 
 fn default_postgresql_binary_config() -> BinaryConfig {
@@ -467,18 +417,6 @@ struct GitHubLatestRelease {
     tag_name: String,
 }
 
-#[derive(Debug, Deserialize)]
-struct NodeIndexEntry {
-    version: String,
-    lts: serde_json::Value,
-}
-
-#[derive(Debug, Deserialize)]
-struct GoDownloadEntry {
-    version: String,
-    stable: bool,
-}
-
 /// Refresh the runtime catalog from upstream release metadata.
 ///
 /// Network failures are non-fatal; the current local catalog is returned so the
@@ -498,11 +436,11 @@ pub async fn refresh_runtime_catalog() -> Result<PackagesConfig, String> {
         changed |= replace_versions(&mut config.binaries.caddy.versions, caddy_version(&version));
     }
 
-    if let Some(version) =
-        fetch_version_from_text(&client, "https://www.php.net/", "downloads of PHP ").await
-    {
-        changed |=
-            upsert_selected_version(&mut config.binaries.php.versions, php_version(&version));
+    if let Some(latest) = crate::runtime::php_catalog::fetch_latest_php(&client).await {
+        changed |= crate::runtime::php_catalog::merge_php_versions(
+            &mut config.binaries.php.versions,
+            latest,
+        );
     }
 
     if let Some(version) = fetch_version_from_text(
@@ -566,72 +504,6 @@ pub async fn refresh_runtime_catalog() -> Result<PackagesConfig, String> {
         );
     }
 
-    if let Some(versions) = fetch_node_release_lines(&client).await {
-        changed |= replace_version_list(
-            &mut config
-                .binaries
-                .node
-                .get_or_insert_with(empty_binary_config)
-                .versions,
-            versions,
-        );
-    }
-
-    if let Some(version) = fetch_version_from_text(
-        &client,
-        "https://www.python.org/downloads/",
-        "Download Python ",
-    )
-    .await
-    {
-        changed |= replace_version_list(
-            &mut config
-                .binaries
-                .python
-                .get_or_insert_with(empty_binary_config)
-                .versions,
-            vec![
-                python_version(&version),
-                selected_version(python_version("3.13.14"), false),
-            ],
-        );
-    }
-
-    if let Some(versions) = fetch_go_stable_versions(&client).await {
-        changed |= replace_version_list(
-            &mut config
-                .binaries
-                .go
-                .get_or_insert_with(empty_binary_config)
-                .versions,
-            versions,
-        );
-    }
-
-    if let Some(version) = fetch_github_latest(&client, "oneclick", "rubyinstaller2")
-        .await
-        .and_then(|tag| {
-            tag.strip_prefix("RubyInstaller-").and_then(|value| {
-                value
-                    .rsplit_once('-')
-                    .map(|(version, _)| version.to_string())
-            })
-        })
-    {
-        changed |= replace_version_list(
-            &mut config
-                .binaries
-                .ruby
-                .get_or_insert_with(empty_binary_config)
-                .versions,
-            vec![
-                ruby_version(&version),
-                selected_version(ruby_version("3.4.9"), false),
-                selected_version(ruby_version("3.3.7"), false),
-            ],
-        );
-    }
-
     if changed {
         persist_runtime_config_override(&config)?;
         replace_runtime_config(Some(config.clone()));
@@ -640,8 +512,23 @@ pub async fn refresh_runtime_catalog() -> Result<PackagesConfig, String> {
     Ok(runtime_config_to_packages(&config))
 }
 
-fn empty_binary_config() -> BinaryConfig {
-    BinaryConfig { versions: vec![] }
+/// Refresh only the PHP section of the catalog (three small JSON requests), so
+/// installing or updating PHP always uses the newest patch release.
+pub async fn refresh_php_catalog() -> Result<(), String> {
+    let client = reqwest::Client::builder()
+        .user_agent("CHAMP runtime catalog refresher")
+        .build()
+        .map_err(|e| format!("Failed to create HTTP client: {}", e))?;
+    let latest = crate::runtime::php_catalog::fetch_latest_php(&client)
+        .await
+        .ok_or("Could not reach php.net")?;
+
+    let mut config = get_config().unwrap_or_else(embedded_default_runtime_config);
+    if crate::runtime::php_catalog::merge_php_versions(&mut config.binaries.php.versions, latest) {
+        persist_runtime_config_override(&config)?;
+        replace_runtime_config(Some(config));
+    }
+    Ok(())
 }
 
 async fn fetch_github_latest(client: &reqwest::Client, owner: &str, repo: &str) -> Option<String> {
@@ -657,82 +544,6 @@ async fn fetch_github_latest(client: &reqwest::Client, owner: &str, repo: &str) 
         .await
         .ok()
         .map(|release| release.tag_name)
-}
-
-async fn fetch_node_release_lines(client: &reqwest::Client) -> Option<Vec<VersionInfo>> {
-    let entries = client
-        .get("https://nodejs.org/dist/index.json")
-        .send()
-        .await
-        .ok()?
-        .error_for_status()
-        .ok()?
-        .json::<Vec<NodeIndexEntry>>()
-        .await
-        .ok()?;
-
-    let mut seen_majors = std::collections::HashSet::new();
-    let mut versions = Vec::new();
-    let mut selected_lts = false;
-
-    for entry in entries {
-        let version = entry.version.trim_start_matches('v').to_string();
-        let major = version.split('.').next().unwrap_or_default().to_string();
-        if major.is_empty() || !seen_majors.insert(major) {
-            continue;
-        }
-
-        let is_lts = !entry.lts.is_boolean() || entry.lts.as_bool() != Some(false);
-        if is_lts {
-            let selected = !selected_lts;
-            selected_lts = true;
-            versions.push(node_version_with_label(&version, true, selected, "LTS"));
-        } else if versions.is_empty() {
-            versions.push(node_version_with_label(&version, false, false, "Stable"));
-        }
-
-        if versions.len() >= 4 {
-            break;
-        }
-    }
-
-    if versions.is_empty() {
-        None
-    } else {
-        Some(versions)
-    }
-}
-
-async fn fetch_go_stable_versions(client: &reqwest::Client) -> Option<Vec<VersionInfo>> {
-    let entries = client
-        .get("https://go.dev/dl/?mode=json")
-        .send()
-        .await
-        .ok()?
-        .error_for_status()
-        .ok()?
-        .json::<Vec<GoDownloadEntry>>()
-        .await
-        .ok()?;
-
-    let versions: Vec<_> = entries
-        .into_iter()
-        .filter(|entry| entry.stable)
-        .take(2)
-        .enumerate()
-        .map(|(index, entry)| {
-            selected_version(
-                go_version(entry.version.trim_start_matches("go")),
-                index == 0,
-            )
-        })
-        .collect();
-
-    if versions.is_empty() {
-        None
-    } else {
-        Some(versions)
-    }
 }
 
 async fn fetch_version_from_text(
@@ -873,26 +684,6 @@ fn selected_version(mut version: VersionInfo, selected: bool) -> VersionInfo {
     version
 }
 
-fn upsert_selected_version(versions: &mut Vec<VersionInfo>, next: VersionInfo) -> bool {
-    let mut changed = false;
-    for version in versions.iter_mut() {
-        version.selected = false;
-    }
-
-    if let Some(existing) = versions.iter_mut().find(|version| version.id == next.id) {
-        if existing.version != next.version || existing.display_name != next.display_name {
-            changed = true;
-        }
-        *existing = next;
-    } else {
-        versions.insert(0, next);
-        changed = true;
-    }
-
-    versions.sort_by(|a, b| b.version.cmp(&a.version));
-    changed
-}
-
 fn upsert_selected_single_url(
     versions: &mut Vec<VersionInfoSingleUrl>,
     next: VersionInfoSingleUrl,
@@ -948,27 +739,6 @@ fn caddy_version(version: &str) -> VersionInfo {
             linux_arm64: Some(format!("https://github.com/caddyserver/caddy/releases/download/v{version}/caddy_{version}_linux_arm64.tar.gz")),
             macos_x64: Some(format!("https://github.com/caddyserver/caddy/releases/download/v{version}/caddy_{version}_mac_amd64.tar.gz")),
             macos_arm64: Some(format!("https://github.com/caddyserver/caddy/releases/download/v{version}/caddy_{version}_mac_arm64.tar.gz")),
-        },
-    }
-}
-
-fn php_version(version: &str) -> VersionInfo {
-    let family = version_major_minor(version);
-    VersionInfo {
-        id: format!("php-{family}"),
-        version: version.to_string(),
-        selected: true,
-        display_name: format!("PHP {family}"),
-        eol: false,
-        lts: false,
-        checksums: Checksums::default(),
-        urls: Urls {
-            windows_x64: Some(format!("https://windows.php.net/downloads/releases/php-{version}-nts-Win32-vs17-x64.zip")),
-            windows_arm64: None,
-            linux_x64: Some(format!("https://dl.static-php.dev/static-php-cli/bulk/php-{version}-fpm-linux-x86_64.tar.gz")),
-            linux_arm64: Some(format!("https://dl.static-php.dev/static-php-cli/bulk/php-{version}-fpm-linux-aarch64.tar.gz")),
-            macos_x64: Some(format!("https://dl.static-php.dev/static-php-cli/bulk/php-{version}-fpm-macos-x86_64.tar.gz")),
-            macos_arm64: Some(format!("https://dl.static-php.dev/static-php-cli/bulk/php-{version}-fpm-macos-aarch64.tar.gz")),
         },
     }
 }
@@ -1038,100 +808,6 @@ fn adminer_version(version: &str) -> VersionInfoSingleUrl {
         lts: false,
         checksum: None,
         url: format!("https://www.adminer.org/static/download/{version}/adminer-{version}.php"),
-    }
-}
-
-fn node_version_with_label(version: &str, lts: bool, selected: bool, label: &str) -> VersionInfo {
-    VersionInfo {
-        id: format!("node-{}", version.split('.').next().unwrap_or(version)),
-        version: version.to_string(),
-        selected,
-        display_name: format!("Node.js {version} ({label})"),
-        eol: false,
-        lts,
-        checksums: Checksums::default(),
-        urls: Urls {
-            windows_x64: Some(format!(
-                "https://nodejs.org/dist/v{version}/node-v{version}-win-x64.zip"
-            )),
-            windows_arm64: Some(format!(
-                "https://nodejs.org/dist/v{version}/node-v{version}-win-arm64.zip"
-            )),
-            linux_x64: Some(format!(
-                "https://nodejs.org/dist/v{version}/node-v{version}-linux-x64.tar.xz"
-            )),
-            linux_arm64: Some(format!(
-                "https://nodejs.org/dist/v{version}/node-v{version}-linux-arm64.tar.xz"
-            )),
-            macos_x64: Some(format!(
-                "https://nodejs.org/dist/v{version}/node-v{version}-darwin-x64.tar.gz"
-            )),
-            macos_arm64: Some(format!(
-                "https://nodejs.org/dist/v{version}/node-v{version}-darwin-arm64.tar.gz"
-            )),
-        },
-    }
-}
-
-fn python_version(version: &str) -> VersionInfo {
-    let build_tag = "20260623";
-    VersionInfo {
-        id: format!("python-{}", version_major_minor(version)),
-        version: version.to_string(),
-        selected: true,
-        display_name: format!("Python {version}"),
-        eol: false,
-        lts: false,
-        checksums: Checksums::default(),
-        urls: Urls {
-            windows_x64: Some(format!("https://www.python.org/ftp/python/{version}/python-{version}-embed-amd64.zip")),
-            windows_arm64: Some(format!("https://www.python.org/ftp/python/{version}/python-{version}-embed-arm64.zip")),
-            linux_x64: Some(format!("https://github.com/astral-sh/python-build-standalone/releases/download/{build_tag}/cpython-{version}+{build_tag}-x86_64-unknown-linux-gnu-install_only.tar.gz")),
-            linux_arm64: Some(format!("https://github.com/astral-sh/python-build-standalone/releases/download/{build_tag}/cpython-{version}+{build_tag}-aarch64-unknown-linux-gnu-install_only.tar.gz")),
-            macos_x64: Some(format!("https://github.com/astral-sh/python-build-standalone/releases/download/{build_tag}/cpython-{version}+{build_tag}-x86_64-apple-darwin-install_only.tar.gz")),
-            macos_arm64: Some(format!("https://github.com/astral-sh/python-build-standalone/releases/download/{build_tag}/cpython-{version}+{build_tag}-aarch64-apple-darwin-install_only.tar.gz")),
-        },
-    }
-}
-
-fn go_version(version: &str) -> VersionInfo {
-    VersionInfo {
-        id: format!("go-{}", version_major_minor(version)),
-        version: version.to_string(),
-        selected: true,
-        display_name: format!("Go {version}"),
-        eol: false,
-        lts: false,
-        checksums: Checksums::default(),
-        urls: Urls {
-            windows_x64: Some(format!("https://go.dev/dl/go{version}.windows-amd64.zip")),
-            windows_arm64: Some(format!("https://go.dev/dl/go{version}.windows-arm64.zip")),
-            linux_x64: Some(format!("https://go.dev/dl/go{version}.linux-amd64.tar.gz")),
-            linux_arm64: Some(format!("https://go.dev/dl/go{version}.linux-arm64.tar.gz")),
-            macos_x64: Some(format!("https://go.dev/dl/go{version}.darwin-amd64.tar.gz")),
-            macos_arm64: Some(format!("https://go.dev/dl/go{version}.darwin-arm64.tar.gz")),
-        },
-    }
-}
-
-fn ruby_version(version: &str) -> VersionInfo {
-    let family = version_major_minor(version);
-    VersionInfo {
-        id: format!("ruby-{family}"),
-        version: version.to_string(),
-        selected: true,
-        display_name: format!("Ruby {version}"),
-        eol: false,
-        lts: false,
-        checksums: Checksums::default(),
-        urls: Urls {
-            windows_x64: Some(format!("https://github.com/oneclick/rubyinstaller2/releases/download/RubyInstaller-{version}-1/rubyinstaller-{version}-1-x64.7z")),
-            windows_arm64: None,
-            linux_x64: Some(format!("https://cache.ruby-lang.org/pub/ruby/{family}/ruby-{version}.tar.xz")),
-            linux_arm64: Some(format!("https://cache.ruby-lang.org/pub/ruby/{family}/ruby-{version}.tar.xz")),
-            macos_x64: Some(format!("https://cache.ruby-lang.org/pub/ruby/{family}/ruby-{version}.tar.xz")),
-            macos_arm64: Some(format!("https://cache.ruby-lang.org/pub/ruby/{family}/ruby-{version}.tar.xz")),
-        },
     }
 }
 
@@ -1229,47 +905,6 @@ fn runtime_config_to_packages(cfg: &RuntimeConfig) -> PackagesConfig {
                 recommended: v.selected,
             })
             .collect(),
-        node: cfg
-            .binaries
-            .node
-            .as_ref()
-            .map(|b| b.versions.iter().map(version_info_to_generic).collect())
-            .unwrap_or_default(),
-        python: cfg
-            .binaries
-            .python
-            .as_ref()
-            .map(|b| b.versions.iter().map(version_info_to_generic).collect())
-            .unwrap_or_default(),
-        go: cfg
-            .binaries
-            .go
-            .as_ref()
-            .map(|b| b.versions.iter().map(version_info_to_generic).collect())
-            .unwrap_or_default(),
-        ruby: cfg
-            .binaries
-            .ruby
-            .as_ref()
-            .map(|b| b.versions.iter().map(version_info_to_generic).collect())
-            .unwrap_or_default(),
-    }
-}
-
-fn version_info_to_generic(v: &VersionInfo) -> GenericPackage {
-    GenericPackage {
-        id: v.id.clone(),
-        version: v.version.clone(),
-        display_name: v.display_name.clone(),
-        windows_x64: v.urls.windows_x64.clone().unwrap_or_default(),
-        windows_arm64: v.urls.windows_arm64.clone().unwrap_or_default(),
-        linux_x64: v.urls.linux_x64.clone().unwrap_or_default(),
-        linux_arm64: v.urls.linux_arm64.clone().unwrap_or_default(),
-        macos_x64: v.urls.macos_x64.clone().unwrap_or_default(),
-        macos_arm64: v.urls.macos_arm64.clone().unwrap_or_default(),
-        eol: v.eol,
-        lts: v.lts,
-        recommended: v.selected,
     }
 }
 
@@ -1301,10 +936,6 @@ fn selected_package_ids_from_config(cfg: &RuntimeConfig) -> PackageSelection {
             .or_else(|| cfg.binaries.phpmyadmin.versions.first())
             .map(|v| v.id.clone())
             .expect("runtime-config.json must define a database tool package"),
-        node: None,
-        python: None,
-        go: None,
-        ruby: None,
     }
 }
 
@@ -1344,35 +975,6 @@ pub fn get_postgresql_package(id: &str) -> Option<PostgreSQLPackage> {
 pub fn get_phpmyadmin_package(id: &str) -> Option<PhpMyAdminPackage> {
     get_available_packages()
         .phpmyadmin
-        .into_iter()
-        .find(|p| p.id == id)
-}
-
-/// Get Node.js package by ID
-pub fn get_node_package(id: &str) -> Option<GenericPackage> {
-    get_available_packages()
-        .node
-        .into_iter()
-        .find(|p| p.id == id)
-}
-
-/// Get Python package by ID
-pub fn get_python_package(id: &str) -> Option<GenericPackage> {
-    get_available_packages()
-        .python
-        .into_iter()
-        .find(|p| p.id == id)
-}
-
-/// Get Go package by ID
-pub fn get_go_package(id: &str) -> Option<GenericPackage> {
-    get_available_packages().go.into_iter().find(|p| p.id == id)
-}
-
-/// Get Ruby package by ID
-pub fn get_ruby_package(id: &str) -> Option<GenericPackage> {
-    get_available_packages()
-        .ruby
         .into_iter()
         .find(|p| p.id == id)
 }

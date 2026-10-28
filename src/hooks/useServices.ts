@@ -87,8 +87,7 @@ export function useServices({
       [ServiceType.Caddy]: settings?.web_port ?? DEFAULT_PORTS[ServiceType.Caddy],
       [ServiceType.PhpFpm]: settings?.php_port ?? DEFAULT_PORTS[ServiceType.PhpFpm],
       [ServiceType.MySQL]: settings?.mysql_port ?? DEFAULT_PORTS[ServiceType.MySQL],
-      [ServiceType.PostgreSQL]:
-        settings?.postgresql_port ?? DEFAULT_PORTS[ServiceType.PostgreSQL],
+      [ServiceType.PostgreSQL]: settings?.postgresql_port ?? DEFAULT_PORTS[ServiceType.PostgreSQL],
     }),
     [settings]
   );
@@ -141,26 +140,23 @@ export function useServices({
     [stackServiceTypes]
   );
 
-  const markServiceTransition = useCallback(
-    (command: ServiceCommand, service: ServiceType) => {
-      const transitionState =
-        command === "stop_service" ? ServiceState.Stopping : ServiceState.Starting;
+  const markServiceTransition = useCallback((command: ServiceCommand, service: ServiceType) => {
+    const transitionState =
+      command === "stop_service" ? ServiceState.Stopping : ServiceState.Starting;
 
-      setServices((current) => {
-        const selected = current[service];
-        if (!selected) return current;
-        return {
-          ...current,
-          [service]: {
-            ...selected,
-            state: transitionState,
-            error_message: undefined,
-          },
-        };
-      });
-    },
-    []
-  );
+    setServices((current) => {
+      const selected = current[service];
+      if (!selected) return current;
+      return {
+        ...current,
+        [service]: {
+          ...selected,
+          state: transitionState,
+          error_message: undefined,
+        },
+      };
+    });
+  }, []);
 
   const fallbackPortMessage = useMemo(() => {
     return (statuses: ServiceMap, fallbackMessage: string) => {

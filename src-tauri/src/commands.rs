@@ -5,7 +5,7 @@
 //!
 //! # Command Categories
 //!
-//! - **Folder Operations**: `open_folder`, `open_manual`
+//! - **Folder Operations**: `open_folder`, `open_project_terminal`
 //! - **Service Control**: `start_service`, `stop_service`, `restart_service`, `start_all_services`, `stop_all_services`, `restart_all_services`
 //! - **Service Status**: `get_all_statuses`
 //! - **HTTPS Tunnel**: `start_https_tunnel`, `stop_https_tunnel`, `get_https_tunnel_status`
@@ -18,73 +18,103 @@
 //! - **PHP Version Management**: `get_installed_php_versions`, `switch_php_version`, `download_php_version`
 //! - **Version Info**: `get_installed_versions`, `check_existing_components`
 //! - **Dependencies**: `check_system_dependencies`
+//!
+//! Service commands run the blocking process-manager work on Tokio's blocking
+//! pool so slow starts (MySQL init, port waits) never stall async IPC workers.
 
 use crate::config::AppSettings;
 use crate::constants::SYSTEM_METRICS_MIN_SAMPLE_INTERVAL_MS;
+use crate::process::manager::ProcessManager;
 use crate::process::{ServiceMap, ServiceState, ServiceType};
 use crate::runtime::deps::DependencyCheckResult;
-use crate::runtime::downloader::Platform;
-use crate::runtime::downloader::{DownloadProgress, RuntimeDownloader};
+use crate::runtime::downloader::{read_marker_version, Platform, RuntimeDownloader};
 use crate::runtime::locator::get_app_data_paths;
 use crate::runtime::packages::{PackageSelection, PackagesConfig};
 use crate::AppState;
-use serde::{Deserialize, Serialize};
-use std::fs::{self, OpenOptions};
-use std::io::Write;
-use std::path::Path;
+use serde::Serialize;
+use std::fs;
+use std::path::{Component, Path, PathBuf};
 use std::sync::{Mutex, OnceLock};
 use std::time::Instant;
-use sysinfo::{Networks, System};
-use tauri::Emitter;
-use tauri::State;
+use sysinfo::{CpuRefreshKind, MemoryRefreshKind, Networks, RefreshKind, System};
+use tauri::{AppHandle, Emitter, Manager};
 
-/// Open a folder in the system's file explorer using tauri-plugin-opener
+/// Installing runtimes without a configured SHA-256 is currently allowed because
+/// upstream projects do not publish stable per-platform checksums for every
+/// package in `runtime-config.json`. A configured checksum that MISMATCHES still
+/// hard-fails regardless of this flag (see `finalize_downloaded_file`).
+const ALLOW_UNVERIFIED_RUNTIME_DOWNLOADS: bool = true;
+
+/// True when `path` is absolute, has no `..` segments, and lies inside one of `roots`.
+fn is_within_roots(path: &Path, roots: &[PathBuf]) -> bool {
+    path.is_absolute()
+        && !path
+            .components()
+            .any(|component| matches!(component, Component::ParentDir))
+        && roots.iter().any(|root| path.starts_with(root))
+}
+
+/// The UI may only open (and create) folders inside the CHAMP data folder or
+/// the download cache, so a compromised webview cannot create or reveal
+/// arbitrary paths through these commands.
+fn ensure_allowed_folder(path: &str) -> Result<PathBuf, String> {
+    let base_dir = get_app_data_paths()?.base_dir;
+    let roots = [
+        base_dir.clone(),
+        std::env::temp_dir().join("champ-download"),
+    ];
+    let path = PathBuf::from(path);
+    if is_within_roots(&path, &roots) {
+        Ok(path)
+    } else {
+        Err(format!(
+            "CHAMP can only open folders inside {}",
+            base_dir.display()
+        ))
+    }
+}
+
+/// Open a folder in the system's file explorer using tauri-plugin-opener.
 ///
-/// This is a wrapper function that forwards to the plugin for cross-platform compatibility.
-/// The plugin handles platform-specific operations internally.
-///
-/// # Arguments
-///
-/// * `path` - The folder path to open
-///
-/// # Returns
-///
-/// * `Ok(())` - If the folder was opened successfully
-/// * `Err(String)` - If the operation failed
-///
-/// # Examples
-///
-/// ```rust,ignore
-/// open_folder("/path/to/folder".to_string()).await?;
-/// ```
+/// The folder is created first when it does not exist yet.
 #[tauri::command]
 pub async fn open_folder(path: String) -> Result<(), String> {
     use tauri_plugin_opener::reveal_item_in_dir;
 
-    // Ensure folder exists before opening
-    let path_obj = std::path::Path::new(&path);
-    if !path_obj.exists() {
-        fs::create_dir_all(path_obj).map_err(|e| format!("Failed to create folder: {}", e))?;
+    let path = ensure_allowed_folder(&path)?;
+    if !path.exists() {
+        fs::create_dir_all(&path).map_err(|e| format!("Failed to create folder: {}", e))?;
     }
 
-    // Use tauri-plugin-opener for cross-platform folder opening
     reveal_item_in_dir(&path).map_err(|e| format!("Failed to open folder: {}", e))?;
 
     Ok(())
 }
 
-/// Open a terminal in a specific directory with the PATH injected to include installed runtimes
+/// Collect the bin directories of the installed CHAMP runtimes (PHP CLI,
+/// MySQL/PostgreSQL clients) so a terminal can use them without setup.
+fn runtime_bin_dirs() -> Vec<PathBuf> {
+    let Ok(runtimes) = crate::runtime::locator::locate_runtime_binaries() else {
+        return Vec::new();
+    };
+
+    let mut dirs: Vec<PathBuf> = Vec::new();
+    for binary in [&runtimes.php_cgi, &runtimes.mysql, &runtimes.postgresql] {
+        if let Some(parent) = binary.parent() {
+            if parent.exists() && !dirs.iter().any(|dir| dir == parent) {
+                dirs.push(parent.to_path_buf());
+            }
+        }
+    }
+    dirs
+}
+
+/// Open a terminal in a specific directory with the installed runtimes on PATH.
 #[tauri::command]
 pub async fn open_project_terminal(path: Option<String>) -> Result<(), String> {
-    use std::process::Command;
-
     let target_dir = match path {
-        Some(p) => std::path::PathBuf::from(p),
-        None => {
-            crate::runtime::locator::get_app_data_paths()
-                .map_err(|e| format!("Failed to get app paths: {}", e))?
-                .projects_dir
-        }
+        Some(p) => ensure_allowed_folder(&p)?,
+        None => get_app_data_paths()?.projects_dir,
     };
 
     if !target_dir.exists() {
@@ -92,124 +122,77 @@ pub async fn open_project_terminal(path: Option<String>) -> Result<(), String> {
             .map_err(|e| format!("Failed to create terminal directory: {}", e))?;
     }
 
-    // Attempt to locate installed runtimes and collect their bin directories
-    let mut runtime_paths = Vec::new();
-    if let Ok(runtimes) = crate::runtime::locator::locate_runtime_binaries() {
-        if let Some(parent) = runtimes.php_cgi.parent() {
-            runtime_paths.push(parent.to_path_buf());
-        }
-        if let Some(parent) = runtimes.mysql.parent() {
-            runtime_paths.push(parent.to_path_buf());
-        }
-        if let Some(node) = runtimes.node {
-            if let Some(parent) = node.parent() {
-                runtime_paths.push(parent.to_path_buf());
-            }
-        }
-        if let Some(python) = runtimes.python {
-            if let Some(parent) = python.parent() {
-                runtime_paths.push(parent.to_path_buf());
-                // Python usually needs its Scripts dir too
-                runtime_paths.push(parent.join("Scripts"));
-            }
-        }
-        if let Some(go) = runtimes.go {
-            if let Some(parent) = go.parent() {
-                runtime_paths.push(parent.to_path_buf());
-            }
-        }
-        if let Some(ruby) = runtimes.ruby {
-            if let Some(parent) = ruby.parent() {
-                runtime_paths.push(parent.to_path_buf());
-            }
-        }
-    }
-
-    // Build the new PATH environment variable
     let current_path = std::env::var_os("PATH").unwrap_or_default();
-    let mut paths = std::env::split_paths(&current_path).collect::<Vec<_>>();
-    // Prepend new paths to override system defaults if there's a conflict
-    paths.splice(0..0, runtime_paths);
+    let mut paths = runtime_bin_dirs();
+    paths.extend(std::env::split_paths(&current_path));
     let new_path = std::env::join_paths(paths).unwrap_or(current_path);
 
-    #[cfg(target_os = "windows")]
-    {
-        Command::new("cmd.exe")
-            .arg("/c")
-            .arg("start")
-            .arg("cmd.exe")
-            .env("PATH", new_path)
+    spawn_terminal(&target_dir, &new_path)
+}
+
+#[cfg(target_os = "windows")]
+fn spawn_terminal(target_dir: &Path, path_env: &std::ffi::OsStr) -> Result<(), String> {
+    std::process::Command::new("cmd.exe")
+        .args(["/c", "start", "cmd.exe"])
+        .env("PATH", path_env)
+        .current_dir(target_dir)
+        .spawn()
+        .map(|_| ())
+        .map_err(|e| format!("Failed to open terminal: {}", e))
+}
+
+#[cfg(target_os = "macos")]
+fn spawn_terminal(target_dir: &Path, path_env: &std::ffi::OsStr) -> Result<(), String> {
+    use std::os::unix::fs::PermissionsExt;
+
+    // Terminal.app does not inherit our environment, so hand it a tiny script
+    // that sets PATH and the working directory before starting the user's shell.
+    let quote = |value: &str| format!("'{}'", value.replace('\'', "'\\''"));
+    let script = format!(
+        "#!/bin/sh\ncd {}\nexport PATH={}\nexec \"${{SHELL:-/bin/zsh}}\" -i\n",
+        quote(&target_dir.to_string_lossy()),
+        quote(&path_env.to_string_lossy()),
+    );
+    let script_path = std::env::temp_dir().join("champ-terminal.command");
+    fs::write(&script_path, script)
+        .map_err(|e| format!("Failed to prepare terminal script: {}", e))?;
+    fs::set_permissions(&script_path, fs::Permissions::from_mode(0o755))
+        .map_err(|e| format!("Failed to prepare terminal script: {}", e))?;
+
+    std::process::Command::new("open")
+        .args(["-a", "Terminal"])
+        .arg(&script_path)
+        .spawn()
+        .map(|_| ())
+        .map_err(|e| format!("Failed to open terminal: {}", e))
+}
+
+#[cfg(all(unix, not(target_os = "macos")))]
+fn spawn_terminal(target_dir: &Path, path_env: &std::ffi::OsStr) -> Result<(), String> {
+    // Most emulators start in the spawning process' working directory, which
+    // avoids relying on emulator-specific flags such as --working-directory.
+    const TERMINALS: [&str; 6] = [
+        "x-terminal-emulator",
+        "gnome-terminal",
+        "konsole",
+        "xfce4-terminal",
+        "kitty",
+        "xterm",
+    ];
+
+    let mut last_error = String::from("no terminal emulator found");
+    for terminal in TERMINALS {
+        match std::process::Command::new(terminal)
+            .env("PATH", path_env)
             .current_dir(target_dir)
             .spawn()
-            .map_err(|e| format!("Failed to open terminal: {}", e))?;
+        {
+            Ok(_) => return Ok(()),
+            Err(e) => last_error = format!("{}: {}", terminal, e),
+        }
     }
-
-    #[cfg(target_os = "macos")]
-    {
-        // On macOS, open Terminal.app but PATH injection might be tricky depending on how "open" works.
-        // A better robust way is launching osascript to open terminal.
-        // For now, try launching bash inside Terminal.app using open.
-        Command::new("open")
-            .arg("-a")
-            .arg("Terminal")
-            .arg(&target_dir)
-            .spawn()
-            .map_err(|e| format!("Failed to open terminal: {}", e))?;
-    }
-
-    #[cfg(target_os = "linux")]
-    {
-        Command::new("x-terminal-emulator")
-            .arg("--working-directory")
-            .arg(&target_dir)
-            .env("PATH", new_path)
-            .spawn()
-            .map_err(|e| format!("Failed to open terminal: {}", e))?;
-    }
-
-    Ok(())
+    Err(format!("Failed to open terminal ({})", last_error))
 }
-
-/// Open the user manual in the system's default application using tauri-plugin-opener
-///
-/// This command locates the MANUAL.html resource file and reveals it in the
-/// file manager using tauri-plugin-opener for cross-platform compatibility.
-/// Users can then open it with their preferred browser or HTML viewer.
-///
-/// # Arguments
-///
-/// * `app` - Tauri application handle
-///
-/// # Returns
-///
-/// * `Ok(())` - If the manual was opened successfully
-/// * `Err(String)` - If the manual file was not found or could not be opened
-#[tauri::command]
-pub async fn open_manual(app: tauri::AppHandle) -> Result<(), String> {
-    use tauri::Manager;
-    use tauri_plugin_opener::reveal_item_in_dir;
-
-    let resource_dir = app
-        .path()
-        .resource_dir()
-        .map_err(|e| format!("Failed to get resource dir: {}", e))?;
-
-    let manual_path = resource_dir.join("MANUAL.html");
-
-    // Ensure the manual exists
-    if !manual_path.exists() {
-        return Err(format!("Manual not found at: {}", manual_path.display()));
-    }
-
-    // Use tauri-plugin-opener to reveal the file in the file manager
-    // This is cross-platform and lets the user choose how to open it
-    reveal_item_in_dir(&manual_path).map_err(|e| format!("Failed to open manual: {}", e))?;
-
-    Ok(())
-}
-
-/// Global state for download progress tracking
-static DOWNLOAD_PROGRESS: Mutex<Option<DownloadProgress>> = Mutex::new(None);
 
 /// Data transfer object for application paths
 #[derive(Debug, Serialize)]
@@ -236,6 +219,10 @@ pub struct InstalledPhpVersionDto {
     pub lts: bool,
     pub recommended: bool,
     pub path: Option<String>,
+    /// Newest patch release of this branch in the catalog.
+    pub latest_version: String,
+    /// Installed, but an older patch than `latest_version`.
+    pub update_available: bool,
 }
 
 /// Data transfer object for system metrics (CPU, memory, network)
@@ -255,27 +242,6 @@ pub struct LanguageSettingsDto {
     pub sound_enabled: bool,
 }
 
-/// Supported project starter templates.
-#[derive(Clone, Copy, Debug, Deserialize)]
-#[serde(rename_all = "lowercase")]
-pub enum ProjectTemplate {
-    Static,
-    Php,
-    Node,
-    Python,
-    Go,
-    Ruby,
-}
-
-/// Data transfer object returned after creating a starter project.
-#[derive(Debug, Serialize)]
-pub struct ProjectScaffoldResult {
-    pub name: String,
-    pub template: String,
-    pub path: String,
-    pub entry_file: String,
-}
-
 /// Minimum interval between system metrics samples to avoid excessive CPU usage
 const SYSTEM_METRICS_MIN_SAMPLE_INTERVAL: std::time::Duration =
     std::time::Duration::from_millis(SYSTEM_METRICS_MIN_SAMPLE_INTERVAL_MS);
@@ -292,7 +258,12 @@ struct SystemMetricsMonitor {
 
 impl SystemMetricsMonitor {
     fn new() -> Self {
-        let mut system = System::new_all();
+        // Only CPU usage and RAM are shown, so skip processes, disks, etc.
+        let mut system = System::new_with_specifics(
+            RefreshKind::nothing()
+                .with_cpu(CpuRefreshKind::nothing().with_cpu_usage())
+                .with_memory(MemoryRefreshKind::nothing().with_ram()),
+        );
         system.refresh_cpu_usage();
         system.refresh_memory();
 
@@ -367,150 +338,92 @@ fn aggregate_network_totals(networks: &Networks) -> (u64, u64) {
 
 static SYSTEM_METRICS_MONITOR: OnceLock<Mutex<SystemMetricsMonitor>> = OnceLock::new();
 
-fn marker_version(path: &Path) -> Option<String> {
-    let content = fs::read_to_string(path).ok()?;
-    content
-        .lines()
-        .find_map(|line| line.strip_prefix("version=").map(str::to_string))
+/// Run `f` against the process manager on Tokio's blocking pool.
+///
+/// Service start/stop can block for seconds (port release waits, MySQL init),
+/// so it must not run on an async IPC worker thread.
+pub(crate) async fn run_with_manager<T, F>(app: &AppHandle, f: F) -> Result<T, String>
+where
+    T: Send + 'static,
+    F: FnOnce(&mut ProcessManager) -> T + Send + 'static,
+{
+    let app = app.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        let state = app.state::<AppState>();
+        let mut manager = state
+            .process_manager
+            .lock()
+            .map_err(|e| format!("Failed to acquire process manager lock: {}", e))?;
+        Ok(f(&mut manager))
+    })
+    .await
+    .map_err(|e| format!("Process manager task failed: {}", e))?
 }
 
-/// Acquire the process manager lock and run `f` with a mutable reference to it. (M-04)
+/// Run a service command, then refresh health and return all statuses.
 ///
-/// Centralizes lock acquisition and the lock-error message so the service/status
-/// commands don't each repeat the same boilerplate.
-fn with_manager<T>(
-    state: &State<'_, AppState>,
-    f: impl FnOnce(&mut crate::process::manager::ProcessManager) -> T,
-) -> Result<T, String> {
-    let mut manager = state
-        .process_manager
-        .lock()
-        .map_err(|e| format!("Failed to acquire process manager lock: {}", e))?;
-    Ok(f(&mut manager))
+/// When `statuses_on_error` is true the error is returned only after statuses
+/// were refreshed, so the frontend's next poll sees the error state.
+async fn run_service_command(
+    app: &AppHandle,
+    command: impl FnOnce(&mut ProcessManager) -> Result<(), String> + Send + 'static,
+) -> Result<ServiceMap, String> {
+    let (result, statuses) = run_with_manager(app, |m| {
+        let result = command(m);
+        m.update_health();
+        (result, m.get_all_statuses())
+    })
+    .await?;
+
+    result?;
+    Ok(statuses)
 }
 
 /// Start a service
-///
-/// # Arguments
-///
-/// * `service` - The service type to start
-/// * `state` - Application state containing the process manager
-///
-/// # Returns
-///
-/// * `Ok(ServiceMap)` - Updated service statuses
-/// * `Err(String)` - If the operation failed
 #[tauri::command]
-pub async fn start_service(
-    service: ServiceType,
-    state: State<'_, AppState>,
-) -> Result<ServiceMap, String> {
-    // Update health and return statuses regardless of start result so the
-    // frontend can see the error state.
-    let (result, statuses) = with_manager(&state, |m| {
-        let result = m.start(service);
-        m.update_health();
-        (result, m.get_all_statuses())
-    })?;
-
-    // Return error after getting statuses so frontend can see the error state
-    result?;
-    Ok(statuses)
+pub async fn start_service(service: ServiceType, app: AppHandle) -> Result<ServiceMap, String> {
+    run_service_command(&app, move |m| m.start(service)).await
 }
 
 /// Stop a service
-///
-/// # Arguments
-///
-/// * `service` - The service type to stop
-/// * `state` - Application state containing the process manager
-///
-/// # Returns
-///
-/// * `Ok(ServiceMap)` - Updated service statuses
-/// * `Err(String)` - If the operation failed
 #[tauri::command]
-pub async fn stop_service(
-    service: ServiceType,
-    state: State<'_, AppState>,
-) -> Result<ServiceMap, String> {
-    // Stop the service; on stop error the `?` short-circuits before statuses
-    // are returned (preserving the original early-return-on-error behavior).
-    with_manager(&state, |m| {
-        m.stop(service)?;
-        m.update_health();
-        Ok(m.get_all_statuses())
-    })?
+pub async fn stop_service(service: ServiceType, app: AppHandle) -> Result<ServiceMap, String> {
+    run_service_command(&app, move |m| m.stop(service)).await
 }
 
 /// Restart a service
-///
-/// # Arguments
-///
-/// * `service` - The service type to restart
-/// * `state` - Application state containing the process manager
-///
-/// # Returns
-///
-/// * `Ok(ServiceMap)` - Updated service statuses
-/// * `Err(String)` - If the operation failed
 #[tauri::command]
-pub async fn restart_service(
-    service: ServiceType,
-    state: State<'_, AppState>,
-) -> Result<ServiceMap, String> {
-    // Update health and return statuses regardless of restart result.
-    let (result, statuses) = with_manager(&state, |m| {
-        let result = m.restart(service);
-        m.update_health();
-        (result, m.get_all_statuses())
-    })?;
-
-    // Return error after getting statuses so frontend can see the error state
-    result?;
-    Ok(statuses)
+pub async fn restart_service(service: ServiceType, app: AppHandle) -> Result<ServiceMap, String> {
+    run_service_command(&app, move |m| m.restart(service)).await
 }
 
 #[tauri::command]
-pub async fn start_all_services(state: State<'_, AppState>) -> Result<ServiceMap, String> {
-    let (result, statuses) = with_manager(&state, |m| {
-        let result = m.start_all();
-        m.update_health();
-        (result, m.get_all_statuses())
-    })?;
-    result?;
-    Ok(statuses)
+pub async fn start_all_services(app: AppHandle) -> Result<ServiceMap, String> {
+    run_service_command(&app, |m| m.start_all()).await
 }
 
 #[tauri::command]
-pub async fn stop_all_services(state: State<'_, AppState>) -> Result<ServiceMap, String> {
-    with_manager(&state, |m| {
+pub async fn stop_all_services(app: AppHandle) -> Result<ServiceMap, String> {
+    run_service_command(&app, |m| {
         let _ = crate::tunnel::stop_https_tunnel();
-        m.stop_stack()?;
-        m.update_health();
-        Ok(m.get_all_statuses())
-    })?
+        m.stop_stack()
+    })
+    .await
 }
 
 #[tauri::command]
-pub async fn restart_all_services(state: State<'_, AppState>) -> Result<ServiceMap, String> {
-    let (result, statuses) = with_manager(&state, |m| {
-        let result = m.restart_all();
-        m.update_health();
-        (result, m.get_all_statuses())
-    })?;
-    result?;
-    Ok(statuses)
+pub async fn restart_all_services(app: AppHandle) -> Result<ServiceMap, String> {
+    run_service_command(&app, |m| m.restart_all()).await
 }
 
 /// Get the status of all services
 #[tauri::command]
-pub async fn get_all_statuses(state: State<'_, AppState>) -> Result<ServiceMap, String> {
-    // Update health before returning statuses
-    with_manager(&state, |m| {
+pub async fn get_all_statuses(app: AppHandle) -> Result<ServiceMap, String> {
+    run_with_manager(&app, |m| {
         m.update_health();
         m.get_all_statuses()
     })
+    .await
 }
 
 /// Start a free public HTTPS URL for the local CHAMP web server.
@@ -519,32 +432,23 @@ pub async fn get_all_statuses(state: State<'_, AppState>) -> Result<ServiceMap, 
 /// selected CHAMP stack first when the web server is not already running.
 #[tauri::command]
 pub async fn start_https_tunnel(
-    state: State<'_, AppState>,
+    app: AppHandle,
 ) -> Result<crate::tunnel::HttpsTunnelStatus, String> {
-    let web_port = {
-        let mut manager = state
-            .process_manager
-            .lock()
-            .map_err(|e| format!("Failed to acquire process manager lock: {}", e))?;
-
+    let web_port = run_with_manager(&app, |manager| -> Result<u16, String> {
         manager.update_health();
-        let statuses = manager.get_all_statuses();
-        let caddy_running = statuses
-            .get(&ServiceType::Caddy)
-            .map(|service| service.state == ServiceState::Running)
-            .unwrap_or(false);
-
+        let caddy_running = manager.status(ServiceType::Caddy) == ServiceState::Running;
         if !caddy_running {
             manager.start_all()?;
             manager.update_health();
         }
 
-        manager
+        Ok(manager
             .get_all_statuses()
             .get(&ServiceType::Caddy)
             .map(|service| service.port)
-            .unwrap_or(ServiceType::Caddy.default_port())
-    };
+            .unwrap_or(ServiceType::Caddy.default_port()))
+    })
+    .await??;
 
     crate::tunnel::start_https_tunnel(web_port).await
 }
@@ -563,53 +467,54 @@ pub async fn get_https_tunnel_status() -> Result<crate::tunnel::HttpsTunnelStatu
 
 /// Get app settings
 #[tauri::command]
-pub async fn get_settings() -> Result<crate::config::AppSettings, String> {
-    Ok(crate::config::AppSettings::load())
+pub async fn get_settings() -> Result<AppSettings, String> {
+    Ok(AppSettings::load())
 }
 
 /// Save app settings
 #[tauri::command]
-pub async fn save_settings(
-    settings: crate::config::AppSettings,
-    app: tauri::AppHandle,
-    state: State<'_, AppState>,
-) -> Result<(), String> {
+pub async fn save_settings(mut settings: AppSettings, app: AppHandle) -> Result<(), String> {
+    // Language, sound, and the agent connector have dedicated commands that
+    // write immediately. The Settings panel holds a snapshot loaded when it
+    // opened, so keep the values on disk instead of reverting a change made
+    // while the panel was open.
+    let stored = AppSettings::load();
+    settings.language = stored.language;
+    settings.sound_enabled = stored.sound_enabled;
+    settings.agent_connector_enabled = stored.agent_connector_enabled;
+    settings.agent_connector_read_only = stored.agent_connector_read_only;
+    settings.agent_connector_port = stored.agent_connector_port;
+
     ensure_selected_database_tool_installed(&settings, &app).await?;
 
     // Save the settings after any required runtime install succeeds.
     settings.save()?;
 
-    // Update the ProcessManager with new settings
-    let mut manager = state
-        .process_manager
-        .lock()
-        .map_err(|e| format!("Failed to acquire process manager lock: {}", e))?;
+    run_with_manager(&app, move |manager| -> Result<(), String> {
+        let running_services: Vec<ServiceType> = manager
+            .get_all_statuses()
+            .iter()
+            .filter(|(_, s)| s.state == ServiceState::Running)
+            .map(|(ty, _)| *ty)
+            .collect();
+        let web_stack_was_running = running_services.contains(&ServiceType::Caddy)
+            || running_services.contains(&ServiceType::PhpFpm);
 
-    // Get the current running services before updating ports
-    let running_services: Vec<ServiceType> = manager
-        .get_all_statuses()
-        .iter()
-        .filter(|(_, s)| s.state == ServiceState::Running)
-        .map(|(ty, _)| *ty)
-        .collect();
-    let web_stack_was_running = running_services.contains(&ServiceType::Caddy)
-        || running_services.contains(&ServiceType::PhpFpm);
+        manager.update_ports(&settings);
 
-    // Update ports in the process manager
-    manager.update_ports(&settings);
-
-    if web_stack_was_running {
-        manager.stop_stack()?;
-        manager.start_all()?;
-    } else {
-        // Restart any standalone running database service with new port settings.
-        for service in running_services {
-            let _ = manager.stop(service);
-            let _ = manager.start(service);
+        if web_stack_was_running {
+            manager.stop_stack()?;
+            manager.start_all()?;
+        } else {
+            // Restart any standalone running database service with new port settings.
+            for service in running_services {
+                let _ = manager.stop(service);
+                let _ = manager.start(service);
+            }
         }
-    }
-
-    Ok(())
+        Ok(())
+    })
+    .await?
 }
 
 /// Get language and sound preferences.
@@ -642,9 +547,17 @@ pub async fn save_sound_setting(enabled: bool) -> Result<(), String> {
     settings.save()
 }
 
+/// Emit runtime download progress to the frontend.
+fn progress_emitter(app: &AppHandle) -> crate::runtime::downloader::ProgressCallback {
+    let app = app.clone();
+    Box::new(move |progress| {
+        let _ = app.emit("download-progress", &progress);
+    })
+}
+
 async fn ensure_selected_database_tool_installed(
     settings: &AppSettings,
-    app: &tauri::AppHandle,
+    app: &AppHandle,
 ) -> Result<(), String> {
     let tool_id = &settings.package_selection.phpmyadmin;
     let packages = crate::runtime::packages::get_available_packages();
@@ -654,7 +567,8 @@ async fn ensure_selected_database_tool_installed(
         .find(|package| package.id == *tool_id)
         .ok_or_else(|| format!("Unknown database tool: {}", tool_id))?;
 
-    let downloader = RuntimeDownloader::with_packages(settings.package_selection.clone());
+    let downloader = RuntimeDownloader::with_packages(settings.package_selection.clone())
+        .allow_unverified_checksums(ALLOW_UNVERIFIED_RUNTIME_DOWNLOADS);
     let runtime_dir = downloader.get_runtime_dir()?;
     if is_database_tool_installed(&runtime_dir, tool_id)
         && is_selected_database_installed(&runtime_dir, tool_id)
@@ -667,22 +581,13 @@ async fn ensure_selected_database_tool_installed(
         package.display_name
     );
 
-    let app_clone = app.clone();
     let skip_list = if tool_id.starts_with("adminer") {
         ["caddy", "php", "mysql", "phpmyadmin"]
     } else {
         ["caddy", "php", "postgresql", "adminer"]
     };
     downloader
-        .download_all_with_skip(
-            Box::new(move |progress| {
-                let _ = app_clone.emit("download-progress", &progress);
-                if let Ok(mut p) = DOWNLOAD_PROGRESS.lock() {
-                    *p = Some(progress);
-                }
-            }),
-            &skip_list,
-        )
+        .download_all_with_skip(progress_emitter(app), &skip_list)
         .await?;
 
     if is_database_tool_installed(&runtime_dir, tool_id)
@@ -708,42 +613,24 @@ fn is_database_tool_installed(runtime_dir: &Path, tool_id: &str) -> bool {
 }
 
 fn is_selected_database_installed(runtime_dir: &Path, tool_id: &str) -> bool {
-    if tool_id.starts_with("adminer") {
-        runtime_dir.join("postgresql_installed.txt").exists()
-            || runtime_dir
-                .join("postgresql")
-                .join("bin")
-                .join("postgres.exe")
-                .exists()
-            || runtime_dir
-                .join("postgresql")
-                .join("bin")
-                .join("postgres")
-                .exists()
-            || runtime_dir.join("bin").join("postgres.exe").exists()
-            || runtime_dir.join("bin").join("postgres").exists()
+    let (marker, folder, binary) = if tool_id.starts_with("adminer") {
+        ("postgresql_installed.txt", "postgresql", "postgres")
     } else {
-        runtime_dir.join("mysql_installed.txt").exists()
-            || runtime_dir
-                .join("mysql")
-                .join("bin")
-                .join("mysqld.exe")
-                .exists()
-            || runtime_dir
-                .join("mysql")
-                .join("bin")
-                .join("mysqld")
-                .exists()
-            || runtime_dir.join("bin").join("mysqld.exe").exists()
-            || runtime_dir.join("bin").join("mysqld").exists()
-    }
+        ("mysql_installed.txt", "mysql", "mysqld")
+    };
+
+    runtime_dir.join(marker).exists()
+        || [binary.to_string(), format!("{binary}.exe")]
+            .iter()
+            .any(|name| {
+                runtime_dir.join(folder).join("bin").join(name).exists()
+                    || runtime_dir.join("bin").join(name).exists()
+            })
 }
 
 /// Validate settings (check port conflicts, valid paths)
 #[tauri::command]
-pub async fn validate_settings(
-    settings: crate::config::AppSettings,
-) -> Result<Vec<String>, Vec<String>> {
+pub async fn validate_settings(settings: AppSettings) -> Result<Vec<String>, Vec<String>> {
     settings.validate()
 }
 
@@ -758,49 +645,45 @@ pub async fn check_ports(
     use crate::config::is_port_available;
 
     serde_json::json!({
-        "web": {
-            "port": web_port,
-            "available": is_port_available(web_port)
-        },
-        "php": {
-            "port": php_port,
-            "available": is_port_available(php_port)
-        },
-        "mysql": {
-            "port": mysql_port,
-            "available": is_port_available(mysql_port)
-        },
-        "postgresql": {
-            "port": postgresql_port,
-            "available": is_port_available(postgresql_port)
-        }
+        "web": { "port": web_port, "available": is_port_available(web_port) },
+        "php": { "port": php_port, "available": is_port_available(php_port) },
+        "mysql": { "port": mysql_port, "available": is_port_available(mysql_port) },
+        "postgresql": { "port": postgresql_port, "available": is_port_available(postgresql_port) }
     })
 }
 
 /// Check if runtime binaries are already installed
 #[tauri::command]
 pub async fn check_runtime_installed() -> Result<bool, String> {
-    let downloader = RuntimeDownloader::new();
-    Ok(downloader.is_installed())
+    Ok(RuntimeDownloader::new().is_installed())
 }
 
-/// Reset installation (for testing/debug - deletes runtime directory)
+/// Reset installation (stops every service, then deletes the runtime directory)
 #[tauri::command]
-pub async fn reset_installation(state: State<'_, AppState>) -> Result<String, String> {
-    {
-        let mut manager = state
-            .process_manager
-            .lock()
-            .map_err(|e| format!("Failed to acquire process manager lock: {}", e))?;
-        manager.stop_all()?;
-    }
+pub async fn reset_installation(app: AppHandle) -> Result<String, String> {
+    run_with_manager(&app, |manager| {
+        let _ = crate::tunnel::stop_https_tunnel();
+        manager.stop_all()
+    })
+    .await??;
 
     reset_runtime_dir().await
 }
 
+/// Stop the tunnel and every service so the installer can replace the app
+/// without leaving orphaned Caddy/PHP/database processes behind.
+#[tauri::command]
+pub async fn prepare_for_update(app: AppHandle) -> Result<(), String> {
+    crate::agent::stop();
+    run_with_manager(&app, |manager| {
+        let _ = crate::tunnel::stop_https_tunnel();
+        manager.stop_all()
+    })
+    .await?
+}
+
 pub async fn reset_runtime_dir() -> Result<String, String> {
-    let downloader = RuntimeDownloader::new();
-    let runtime_dir = downloader.get_runtime_dir().map_err(|e| e.to_string())?;
+    let runtime_dir = RuntimeDownloader::new().get_runtime_dir()?;
 
     if runtime_dir.exists() {
         fs::remove_dir_all(&runtime_dir)
@@ -813,8 +696,7 @@ pub async fn reset_runtime_dir() -> Result<String, String> {
 /// Get the runtime directory path
 #[tauri::command]
 pub async fn get_runtime_dir() -> Result<String, String> {
-    let downloader = RuntimeDownloader::new();
-    downloader
+    RuntimeDownloader::new()
         .get_runtime_dir()
         .map(|p| p.to_string_lossy().to_string())
 }
@@ -835,306 +717,6 @@ pub async fn get_app_paths() -> Result<AppPathsDto, String> {
 }
 
 #[tauri::command]
-pub async fn create_project_template(
-    project_name: String,
-    template: ProjectTemplate,
-) -> Result<ProjectScaffoldResult, String> {
-    let paths = get_app_data_paths()?;
-    fs::create_dir_all(&paths.projects_dir)
-        .map_err(|e| format!("Failed to create projects directory: {}", e))?;
-
-    create_project_template_in_dir(&paths.projects_dir, &project_name, template)
-}
-
-fn create_project_template_in_dir(
-    projects_dir: &Path,
-    project_name: &str,
-    template: ProjectTemplate,
-) -> Result<ProjectScaffoldResult, String> {
-    let name = validate_project_name(project_name)?;
-    let projects_root = projects_dir
-        .canonicalize()
-        .map_err(|e| format!("Failed to resolve projects directory: {}", e))?;
-    let project_dir = projects_root.join(&name);
-
-    if !project_dir.starts_with(&projects_root) {
-        return Err("Project path must stay inside the projects directory".to_string());
-    }
-
-    let created_dir = !project_dir.exists();
-    if project_dir.exists() {
-        let mut entries = fs::read_dir(&project_dir)
-            .map_err(|e| format!("Failed to inspect existing project directory: {}", e))?;
-        if entries.next().is_some() {
-            return Err(format!(
-                "Project '{}' already exists and is not empty",
-                name
-            ));
-        }
-    } else {
-        fs::create_dir(&project_dir)
-            .map_err(|e| format!("Failed to create project directory: {}", e))?;
-    }
-
-    let files = project_template_files(template, &name);
-    for (relative_path, content) in files {
-        let file_path = project_dir.join(relative_path);
-        let write_result = (|| {
-            if let Some(parent) = file_path.parent() {
-                fs::create_dir_all(parent)
-                    .map_err(|e| format!("Failed to create project subdirectory: {}", e))?;
-            }
-            OpenOptions::new()
-                .write(true)
-                .create_new(true)
-                .open(&file_path)
-                .and_then(|mut file| file.write_all(content.as_bytes()))
-                .map_err(|e| format!("Failed to write {}: {}", file_path.display(), e))
-        })();
-
-        if let Err(err) = write_result {
-            // If we created the project directory in this call, remove the partial
-            // scaffold so a retry doesn't fail with "already exists and is not empty".
-            // Never remove a pre-existing (empty) directory we did not create.
-            if created_dir {
-                let _ = fs::remove_dir_all(&project_dir);
-            }
-            return Err(err);
-        }
-    }
-
-    let entry_file = project_entry_file(template);
-    Ok(ProjectScaffoldResult {
-        name,
-        template: project_template_id(template).to_string(),
-        path: project_dir.to_string_lossy().to_string(),
-        entry_file: project_dir.join(entry_file).to_string_lossy().to_string(),
-    })
-}
-
-fn validate_project_name(project_name: &str) -> Result<String, String> {
-    let name = project_name.trim();
-    if name.is_empty() {
-        return Err("Project name is required".to_string());
-    }
-
-    if name == "." || name == ".." {
-        return Err("Project name cannot be '.' or '..'".to_string());
-    }
-
-    if name.chars().any(|ch| {
-        ch.is_control() || matches!(ch, '<' | '>' | ':' | '"' | '/' | '\\' | '|' | '?' | '*')
-    }) {
-        return Err(
-            "Project name contains characters that are not valid in a folder name".to_string(),
-        );
-    }
-
-    // Windows silently strips a trailing dot or space, which leads to confusing
-    // mismatches between the requested name and the folder that ends up on disk.
-    // Check the original input (not the trimmed name) so trailing whitespace the
-    // caller supplied is rejected rather than silently swallowed by the trim above.
-    if project_name.ends_with('.')
-        || project_name.ends_with(' ')
-        || name.ends_with('.')
-        || name.ends_with(' ')
-    {
-        return Err("Project name cannot end with a space or period".to_string());
-    }
-
-    // Reject Windows reserved device names (case-insensitive), with or without an
-    // extension. These are invalid folder names on Windows, and a project created
-    // on macOS/Linux may later be opened on Windows, so validate everywhere.
-    let stem = name.split('.').next().unwrap_or(name);
-    if is_windows_reserved_name(stem) {
-        return Err(format!(
-            "Project name '{}' is a reserved Windows device name",
-            name
-        ));
-    }
-
-    Ok(name.to_string())
-}
-
-/// Returns true if `stem` matches a Windows reserved device name
-/// (CON, PRN, AUX, NUL, COM1..COM9, LPT1..LPT9), case-insensitively.
-fn is_windows_reserved_name(stem: &str) -> bool {
-    let upper = stem.to_ascii_uppercase();
-    if matches!(upper.as_str(), "CON" | "PRN" | "AUX" | "NUL") {
-        return true;
-    }
-    if let Some(digit) = upper
-        .strip_prefix("COM")
-        .or_else(|| upper.strip_prefix("LPT"))
-    {
-        return matches!(digit, "1" | "2" | "3" | "4" | "5" | "6" | "7" | "8" | "9");
-    }
-    false
-}
-
-fn project_template_id(template: ProjectTemplate) -> &'static str {
-    match template {
-        ProjectTemplate::Static => "static",
-        ProjectTemplate::Php => "php",
-        ProjectTemplate::Node => "node",
-        ProjectTemplate::Python => "python",
-        ProjectTemplate::Go => "go",
-        ProjectTemplate::Ruby => "ruby",
-    }
-}
-
-fn project_entry_file(template: ProjectTemplate) -> &'static str {
-    match template {
-        ProjectTemplate::Static => "index.html",
-        ProjectTemplate::Php => "index.php",
-        ProjectTemplate::Node => "README.md",
-        ProjectTemplate::Python => "README.md",
-        ProjectTemplate::Go => "README.md",
-        ProjectTemplate::Ruby => "README.md",
-    }
-}
-
-fn project_template_files(template: ProjectTemplate, name: &str) -> Vec<(&'static str, String)> {
-    match template {
-        ProjectTemplate::Static => vec![
-            (
-                "index.html",
-                format!(
-                    r#"<!doctype html>
-<html lang="en">
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>{name}</title>
-    <link rel="stylesheet" href="./styles.css" />
-  </head>
-  <body>
-    <main>
-      <h1>{name}</h1>
-      <p>Static project served from the CHAMP projects folder.</p>
-    </main>
-    <script src="./script.js"></script>
-  </body>
-</html>
-"#
-                ),
-            ),
-            (
-                "styles.css",
-                "body { margin: 0; min-height: 100vh; display: grid; place-items: center; font-family: system-ui, sans-serif; background: #f8fafc; color: #111827; }\nmain { width: min(720px, calc(100vw - 32px)); }\n".to_string(),
-            ),
-            (
-                "script.js",
-                "console.log('CHAMP static project ready');\n".to_string(),
-            ),
-        ],
-        ProjectTemplate::Php => vec![(
-            "index.php",
-            format!(
-                r#"<?php
-$projectName = "{name}";
-?>
-<!doctype html>
-<html lang="en">
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title><?= htmlspecialchars($projectName) ?></title>
-  </head>
-  <body>
-    <h1><?= htmlspecialchars($projectName) ?></h1>
-    <p>PHP <?= phpversion() ?> is running through CHAMP.</p>
-  </body>
-</html>
-"#
-            ),
-        )],
-        ProjectTemplate::Node => vec![
-            (
-                "package.json",
-                format!(
-                    r#"{{
-  "name": "{}",
-  "private": true,
-  "type": "module",
-  "scripts": {{
-    "dev": "node src/server.js"
-  }}
-}}
-"#,
-                    package_name_slug(name)
-                ),
-            ),
-            (
-                "src/server.js",
-                "import { createServer } from 'node:http';\n\nconst port = Number(process.env.PORT || 3000);\n\ncreateServer((_req, res) => {\n  res.writeHead(200, { 'content-type': 'text/plain; charset=utf-8' });\n  res.end('Node project ready from CHAMP workspace\\n');\n}).listen(port, () => {\n  console.log(`Node app running at http://localhost:${port}`);\n});\n".to_string(),
-            ),
-            (
-                "README.md",
-                "# Node starter\n\nRun `npm run dev` from this folder. CHAMP keeps the project with the rest of your local web workspace.\n".to_string(),
-            ),
-        ],
-        ProjectTemplate::Python => vec![
-            (
-                "app.py",
-                "from http.server import ThreadingHTTPServer, SimpleHTTPRequestHandler\n\nPORT = 5000\n\nif __name__ == \"__main__\":\n    server = ThreadingHTTPServer((\"127.0.0.1\", PORT), SimpleHTTPRequestHandler)\n    print(f\"Python app running at http://127.0.0.1:{PORT}\")\n    server.serve_forever()\n".to_string(),
-            ),
-            (
-                "README.md",
-                "# Python starter\n\nRun `python app.py` from this folder. CHAMP keeps the project with the rest of your local web workspace.\n".to_string(),
-            ),
-        ],
-        ProjectTemplate::Go => vec![
-            (
-                "main.go",
-                "package main\n\nimport (\n\t\"fmt\"\n\t\"net/http\"\n)\n\nfunc main() {\n\thttp.HandleFunc(\"/\", func(w http.ResponseWriter, r *http.Request) {\n\t\tfmt.Fprintf(w, \"Go project ready from CHAMP workspace\\n\")\n\t})\n\n\tport := \":8080\"\n\tfmt.Printf(\"Go server listening on %s\\n\", port)\n\thttp.ListenAndServe(port, nil)\n}\n".to_string(),
-            ),
-            (
-                "go.mod",
-                format!("module {}\n\ngo 1.21\n", package_name_slug(name)),
-            ),
-            (
-                "README.md",
-                "# Go starter\n\nRun `go run main.go` from this folder. CHAMP keeps the project with the rest of your local web workspace.\n".to_string(),
-            ),
-        ],
-        ProjectTemplate::Ruby => vec![
-            (
-                "app.rb",
-                "require 'webrick'\n\nserver = WEBrick::HTTPServer.new(Port: 4567)\n\nserver.mount_proc '/' do |req, res|\n  res.body = \"Ruby project ready from CHAMP workspace\\n\"\nend\n\nputs \"Ruby server running at http://localhost:4567\"\nserver.start\n".to_string(),
-            ),
-            (
-                "README.md",
-                "# Ruby starter\n\nRun `ruby app.rb` from this folder. CHAMP keeps the project with the rest of your local web workspace.\n".to_string(),
-            ),
-        ],
-    }
-}
-
-fn package_name_slug(name: &str) -> String {
-    let slug = name
-        .chars()
-        .map(|ch| {
-            if ch.is_ascii_alphanumeric() {
-                ch.to_ascii_lowercase()
-            } else {
-                '-'
-            }
-        })
-        .collect::<String>()
-        .split('-')
-        .filter(|part| !part.is_empty())
-        .collect::<Vec<_>>()
-        .join("-");
-
-    if slug.is_empty() {
-        "champ-node-project".to_string()
-    } else {
-        slug
-    }
-}
-
-#[tauri::command]
 pub async fn get_system_metrics() -> Result<SystemMetricsDto, String> {
     let monitor = SYSTEM_METRICS_MONITOR.get_or_init(|| Mutex::new(SystemMetricsMonitor::new()));
     let mut monitor = monitor
@@ -1144,38 +726,11 @@ pub async fn get_system_metrics() -> Result<SystemMetricsDto, String> {
     Ok(monitor.collect())
 }
 
-/// Get the download directory path (where ZIP files are stored)
+/// Get the download directory path (where downloaded archives are cached)
 #[tauri::command]
 pub async fn get_download_dir() -> Result<String, String> {
     let temp_dir = std::env::temp_dir().join("champ-download");
     Ok(temp_dir.to_string_lossy().to_string())
-}
-
-/// S-01 interim: the checksum verifier in `downloader.rs` is fail-closed — a
-/// component/platform with no configured SHA-256 is refused. Today only phpMyAdmin
-/// has a checksum in `runtime-config.json`, so enforcing fail-closed unconditionally
-/// would break first-run installation of PHP/MySQL/PostgreSQL/Caddy/Node/etc.
-/// Until real per-platform checksums are populated (must be computed against genuine
-/// upstream artifacts, ideally in CI), we opt in to installing unverified binaries.
-/// A configured checksum that MISMATCHES still hard-fails regardless of this flag.
-///
-/// TODO(retire S-01): set this to `false` once `runtime-config.json` carries SHA-256
-/// for every package/platform, and surface a user-facing "install unverified?" prompt
-/// for any remaining gaps. Tracked in CODE_HEALTH_BACKLOG.md (S-01).
-const ALLOW_UNVERIFIED_RUNTIME_DOWNLOADS: bool = true;
-
-/// Stop all running services (for cleanup on app exit)
-#[tauri::command]
-pub async fn cleanup_all_services(state: State<'_, AppState>) -> Result<String, String> {
-    let mut manager = state
-        .process_manager
-        .lock()
-        .map_err(|e| format!("Failed to acquire process manager lock: {}", e))?;
-
-    let _ = crate::tunnel::stop_https_tunnel();
-    manager.stop_all()?;
-
-    Ok("All services stopped".to_string())
 }
 
 /// Get all available runtime packages
@@ -1190,6 +745,13 @@ pub async fn refresh_runtime_catalog() -> Result<PackagesConfig, String> {
     crate::runtime::packages::refresh_runtime_catalog().await
 }
 
+/// Refresh only the PHP releases (fast); the dashboard uses this to offer
+/// patch updates for the active PHP.
+#[tauri::command]
+pub async fn refresh_php_catalog() -> Result<(), String> {
+    crate::runtime::packages::refresh_php_catalog().await
+}
+
 #[tauri::command]
 pub async fn get_runtime_platform() -> String {
     Platform::current().url_key()
@@ -1199,22 +761,11 @@ pub async fn get_runtime_platform() -> String {
 #[tauri::command]
 pub async fn download_runtime_with_packages(
     package_selection: PackageSelection,
-    app: tauri::AppHandle,
+    app: AppHandle,
 ) -> Result<String, String> {
-    let downloader = RuntimeDownloader::with_packages(package_selection)
-        .allow_unverified_checksums(ALLOW_UNVERIFIED_RUNTIME_DOWNLOADS);
-    let app_clone = app.clone();
-
-    // Emit progress updates via Tauri events
-    downloader
-        .download_all(Box::new(move |progress| {
-            let _ = app_clone.emit("download-progress", &progress);
-
-            // Store latest progress
-            if let Ok(mut p) = DOWNLOAD_PROGRESS.lock() {
-                *p = Some(progress);
-            }
-        }))
+    RuntimeDownloader::with_packages(package_selection)
+        .allow_unverified_checksums(ALLOW_UNVERIFIED_RUNTIME_DOWNLOADS)
+        .download_all(progress_emitter(&app))
         .await?;
 
     Ok("Runtime binaries installed successfully".to_string())
@@ -1225,17 +776,15 @@ pub async fn download_runtime_with_packages(
 pub async fn update_package_selection(package_selection: PackageSelection) -> Result<(), String> {
     let mut settings = AppSettings::load();
     settings.package_selection = package_selection;
-    settings.save()?;
-    Ok(())
+    settings.save()
 }
 
 #[tauri::command]
 pub async fn get_installed_php_versions() -> Result<Vec<InstalledPhpVersionDto>, String> {
     let runtime_dir = RuntimeDownloader::new().get_runtime_dir()?;
-    let settings = AppSettings::load();
-    let active_php = settings.package_selection.php;
+    let active_php = AppSettings::load().package_selection.php;
     let packages = crate::runtime::packages::get_available_packages();
-    let legacy_version = marker_version(&runtime_dir.join("php_installed.txt"));
+    let legacy_version = read_marker_version(&runtime_dir.join("php_installed.txt"));
 
     Ok(packages
         .php
@@ -1246,15 +795,18 @@ pub async fn get_installed_php_versions() -> Result<Vec<InstalledPhpVersionDto>,
             let marker = runtime_dir
                 .join("php_versions")
                 .join(format!("{}_installed.txt", package_id));
-            let marker_version = marker_version(&marker);
+            let marker_version = read_marker_version(&marker);
             let installed = marker_version.is_some()
-                || legacy_version
-                    .as_ref()
-                    .map(|version| version == &package.version)
-                    .unwrap_or(false);
+                || legacy_version.as_deref() == Some(package.version.as_str());
+
+            let update_available = marker_version.as_deref().is_some_and(|installed| {
+                crate::runtime::php_catalog::is_newer_version(&package.version, installed)
+            });
 
             InstalledPhpVersionDto {
                 id: package_id.clone(),
+                latest_version: package.version.clone(),
+                update_available,
                 version: marker_version.unwrap_or(package.version),
                 display_name: package.display_name,
                 installed,
@@ -1262,26 +814,16 @@ pub async fn get_installed_php_versions() -> Result<Vec<InstalledPhpVersionDto>,
                 eol: package.eol,
                 lts: package.lts,
                 recommended: package.recommended,
-                path: if version_dir.exists() {
-                    Some(version_dir.to_string_lossy().to_string())
-                } else {
-                    None
-                },
+                path: version_dir
+                    .exists()
+                    .then(|| version_dir.to_string_lossy().to_string()),
             }
         })
         .collect())
 }
 
 #[tauri::command]
-pub async fn switch_php_version(
-    php_id: String,
-    state: State<'_, AppState>,
-) -> Result<ServiceMap, String> {
-    let packages = crate::runtime::packages::get_available_packages();
-    if !packages.php.iter().any(|package| package.id == php_id) {
-        return Err(format!("Unknown PHP version: {}", php_id));
-    }
-
+pub async fn switch_php_version(php_id: String, app: AppHandle) -> Result<ServiceMap, String> {
     let installed_versions = get_installed_php_versions().await?;
     let selected = installed_versions
         .iter()
@@ -1299,74 +841,97 @@ pub async fn switch_php_version(
     settings.package_selection.php = php_id;
     settings.save()?;
 
-    let mut manager = state
-        .process_manager
-        .lock()
-        .map_err(|e| format!("Failed to acquire process manager lock: {}", e))?;
-    let statuses = manager.get_all_statuses();
-    let php_was_running = statuses
-        .get(&ServiceType::PhpFpm)
-        .map(|service| service.state == ServiceState::Running)
-        .unwrap_or(false);
-    let caddy_was_running = statuses
-        .get(&ServiceType::Caddy)
-        .map(|service| service.state == ServiceState::Running)
-        .unwrap_or(false);
+    run_with_manager(&app, move |manager| -> Result<ServiceMap, String> {
+        let php_was_running = manager.status(ServiceType::PhpFpm) == ServiceState::Running;
+        let caddy_was_running = manager.status(ServiceType::Caddy) == ServiceState::Running;
 
-    if caddy_was_running {
-        manager.stop(ServiceType::Caddy)?;
-    }
-    if php_was_running {
-        manager.stop(ServiceType::PhpFpm)?;
-    }
-
-    manager.update_ports(&settings);
-    if php_was_running || caddy_was_running {
-        manager.initialize()?;
-        if php_was_running {
-            manager.start(ServiceType::PhpFpm)?;
-        }
         if caddy_was_running {
-            manager.start(ServiceType::Caddy)?;
+            manager.stop(ServiceType::Caddy)?;
         }
-    }
+        if php_was_running {
+            manager.stop(ServiceType::PhpFpm)?;
+        }
 
-    manager.update_health();
-    Ok(manager.get_all_statuses())
+        manager.update_ports(&settings);
+        if php_was_running || caddy_was_running {
+            manager.initialize()?;
+            if php_was_running {
+                manager.start(ServiceType::PhpFpm)?;
+            }
+            if caddy_was_running {
+                manager.start(ServiceType::Caddy)?;
+            }
+        }
+
+        manager.update_health();
+        Ok(manager.get_all_statuses())
+    })
+    .await?
 }
 
 #[tauri::command]
-pub async fn download_php_version(php_id: String, app: tauri::AppHandle) -> Result<String, String> {
+/// Install (or update to) the newest patch release of a PHP branch.
+///
+/// Installing does not change the active PHP; use `switch_php_version`. When
+/// the branch being updated is the active one, PHP-FPM and Caddy are stopped
+/// while its files are replaced and started again afterwards.
+pub async fn download_php_version(php_id: String, app: AppHandle) -> Result<String, String> {
+    // Best effort: offline installs fall back to the cached catalog.
+    if let Err(error) = crate::runtime::packages::refresh_php_catalog().await {
+        eprintln!(
+            "PHP catalog refresh failed, using cached catalog: {}",
+            error
+        );
+    }
+
     let packages = crate::runtime::packages::get_available_packages();
     if !packages.php.iter().any(|package| package.id == php_id) {
         return Err(format!("Unknown PHP version: {}", php_id));
     }
 
-    let mut settings = AppSettings::load();
-    settings.package_selection.php = php_id;
-    let selection_for_download = settings.package_selection.clone();
+    let mut selection = AppSettings::load().package_selection;
+    let is_active = selection.php == php_id;
+    selection.php = php_id;
 
-    let downloader = RuntimeDownloader::with_packages(selection_for_download)
-        .allow_unverified_checksums(ALLOW_UNVERIFIED_RUNTIME_DOWNLOADS);
-    let app_clone = app.clone();
-    let skip_list = ["caddy", "mysql", "postgresql", "adminer", "phpmyadmin"];
+    let (php_was_running, caddy_was_running) = if is_active {
+        run_with_manager(&app, |manager| {
+            let php = manager.status(ServiceType::PhpFpm) == ServiceState::Running;
+            let caddy = manager.status(ServiceType::Caddy) == ServiceState::Running;
+            if caddy {
+                let _ = manager.stop(ServiceType::Caddy);
+            }
+            if php {
+                let _ = manager.stop(ServiceType::PhpFpm);
+            }
+            (php, caddy)
+        })
+        .await?
+    } else {
+        (false, false)
+    };
 
-    downloader
+    let result = RuntimeDownloader::with_packages(selection)
+        .allow_unverified_checksums(ALLOW_UNVERIFIED_RUNTIME_DOWNLOADS)
         .download_all_with_skip(
-            Box::new(move |progress| {
-                let _ = app_clone.emit("download-progress", &progress);
-                if let Ok(mut p) = DOWNLOAD_PROGRESS.lock() {
-                    *p = Some(progress);
-                }
-            }),
-            &skip_list,
+            progress_emitter(&app),
+            &["caddy", "mysql", "postgresql", "adminer", "phpmyadmin"],
         )
+        .await;
+
+    if php_was_running || caddy_was_running {
+        run_with_manager(&app, move |manager| {
+            let _ = manager.initialize();
+            if php_was_running {
+                let _ = manager.start(ServiceType::PhpFpm);
+            }
+            if caddy_was_running {
+                let _ = manager.start(ServiceType::Caddy);
+            }
+        })
         .await?;
+    }
 
-    // Persist the selection only after the download succeeds. Otherwise a failed
-    // download would leave settings pointing at a PHP version that isn't installed.
-    settings.save()?;
-
+    result?;
     Ok("PHP version installed successfully".to_string())
 }
 
@@ -1379,12 +944,9 @@ pub async fn get_selected_package_ids() -> Result<PackageSelection, String> {
 /// Get the installed runtime versions
 #[tauri::command]
 pub async fn get_installed_versions() -> Result<std::collections::HashMap<String, String>, String> {
-    let downloader = RuntimeDownloader::new();
-    let runtime_dir = downloader.get_runtime_dir()?;
+    let runtime_dir = RuntimeDownloader::new().get_runtime_dir()?;
 
     let mut versions = std::collections::HashMap::new();
-
-    // Read version from marker files
     for component in [
         "caddy",
         "php",
@@ -1392,31 +954,18 @@ pub async fn get_installed_versions() -> Result<std::collections::HashMap<String
         "postgresql",
         "adminer",
         "phpmyadmin",
-        "node",
-        "python",
-        "go",
-        "ruby",
         "cloudflared",
     ] {
         let marker_file = runtime_dir.join(format!("{}_installed.txt", component));
-        if let Ok(content) = fs::read_to_string(&marker_file) {
-            // Parse version from format: "version=1.2.3\ninstalled_at=..."
-            for line in content.lines() {
-                if let Some(version) = line.strip_prefix("version=") {
-                    versions.insert(component.to_string(), version.to_string());
-                    break;
-                }
-            }
+        if let Some(version) = read_marker_version(&marker_file) {
+            versions.insert(component.to_string(), version);
         }
     }
 
-    // Add Caddy version from default config (not in packages)
-    if !versions.contains_key("caddy") {
-        versions.insert(
-            "caddy".to_string(),
-            crate::runtime::packages::selected_caddy_version(),
-        );
-    }
+    // Caddy is not package-selectable; fall back to the catalog version.
+    versions
+        .entry("caddy".to_string())
+        .or_insert_with(crate::runtime::packages::selected_caddy_version);
 
     Ok(versions)
 }
@@ -1425,8 +974,7 @@ pub async fn get_installed_versions() -> Result<std::collections::HashMap<String
 #[tauri::command]
 pub async fn check_existing_components() -> Result<std::collections::HashMap<String, String>, String>
 {
-    let downloader = RuntimeDownloader::new();
-    Ok(downloader.get_installed_components())
+    Ok(RuntimeDownloader::new().get_installed_components())
 }
 
 /// Download and install runtime binaries with option to skip existing components
@@ -1434,28 +982,13 @@ pub async fn check_existing_components() -> Result<std::collections::HashMap<Str
 pub async fn download_runtime_with_skip(
     package_selection: PackageSelection,
     skip_list: Vec<String>,
-    app: tauri::AppHandle,
+    app: AppHandle,
 ) -> Result<String, String> {
-    let downloader = RuntimeDownloader::with_packages(package_selection)
-        .allow_unverified_checksums(ALLOW_UNVERIFIED_RUNTIME_DOWNLOADS);
-    let app_clone = app.clone();
+    let skip_refs: Vec<&str> = skip_list.iter().map(String::as_str).collect();
 
-    // Convert Vec<String> to Vec<&str> for the skip_list
-    let skip_refs: Vec<&str> = skip_list.iter().map(|s| s.as_str()).collect();
-
-    // Emit progress updates via Tauri events
-    downloader
-        .download_all_with_skip(
-            Box::new(move |progress| {
-                let _ = app_clone.emit("download-progress", &progress);
-
-                // Store latest progress
-                if let Ok(mut p) = DOWNLOAD_PROGRESS.lock() {
-                    *p = Some(progress);
-                }
-            }),
-            &skip_refs,
-        )
+    RuntimeDownloader::with_packages(package_selection)
+        .allow_unverified_checksums(ALLOW_UNVERIFIED_RUNTIME_DOWNLOADS)
+        .download_all_with_skip(progress_emitter(&app), &skip_refs)
         .await?;
 
     Ok("Runtime binaries installed successfully".to_string())
@@ -1472,60 +1005,48 @@ mod tests {
     use super::*;
 
     #[test]
-    fn validate_project_name_rejects_path_traversal() {
-        assert!(validate_project_name("..").is_err());
-        assert!(validate_project_name("../outside").is_err());
-        assert!(validate_project_name("nested\\outside").is_err());
-    }
-
-    #[test]
-    fn validate_project_name_rejects_windows_reserved() {
-        assert!(validate_project_name("CON").is_err());
-        assert!(validate_project_name("com1").is_err());
-        assert!(validate_project_name("LPT9").is_err());
-        assert!(validate_project_name("nul.txt").is_err());
-        // A normal name that merely contains a reserved substring is fine.
-        assert!(validate_project_name("con-tainer").is_ok());
-    }
-
-    #[test]
-    fn validate_project_name_rejects_trailing_dot_or_space() {
-        assert!(validate_project_name("foo.").is_err());
-        assert!(validate_project_name("bar ").is_err());
-    }
-
-    #[test]
-    fn package_name_slug_keeps_npm_safe_ascii() {
-        assert_eq!(package_name_slug("My Node App"), "my-node-app");
-        assert_eq!(package_name_slug("โปรเจกต์"), "champ-node-project");
-    }
-
-    #[test]
-    fn create_static_project_writes_expected_files() {
+    fn selected_database_detection_uses_marker_or_binary() {
         let temp = tempfile::tempdir().expect("failed to create temp dir");
+        assert!(!is_selected_database_installed(
+            temp.path(),
+            "phpmyadmin-5.2"
+        ));
 
-        let result = create_project_template_in_dir(temp.path(), "demo", ProjectTemplate::Static)
-            .expect("failed to create project");
+        fs::create_dir_all(temp.path().join("mysql").join("bin")).unwrap();
+        fs::write(temp.path().join("mysql").join("bin").join("mysqld"), "").unwrap();
+        assert!(is_selected_database_installed(
+            temp.path(),
+            "phpmyadmin-5.2"
+        ));
+        assert!(!is_selected_database_installed(temp.path(), "adminer-5.4"));
 
-        assert_eq!(result.name, "demo");
-        assert!(temp.path().join("demo").join("index.html").exists());
-        assert!(temp.path().join("demo").join("styles.css").exists());
-        assert!(temp.path().join("demo").join("script.js").exists());
+        fs::write(temp.path().join("postgresql_installed.txt"), "version=17").unwrap();
+        assert!(is_selected_database_installed(temp.path(), "adminer-5.4"));
     }
 
     #[test]
-    fn create_project_does_not_overwrite_non_empty_directory() {
+    fn folder_scope_only_allows_paths_inside_roots() {
         let temp = tempfile::tempdir().expect("failed to create temp dir");
-        let project = temp.path().join("demo");
-        std::fs::create_dir(&project).expect("failed to create project dir");
-        std::fs::write(project.join("keep.txt"), "keep").expect("failed to write sentinel");
+        let root = temp.path().join("CHAMP");
+        let roots = [root.clone()];
 
-        let result = create_project_template_in_dir(temp.path(), "demo", ProjectTemplate::Php);
+        assert!(is_within_roots(&root.join("logs"), &roots));
+        assert!(is_within_roots(&root, &roots));
+        assert!(!is_within_roots(&temp.path().join("other"), &roots));
+        assert!(!is_within_roots(&root.join("..").join("other"), &roots));
+        assert!(!is_within_roots(Path::new("relative/logs"), &roots));
+        // A sibling whose name merely starts with the root's name is outside.
+        assert!(!is_within_roots(&temp.path().join("CHAMP-evil"), &roots));
+    }
 
-        assert!(result.is_err());
-        assert_eq!(
-            std::fs::read_to_string(project.join("keep.txt")).expect("failed to read sentinel"),
-            "keep"
-        );
+    #[test]
+    fn database_tool_detection_matches_tool_layout() {
+        let temp = tempfile::tempdir().expect("failed to create temp dir");
+        assert!(!is_database_tool_installed(temp.path(), "adminer-5.4"));
+
+        fs::create_dir_all(temp.path().join("adminer")).unwrap();
+        fs::write(temp.path().join("adminer").join("index.php"), "<?php").unwrap();
+        assert!(is_database_tool_installed(temp.path(), "adminer-5.4"));
+        assert!(!is_database_tool_installed(temp.path(), "phpmyadmin-5.2"));
     }
 }
