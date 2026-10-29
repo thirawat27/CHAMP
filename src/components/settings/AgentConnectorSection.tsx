@@ -1,40 +1,35 @@
-import { Bot, Check, Copy, KeyRound } from "lucide-react";
+import { Bot, Check, Copy, KeyRound, PlugZap } from "lucide-react";
 import { useState } from "react";
 import { useAgentConnector } from "../../hooks/useAgentConnector";
 import { useTranslation } from "../../stores/languageStore";
 import { AudioManager } from "../../utils/audioManager";
-
-type SnippetId = "claude" | "json";
+import {
+  AGENT_CLIENT_IDS,
+  AgentClientId,
+  agentClientSetup,
+  maskToken,
+} from "../../utils/agentSnippets";
 
 /** Local MCP server so AI coding agents can read and control the stack. */
 export function AgentConnectorSection() {
   const { t } = useTranslation();
-  const { status, busy, error, configure, regenerateToken } = useAgentConnector();
+  const { status, busy, error, configure, regenerateToken, testResult, testing, test } =
+    useAgentConnector();
   const [portDraft, setPortDraft] = useState<string | null>(null);
-  const [copied, setCopied] = useState<SnippetId | null>(null);
+  const [client, setClient] = useState<AgentClientId>("claude-code");
+  const [copied, setCopied] = useState(false);
 
   if (!status) return null;
 
   const token = status.token ?? "";
-  const snippets: Record<SnippetId, string> = {
-    claude: `claude mcp add --transport http champ ${status.url} --header "Authorization: Bearer ${token}"`,
-    json: JSON.stringify(
-      {
-        mcpServers: {
-          champ: { type: "http", url: status.url, headers: { Authorization: `Bearer ${token}` } },
-        },
-      },
-      null,
-      2
-    ),
-  };
+  const setup = agentClientSetup(client, status.url, token);
 
-  const copy = async (id: SnippetId) => {
+  const copy = async () => {
     try {
-      await navigator.clipboard.writeText(snippets[id]);
+      await navigator.clipboard.writeText(setup.snippet);
       AudioManager.playClick();
-      setCopied(id);
-      window.setTimeout(() => setCopied((current) => (current === id ? null : current)), 1600);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 1600);
     } catch (copyError) {
       console.error("Failed to copy agent config:", copyError);
     }
@@ -87,6 +82,83 @@ export function AgentConnectorSection() {
 
       {status.enabled && (
         <>
+          <p className="agent-step">{t.agentConnectorStep1}</p>
+          <div className="agent-clients" role="tablist">
+            {AGENT_CLIENT_IDS.map((id) => (
+              <button
+                key={id}
+                type="button"
+                role="tab"
+                aria-selected={client === id}
+                className={`agent-client ${client === id ? "selected" : ""}`}
+                onClick={() => {
+                  AudioManager.playClick();
+                  setClient(id);
+                  setCopied(false);
+                }}
+              >
+                {agentClientSetup(id, status.url, token).label}
+              </button>
+            ))}
+          </div>
+
+          <p className="agent-step">{t.agentConnectorStep2}</p>
+          <div className="agent-snippet">
+            <div className="agent-snippet-head">
+              <span>
+                {setup.kind === "command" ? t.agentConnectorRunIn : t.agentConnectorPasteInto}{" "}
+                <span className="agent-snippet-target">{setup.target}</span>
+              </span>
+              <button
+                type="button"
+                className="btn-secondary compact"
+                onClick={copy}
+                disabled={!token}
+              >
+                {copied ? <Check size={14} /> : <Copy size={14} />}
+                {copied ? t.agentConnectorCopied : t.agentConnectorCopy}
+              </button>
+            </div>
+            <pre>{maskToken(setup.snippet, token)}</pre>
+          </div>
+          {client === "claude-desktop" && (
+            <p className="settings-muted">{t.agentConnectorDesktopHint}</p>
+          )}
+          <p className="settings-muted">{t.agentConnectorRestartHint}</p>
+
+          <p className="agent-step">{t.agentConnectorStep3}</p>
+          <div className="settings-inline-actions">
+            <button
+              type="button"
+              className="btn-secondary compact"
+              onClick={() => {
+                AudioManager.playClick();
+                test();
+              }}
+              disabled={busy || testing || !status.running}
+            >
+              <PlugZap size={14} /> {testing ? t.agentConnectorTesting : t.agentConnectorTest}
+            </button>
+          </div>
+          {testResult &&
+            (testResult.ok ? (
+              <div className="success-box">
+                <Check size={14} />
+                <div>
+                  <p className="success-box-text">
+                    {t.agentConnectorTestOk.replace("{count}", String(testResult.tools.length))}
+                  </p>
+                  <p className="agent-tools">{testResult.tools.join(", ")}</p>
+                </div>
+              </div>
+            ) : (
+              <div className="error-box">
+                <p className="error-box-text">
+                  {t.agentConnectorTestFailed}: {testResult.message}
+                </p>
+              </div>
+            ))}
+
           <label className="toggle-row">
             <input
               type="checkbox"
@@ -103,62 +175,44 @@ export function AgentConnectorSection() {
             {status.read_only ? t.agentConnectorReadOnlyHint : t.agentConnectorControlHint}
           </p>
 
-          <div className="settings-grid">
-            <label>
-              <span>{t.agentConnectorPort}</span>
-              <input
-                className="input"
-                type="number"
-                min={1024}
-                max={65535}
-                value={portDraft ?? status.port}
-                onChange={(event) => setPortDraft(event.target.value)}
-                onBlur={commitPort}
-                onKeyDown={(event) => {
-                  if (event.key === "Enter") commitPort();
+          <details className="settings-details">
+            <summary>{t.agentConnectorAdvanced}</summary>
+            <div className="settings-grid">
+              <label>
+                <span>{t.agentConnectorPort}</span>
+                <input
+                  className="input"
+                  type="number"
+                  min={1024}
+                  max={65535}
+                  value={portDraft ?? status.port}
+                  onChange={(event) => setPortDraft(event.target.value)}
+                  onBlur={commitPort}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter") commitPort();
+                  }}
+                />
+              </label>
+              <label>
+                <span>{t.agentConnectorEndpoint}</span>
+                <input className="input mono" value={status.url} readOnly />
+              </label>
+            </div>
+            <div className="settings-inline-actions">
+              <span className="settings-muted">{t.agentConnectorTokenHint}</span>
+              <button
+                type="button"
+                className="btn-secondary compact"
+                onClick={() => {
+                  AudioManager.playClick();
+                  regenerateToken();
                 }}
-              />
-            </label>
-            <label>
-              <span>{t.agentConnectorEndpoint}</span>
-              <input className="input mono" value={status.url} readOnly />
-            </label>
-          </div>
-
-          <div className="agent-snippets">
-            {(["claude", "json"] as const).map((id) => (
-              <div className="agent-snippet" key={id}>
-                <div className="agent-snippet-head">
-                  <span>{id === "claude" ? t.agentConnectorClaudeCode : t.agentConnectorJson}</span>
-                  <button
-                    type="button"
-                    className="btn-secondary compact"
-                    onClick={() => copy(id)}
-                    disabled={!token}
-                  >
-                    {copied === id ? <Check size={14} /> : <Copy size={14} />}
-                    {copied === id ? t.agentConnectorCopied : t.agentConnectorCopy}
-                  </button>
-                </div>
-                <pre>{token ? snippets[id].replace(token, "••••••••") : snippets[id]}</pre>
-              </div>
-            ))}
-          </div>
-
-          <div className="settings-inline-actions">
-            <span className="settings-muted">{t.agentConnectorTokenHint}</span>
-            <button
-              type="button"
-              className="btn-secondary compact"
-              onClick={() => {
-                AudioManager.playClick();
-                regenerateToken();
-              }}
-              disabled={busy}
-            >
-              <KeyRound size={14} /> {t.agentConnectorRegenerate}
-            </button>
-          </div>
+                disabled={busy}
+              >
+                <KeyRound size={14} /> {t.agentConnectorRegenerate}
+              </button>
+            </div>
+          </details>
         </>
       )}
     </div>

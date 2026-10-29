@@ -1460,6 +1460,47 @@ select.input {
   gap: 10px;
 }
 
+.agent-step {
+  margin: 4px 0 0;
+  color: var(--text-primary);
+  font-size: 12.5px;
+  font-weight: 600;
+}
+
+.agent-clients {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.agent-client {
+  padding: 5px 10px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  background: var(--bg-card-secondary);
+  color: var(--text-secondary);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.agent-client.selected {
+  border-color: var(--color-primary);
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+.agent-snippet-target {
+  font-family: var(--font-mono);
+  font-weight: 500;
+}
+
+.agent-tools {
+  margin: 6px 0 0;
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  word-break: break-word;
+}
+
 .agent-snippet-head {
   display: flex;
   align-items: center;

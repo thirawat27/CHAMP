@@ -462,15 +462,15 @@ export const GUIDE_SECTIONS: GuideSection[] = [
     icon: Bot,
     title: l("AI Agent Connector (MCP)", "AI agent connector (MCP)"),
     summary: l(
-      "ให้ Claude Code, Cursor และ agent อื่นใช้ CHAMP",
-      "Let Claude Code, Cursor, and other agents use CHAMP"
+      "ให้ Claude Code, Codex, Cursor, VS Code และ Claude Desktop ใช้ CHAMP",
+      "Let Claude Code, Codex, Cursor, VS Code, and Claude Desktop use CHAMP"
     ),
     blocks: [
       {
         kind: "p",
         text: l(
-          "CHAMP มี MCP server ในตัว เมื่อเปิด AI coding agent จะรู้พอร์ตฐานข้อมูล URL และโฟลเดอร์ของคุณ อ่าน log ใช้ Log Doctor และสั่งเปิด/ปิดบริการได้เอง",
-          "CHAMP includes an MCP server. Once on, AI coding agents can learn your database ports, URLs, and folders, read logs, run Log Doctor, and start or stop services."
+          "CHAMP มี MCP server ในตัว เมื่อเปิด AI coding agent จะรู้พอร์ตฐานข้อมูล URL และโฟลเดอร์ของคุณ ได้บรรทัด .env พร้อมใช้ อ่าน log ใช้ Log Doctor สร้างฐานข้อมูล สั่งเปิด/ปิดบริการ และเปิด HTTPS Preview ได้เอง",
+          "CHAMP includes an MCP server. Once on, AI coding agents can learn your database ports, URLs, and folders, get ready-made .env lines, read logs, run Log Doctor, create databases, start or stop services, and open HTTPS Preview."
         ),
       },
       {
@@ -478,23 +478,27 @@ export const GUIDE_SECTIONS: GuideSection[] = [
         items: [
           l("Settings → AI Agent Connector → เปิด", "Settings → AI agent connector → turn it on."),
           l(
-            "Claude Code: กด คัดลอก ที่ช่อง Claude Code แล้ววางคำสั่งใน terminal",
-            "Claude Code: copy the Claude Code command and paste it into a terminal."
+            "1. เลือกโปรแกรม AI ที่ใช้ (Claude Code, Codex, Cursor, VS Code หรือ Claude Desktop)",
+            "1. Pick your AI tool (Claude Code, Codex, Cursor, VS Code, or Claude Desktop)."
           ),
           l(
-            "Cursor หรือ agent อื่น: คัดลอก JSON ไปใส่ในไฟล์ตั้งค่า MCP ของโปรแกรมนั้น (เช่น `.cursor/mcp.json`)",
-            "Cursor or other agents: copy the JSON into that tool's MCP config (for example `.cursor/mcp.json`)."
+            "2. กด คัดลอก แล้วรันใน terminal หรือวางในไฟล์ที่บอกไว้ จากนั้นเปิดโปรแกรม AI ใหม่",
+            "2. Press Copy, then run it in a terminal or paste it into the file shown, and restart the AI tool."
           ),
           l(
-            'ถาม agent ได้เลย เช่น "ต่อ Laravel เข้ากับ MySQL ของ CHAMP ให้หน่อย" หรือ "ทำไม MySQL เปิดไม่ขึ้น"',
-            'Ask the agent, for example "connect my Laravel app to CHAMP\'s MySQL" or "why won\'t MySQL start?"'
+            "3. กด ทดสอบการเชื่อมต่อ ถ้าผ่านจะเห็นจำนวน tools ที่ agent ใช้ได้",
+            "3. Press Test connection. On success it lists the tools agents can use."
+          ),
+          l(
+            'ถาม agent ได้เลย เช่น "สร้างฐานข้อมูล my_app แล้วต่อ Laravel ให้หน่อย" หรือ "ทำไม MySQL เปิดไม่ขึ้น"',
+            'Ask the agent, for example "create a my_app database and connect my Laravel app" or "why won\'t MySQL start?"'
           ),
         ],
       },
       {
         kind: "code",
         label: l("ตัวอย่างคำสั่ง Claude Code", "Claude Code command"),
-        code: 'claude mcp add --transport http champ http://127.0.0.1:47823/mcp --header "Authorization: Bearer <token>"',
+        code: 'claude mcp add --transport http --scope user champ http://127.0.0.1:47823/mcp --header "Authorization: Bearer <token>"',
       },
       {
         kind: "table",
@@ -515,10 +519,32 @@ export const GUIDE_SECTIONS: GuideSection[] = [
           ["read_logs", l("อ่าน log ล่าสุดของบริการ", "Recent log lines of a service")],
           ["diagnose_service", l("รัน Log Doctor", "Run Log Doctor")],
           [
+            "list_databases",
+            l("รายชื่อฐานข้อมูลบน MySQL/PostgreSQL", "Databases on MySQL/PostgreSQL"),
+          ],
+          [
+            "get_https_preview",
+            l("สถานะและ URL ของ HTTPS Preview", "HTTPS Preview status and URL"),
+          ],
+          [
             "start/stop/restart_*",
             l(
               "ควบคุมบริการ (ปิดได้ด้วยโหมดอ่านอย่างเดียว)",
               "Control services (disabled in read-only mode)"
+            ),
+          ],
+          [
+            "create_database",
+            l(
+              "สร้างฐานข้อมูลเปล่า ไม่ลบหรือเขียนทับของเดิม (ปิดในโหมดอ่านอย่างเดียว)",
+              "Create an empty database; never drops or overwrites (disabled in read-only mode)"
+            ),
+          ],
+          [
+            "start/stop_https_preview",
+            l(
+              "เปิด/ปิด URL สาธารณะผ่าน ngrok (ปิดในโหมดอ่านอย่างเดียว)",
+              "Open or close the public ngrok URL (disabled in read-only mode)"
             ),
           ],
         ],

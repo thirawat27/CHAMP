@@ -46,9 +46,17 @@ export interface AgentConnectorStatus {
   error: string | null;
 }
 
+export interface AgentConnectorTestResult {
+  ok: boolean;
+  tools: string[];
+  message: string;
+}
+
 export interface AgentActivity {
   tool: string;
   service: ServiceType | null;
+  /** Non-service target such as a database name or "HTTPS Preview". */
+  target?: string | null;
   ok: boolean;
   error: string | null;
 }

@@ -1,6 +1,6 @@
 [package]
 name = "champ"
-version = "1.4.0"
+version = "2.0.0"
 description = "CHAMP - Caddy + HTTP(S) + Adminer + MySQL + PHP"
 authors = ["Thirawat Sinlapasomsak"]
 edition = "2021"

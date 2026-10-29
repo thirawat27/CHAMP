@@ -89,6 +89,11 @@ const responses: Record<string, unknown> = {
     token: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
     error: null,
   },
+  test_agent_connector: {
+    ok: true,
+    tools: ["get_status", "get_environment", "list_projects", "list_databases"],
+    message: "4 tools available",
+  },
   get_available_packages_cmd: { php: [], mysql: [], postgresql: [], phpmyadmin: [] },
   refresh_php_catalog: null,
   get_installed_php_versions: [

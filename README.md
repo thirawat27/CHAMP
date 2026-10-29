@@ -39,7 +39,7 @@ CHAMP is a desktop app that runs a complete PHP development stack **without admi
 | Projects | Every folder in `projects/` is served at `http://localhost:8080/<folder>/`; common `.htaccess` rules are translated to Caddy |
 | HTTPS Preview | Public `https://*.ngrok-free.app` link via ngrok (free ngrok authtoken required) |
 | Log Doctor | 28 known failure patterns (ports, VC++ runtime, corrupted data, locks, permissions, …) with fixes and one-click actions |
-| AI agents | Local MCP server (127.0.0.1 + bearer token) with status, environment, logs, diagnosis, and service-control tools |
+| AI agents | Local MCP server (127.0.0.1 + bearer token) with status, environment, logs, diagnosis, database, HTTPS Preview, and service-control tools |
 | Updates | Daily update check, one-click install and restart, minisign-verified packages |
 | Guide | Detailed in-app guide in Thai and English (F1) |
 | Tray | Closing the window keeps the stack running; quit from the tray |
@@ -101,22 +101,24 @@ Shortcuts use physical key positions, so they work with Thai and other keyboard 
 
 ## 🤖 AI agent connector (MCP)
 
-Turn it on in **Settings → AI agent connector**, then copy the ready-made command:
+Turn it on in **Settings → AI agent connector**, pick your client, copy the setup, and press **Test connection**. The panel has ready-made setup for Claude Code, Codex (`~/.codex/config.toml`), Cursor (`~/.cursor/mcp.json`), VS Code (`.vscode/mcp.json`), and Claude Desktop (via `npx mcp-remote`, needs Node.js). For Claude Code:
 
 ```bash
-claude mcp add --transport http champ http://127.0.0.1:47823/mcp --header "Authorization: Bearer <token>"
+claude mcp add --transport http --scope user champ http://127.0.0.1:47823/mcp --header "Authorization: Bearer <token>"
 ```
-
-For Cursor and other MCP clients, copy the JSON snippet from the same panel.
 
 | Tool | Purpose |
 | --- | --- |
 | `get_status` | State, port, and last error of every service, plus URLs |
-| `get_environment` | Database credentials, PHP version, document root, folders, versions |
+| `get_environment` | Database credentials and `.env` lines, PHP version, document root, folders, versions |
 | `list_projects` | Project folders and their URLs |
 | `read_logs` | Recent log lines for a service |
 | `diagnose_service` | Log Doctor diagnosis |
-| `start_*` / `stop_*` / `restart_*` | Service control (hidden in read-only mode) |
+| `list_databases` | User databases on MySQL or PostgreSQL with connection details |
+| `get_https_preview` | HTTPS Preview (ngrok) status and public URL |
+| `start_*` / `stop_*` / `restart_*` | Stack and service control (hidden in read-only mode) |
+| `create_database` | Create an empty database, never drops or overwrites (hidden in read-only mode) |
+| `start_https_preview` / `stop_https_preview` | Open or close the public HTTPS URL (hidden in read-only mode) |
 
 Security: localhost-only, 256-bit bearer token compared in constant time, browser requests (any `Origin` header) refused, optional read-only mode, and a dashboard notification for every agent action.
 

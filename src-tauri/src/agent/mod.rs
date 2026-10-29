@@ -15,6 +15,8 @@
 //! - Read-only mode hides and refuses every tool that changes services.
 //! - The UI is told about each agent action ("agent-activity" event).
 
+mod database;
+
 use crate::commands::run_with_manager;
 use crate::config::AppSettings;
 use crate::process::{ServiceMap, ServiceType};
@@ -43,7 +45,8 @@ use tokio_util::sync::CancellationToken;
 const MAX_BODY_BYTES: usize = 1024 * 1024;
 const MAX_LOG_LINES: usize = 400;
 const SUPPORTED_PROTOCOL_VERSIONS: [&str; 3] = ["2025-06-18", "2025-03-26", "2024-11-05"];
-const SERVER_INSTRUCTIONS: &str = "CHAMP runs a local web stack: Caddy (web server) -> PHP-FPM -> MySQL or PostgreSQL, with phpMyAdmin or Adminer. Call get_environment before writing app configuration (database host, port, user, URLs). Projects live in the projects folder and are served at http://localhost:<web port>/<folder>/. When a service is in the error state, call diagnose_service for the cause and fix.";
+const SERVER_INSTRUCTIONS: &str = "CHAMP runs a local web stack: Caddy (web server) -> PHP-FPM -> MySQL or PostgreSQL, with phpMyAdmin or Adminer. Call get_environment before writing app configuration (database host, port, user, URLs, ready-made .env lines). Projects live in the projects folder and are served at http://localhost:<web port>/<folder>/ (list_projects). Use list_databases / create_database instead of asking the user to open phpMyAdmin. When a service is in the error state, call diagnose_service for the cause and fix, then read_logs for details. get_https_preview / start_https_preview give a public HTTPS URL (ngrok) for webhooks or phone testing. Tools that change things are missing when the user turned on read-only mode.";
+const READ_ONLY_REFUSAL: &str = "CHAMP's agent connector is in read-only mode, so this tool is disabled. Ask the user to turn off Read-only in CHAMP Settings -> AI agent connector, or ask them to do this step themselves.";
 
 type HttpResponse = Response<Full<Bytes>>;
 
@@ -131,7 +134,10 @@ fn check_headers(headers: &HeaderMap, token: &str) -> Result<(), (StatusCode, &'
     if constant_time_eq(presented.trim().as_bytes(), token.as_bytes()) {
         Ok(())
     } else {
-        Err((StatusCode::UNAUTHORIZED, "Missing or invalid bearer token"))
+        Err((
+            StatusCode::UNAUTHORIZED,
+            "Missing or invalid bearer token. Copy the setup again from CHAMP Settings -> AI agent connector (the token changes when you create a new one).",
+        ))
     }
 }
 
@@ -182,19 +188,31 @@ fn tool(
     })
 }
 
-/// Tools that change service state; hidden and refused in read-only mode.
-const WRITE_TOOLS: [&str; 6] = [
+fn engine_schema() -> Value {
+    json!({
+        "type": "string",
+        "enum": ["mysql", "postgresql"],
+        "description": "Database engine. Defaults to the database selected in CHAMP."
+    })
+}
+
+/// Tools that change the stack; hidden and refused in read-only mode.
+const WRITE_TOOLS: [&str; 9] = [
     "start_stack",
     "stop_stack",
     "restart_stack",
     "start_service",
     "stop_service",
     "restart_service",
+    "create_database",
+    "start_https_preview",
+    "stop_https_preview",
 ];
 
 fn tool_definitions(read_only: bool) -> Vec<Value> {
     let none = json!({});
     let service = json!({ "service": service_schema() });
+    let engine = json!({ "engine": engine_schema() });
     let mut tools = vec![
         tool("get_status", "Stack status", "State, port, and last error of every CHAMP service, plus the website, database tool, and HTTPS preview URLs.", none.clone(), &[], true),
         tool("get_environment", "Development environment", "Everything needed to configure an app for CHAMP: database host/port/user/password, PHP version, document root, project URL pattern, folders, and installed versions.", none.clone(), &[], true),
@@ -208,6 +226,8 @@ fn tool_definitions(read_only: bool) -> Vec<Value> {
             true,
         ),
         tool("diagnose_service", "Diagnose a service", "Run CHAMP Log Doctor on a service: likely cause, fix steps, and the matching log line.", service.clone(), &["service"], true),
+        tool("list_databases", "List databases", "User databases on MySQL or PostgreSQL (system databases hidden) plus connection details. The database must be running.", engine, &[], true),
+        tool("get_https_preview", "HTTPS Preview status", "Whether the public HTTPS Preview (ngrok) is running, its public URL once ready, and whether an ngrok authtoken is saved.", none.clone(), &[], true),
     ];
     if !read_only {
         tools.extend([
@@ -231,7 +251,7 @@ fn tool_definitions(read_only: bool) -> Vec<Value> {
                 "restart_stack",
                 "Restart stack",
                 "Restart Caddy, PHP-FPM, and the selected database.",
-                none,
+                none.clone(),
                 &[],
                 false,
             ),
@@ -257,6 +277,33 @@ fn tool_definitions(read_only: bool) -> Vec<Value> {
                 "Restart one service.",
                 service,
                 &["service"],
+                false,
+            ),
+            tool(
+                "create_database",
+                "Create database",
+                "Create an empty database (utf8mb4 on MySQL) if it does not exist yet, and return its .env lines and connection URL. Nothing is dropped or overwritten.",
+                json!({
+                    "name": { "type": "string", "pattern": "^[A-Za-z_][A-Za-z0-9_]{0,62}$", "description": "Database name, for example my_app" },
+                    "engine": engine_schema(),
+                }),
+                &["name"],
+                false,
+            ),
+            tool(
+                "start_https_preview",
+                "Start HTTPS Preview",
+                "Start the stack if needed and open a public HTTPS URL (ngrok) to the local website. Needs an ngrok authtoken saved in CHAMP.",
+                none.clone(),
+                &[],
+                false,
+            ),
+            tool(
+                "stop_https_preview",
+                "Stop HTTPS Preview",
+                "Close the public HTTPS URL.",
+                none,
+                &[],
                 false,
             ),
         ]);
@@ -354,6 +401,9 @@ async fn environment_json(app: &AppHandle) -> Result<Value, String> {
             .unwrap_or(fallback)
     };
     let web_port = port(ServiceType::Caddy, settings.web_port);
+    let mysql_port = port(ServiceType::MySQL, settings.mysql_port);
+    let postgresql_port = port(ServiceType::PostgreSQL, settings.postgresql_port);
+    let dotenv = |engine, port| database::connection_info(engine, port, None)["dotenv"].clone();
     let versions = crate::commands::get_installed_versions()
         .await
         .unwrap_or_default();
@@ -373,18 +423,20 @@ async fn environment_json(app: &AppHandle) -> Result<Value, String> {
         "databases": {
             "mysql": {
                 "host": "127.0.0.1",
-                "port": port(ServiceType::MySQL, settings.mysql_port),
+                "port": mysql_port,
                 "user": "root",
                 "password": "",
                 "version": versions.get("mysql"),
+                "dotenv": dotenv(ServiceType::MySQL, mysql_port),
             },
             "postgresql": {
                 "host": "127.0.0.1",
-                "port": port(ServiceType::PostgreSQL, settings.postgresql_port),
+                "port": postgresql_port,
                 "user": "postgres",
                 "password": "",
                 "auth": "trust (local connections only)",
                 "version": versions.get("postgresql"),
+                "dotenv": dotenv(ServiceType::PostgreSQL, postgresql_port),
             },
             "active": if settings.package_selection.is_postgresql() { "postgresql" } else { "mysql" },
             "note": "Use host 127.0.0.1 rather than localhost so drivers connect over TCP.",
@@ -494,12 +546,72 @@ async fn run_write_tool(app: &AppHandle, name: &str, args: &Value) -> Result<Val
     .await?;
 
     let (outcome, statuses) = result;
-    let _ = app.emit(
-        "agent-activity",
-        json!({ "tool": name, "service": service.map(service_key), "ok": outcome.is_ok(), "error": outcome.as_ref().err() }),
-    );
+    emit_activity(app, name, service, None, &outcome);
     outcome?;
     Ok(status_json(&statuses))
+}
+
+/// Tell the dashboard about an agent action. `target` names non-service targets.
+fn emit_activity<T>(
+    app: &AppHandle,
+    tool: &str,
+    service: Option<ServiceType>,
+    target: Option<&str>,
+    outcome: &Result<T, String>,
+) {
+    let _ = app.emit(
+        "agent-activity",
+        json!({ "tool": tool, "service": service.map(service_key), "target": target, "ok": outcome.is_ok(), "error": outcome.as_ref().err() }),
+    );
+}
+
+fn active_database() -> ServiceType {
+    if AppSettings::load().package_selection.is_postgresql() {
+        ServiceType::PostgreSQL
+    } else {
+        ServiceType::MySQL
+    }
+}
+
+async fn database_tool(app: &AppHandle, name: &str, args: &Value) -> Result<Value, String> {
+    let engine = database::parse_engine(args, active_database())?;
+    let port = database::running_port(&current_statuses(app).await?, engine)?;
+    let create = name == "create_database";
+    let db_name = args["name"].as_str().unwrap_or_default().trim().to_string();
+    if create {
+        database::validate_database_name(&db_name)?;
+    }
+    let task_name = db_name.clone();
+    let outcome = tauri::async_runtime::spawn_blocking(move || {
+        if create {
+            database::create_database(engine, port, &task_name)
+        } else {
+            database::list_databases(engine, port)
+        }
+    })
+    .await
+    .map_err(|e| format!("Database task failed: {}", e))?;
+    if create {
+        emit_activity(app, name, Some(engine), Some(&db_name), &outcome);
+    }
+    outcome
+}
+
+async fn https_preview_tool(app: &AppHandle, name: &str) -> Result<Value, String> {
+    let outcome = match name {
+        "start_https_preview" => crate::commands::start_https_tunnel(app.clone()).await,
+        "stop_https_preview" => crate::tunnel::stop_https_tunnel(),
+        _ => crate::tunnel::get_https_tunnel_status(),
+    };
+    if name != "get_https_preview" {
+        emit_activity(app, name, None, Some("HTTPS Preview"), &outcome);
+    }
+    let status = outcome?;
+    let mut value = serde_json::to_value(&status).map_err(|e| e.to_string())?;
+    if !status.authtoken_configured {
+        value["hint"] = json!("No ngrok authtoken is saved. Ask the user to paste their free ngrok authtoken in CHAMP's HTTPS Preview panel.");
+    }
+    Ok(value)
 }
 
 /// Execute a tool and wrap it as an MCP `CallToolResult`.
@@ -508,12 +620,13 @@ async fn call_tool(ctx: &Context, name: &str, args: &Value) -> Result<Value, (i6
         .iter()
         .any(|tool| tool["name"].as_str() == Some(name));
     if !known {
-        return Err((-32602, format!("Unknown tool: {name}")));
+        return Err((
+            -32602,
+            format!("Unknown tool: {name}. Call tools/list for the available CHAMP tools."),
+        ));
     }
     if ctx.read_only && WRITE_TOOLS.contains(&name) {
-        return Ok(tool_error(
-            "CHAMP's agent connector is in read-only mode. Ask the user to allow control in CHAMP Settings.",
-        ));
+        return Ok(tool_error(READ_ONLY_REFUSAL));
     }
 
     let outcome: Result<(Value, Option<String>), String> = match name {
@@ -535,6 +648,12 @@ async fn call_tool(ctx: &Context, name: &str, args: &Value) -> Result<Value, (i6
                 .map(|(v, text)| (v, Some(text))),
             Err(error) => Err(error),
         },
+        "list_databases" | "create_database" => {
+            database_tool(&ctx.app, name, args).await.map(|v| (v, None))
+        }
+        "get_https_preview" | "start_https_preview" | "stop_https_preview" => {
+            https_preview_tool(&ctx.app, name).await.map(|v| (v, None))
+        }
         _ => run_write_tool(&ctx.app, name, args)
             .await
             .map(|v| (v, None)),
@@ -587,7 +706,10 @@ async fn respond(ctx: &Context, message: &Value) -> Option<Value> {
 
 async fn handle(request: Request<Incoming>, ctx: Arc<Context>) -> HttpResponse {
     if request.uri().path() != "/mcp" {
-        return text_response(StatusCode::NOT_FOUND, "Not found");
+        return text_response(
+            StatusCode::NOT_FOUND,
+            "Not found. The CHAMP MCP endpoint is /mcp",
+        );
     }
     if let Err((status, message)) = check_headers(request.headers(), &ctx.token) {
         let mut response = text_response(status, message);
@@ -600,7 +722,10 @@ async fn handle(request: Request<Incoming>, ctx: Arc<Context>) -> HttpResponse {
         return response;
     }
     if request.method() != Method::POST {
-        let mut response = text_response(StatusCode::METHOD_NOT_ALLOWED, "Use POST");
+        let mut response = text_response(
+            StatusCode::METHOD_NOT_ALLOWED,
+            "Use POST (MCP Streamable HTTP, JSON responses only)",
+        );
         response
             .headers_mut()
             .insert(ALLOW, HeaderValue::from_static("POST"));
@@ -662,7 +787,7 @@ async fn bind(port: u16) -> Result<TcpListener, String> {
         tokio::time::sleep(Duration::from_millis(100)).await;
     }
     Err(format!(
-        "Port {} is not available: {}",
+        "Port {} is not available ({}). Another program may be using it; choose a different port.",
         port,
         last_error.map(|e| e.to_string()).unwrap_or_default()
     ))
@@ -767,6 +892,89 @@ pub async fn configure_agent_connector(
     Ok(apply(&app).await)
 }
 
+#[derive(Debug, Serialize)]
+pub struct AgentTestResult {
+    pub ok: bool,
+    pub tools: Vec<String>,
+    pub message: String,
+}
+
+/// Connect to the running server exactly like an agent would (initialize +
+/// tools/list over HTTP with the bearer token) so the user can confirm setup.
+#[tauri::command]
+pub async fn test_agent_connector() -> AgentTestResult {
+    match probe(&status()).await {
+        Ok(tools) => AgentTestResult {
+            ok: true,
+            message: format!("{} tools available", tools.len()),
+            tools,
+        },
+        Err(message) => AgentTestResult {
+            ok: false,
+            tools: Vec::new(),
+            message,
+        },
+    }
+}
+
+async fn probe(status: &AgentStatus) -> Result<Vec<String>, String> {
+    if !status.enabled {
+        return Err("The agent connector is turned off.".to_string());
+    }
+    if !status.running {
+        return Err(status
+            .error
+            .clone()
+            .unwrap_or_else(|| "The agent connector is not running.".to_string()));
+    }
+    let token = status.token.clone().unwrap_or_default();
+    let client = reqwest::Client::builder()
+        .no_proxy()
+        .timeout(Duration::from_secs(5))
+        .build()
+        .map_err(|e| e.to_string())?;
+    let call = |id: u64, method: &str, params: Value| {
+        client
+            .post(&status.url)
+            .bearer_auth(&token)
+            .header("Accept", "application/json, text/event-stream")
+            .json(&json!({ "jsonrpc": "2.0", "id": id, "method": method, "params": params }))
+            .send()
+    };
+
+    let response = call(
+        1,
+        "initialize",
+        json!({ "protocolVersion": SUPPORTED_PROTOCOL_VERSIONS[0], "capabilities": {}, "clientInfo": { "name": "champ-self-test", "version": env!("CARGO_PKG_VERSION") } }),
+    )
+    .await
+    .map_err(|e| format!("Could not reach {}: {}", status.url, e))?;
+    if !response.status().is_success() {
+        let code = response.status();
+        return Err(format!(
+            "Server answered {}: {}",
+            code,
+            response.text().await.unwrap_or_default()
+        ));
+    }
+
+    let listed: Value = call(2, "tools/list", json!({}))
+        .await
+        .map_err(|e| e.to_string())?
+        .json()
+        .await
+        .map_err(|e| format!("Unexpected tools/list reply: {}", e))?;
+    Ok(listed["result"]["tools"]
+        .as_array()
+        .map(|tools| {
+            tools
+                .iter()
+                .filter_map(|tool| tool["name"].as_str().map(str::to_string))
+                .collect()
+        })
+        .unwrap_or_default())
+}
+
 /// Replace the token; agents configured with the old one stop working.
 #[tauri::command]
 pub async fn regenerate_agent_token(app: AppHandle) -> Result<AgentStatus, String> {
@@ -859,6 +1067,39 @@ mod tests {
         assert_eq!(a.len(), 64);
         assert!(a.chars().all(|ch| ch.is_ascii_hexdigit()));
         assert_ne!(a, b);
+    }
+
+    #[test]
+    fn every_tool_hidden_in_read_only_mode_is_a_write_tool() {
+        let limited: Vec<Value> = tool_definitions(true);
+        for tool in tool_definitions(false) {
+            let name = tool["name"].as_str().unwrap();
+            let visible = limited.iter().any(|t| t["name"] == name);
+            assert_eq!(!visible, WRITE_TOOLS.contains(&name), "{name}");
+            assert_eq!(tool["annotations"]["readOnlyHint"], visible, "{name}");
+        }
+        for name in ["list_databases", "get_https_preview", "get_environment"] {
+            assert!(limited.iter().any(|t| t["name"] == name), "{name}");
+        }
+    }
+
+    #[test]
+    fn self_test_explains_why_it_cannot_connect() {
+        let mut status = AgentStatus {
+            enabled: false,
+            running: false,
+            read_only: false,
+            port: 47823,
+            url: "http://127.0.0.1:47823/mcp".to_string(),
+            token: None,
+            error: None,
+        };
+        let off = tauri::async_runtime::block_on(probe(&status)).unwrap_err();
+        assert!(off.contains("turned off"), "{off}");
+        status.enabled = true;
+        status.error = Some("Port 47823 is not available".to_string());
+        let failed = tauri::async_runtime::block_on(probe(&status)).unwrap_err();
+        assert!(failed.contains("47823"), "{failed}");
     }
 
     #[test]

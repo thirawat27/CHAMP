@@ -122,8 +122,18 @@ export interface Translations {
   agentConnectorControlHint: string;
   agentConnectorPort: string;
   agentConnectorEndpoint: string;
-  agentConnectorClaudeCode: string;
-  agentConnectorJson: string;
+  agentConnectorStep1: string;
+  agentConnectorStep2: string;
+  agentConnectorStep3: string;
+  agentConnectorRunIn: string;
+  agentConnectorPasteInto: string;
+  agentConnectorDesktopHint: string;
+  agentConnectorRestartHint: string;
+  agentConnectorTest: string;
+  agentConnectorTesting: string;
+  agentConnectorTestOk: string;
+  agentConnectorTestFailed: string;
+  agentConnectorAdvanced: string;
   agentConnectorCopy: string;
   agentConnectorCopied: string;
   agentConnectorTokenHint: string;
@@ -449,18 +459,31 @@ const th: Translations = {
   autoCheckUpdates: "ตรวจหาอัปเดตจาก GitHub วันละครั้งตอนเปิดโปรแกรม",
   agentConnectorTitle: "AI Agent Connector",
   agentConnectorDescription:
-    "เปิด MCP server ในเครื่อง ให้ AI coding agent อย่าง Claude Code, Cursor หรือ Codex ดูสถานะ อ่าน log ใช้ Log Doctor และสั่งเปิด/ปิดบริการได้ ฟังเฉพาะ 127.0.0.1 และต้องใช้ token",
+    "เปิด MCP server ในเครื่อง ให้ AI coding agent อย่าง Claude Code, Codex, Cursor หรือ VS Code รู้ค่าการเชื่อมต่อฐานข้อมูล อ่าน log ใช้ Log Doctor สร้างฐานข้อมูล สั่งเปิด/ปิดบริการ และเปิด HTTPS Preview ได้ ฟังเฉพาะ 127.0.0.1 และต้องใช้ token",
   agentConnectorEnable: "เปิด AI Agent Connector",
   agentConnectorRunning: "ทำงานอยู่",
   agentConnectorStopped: "ไม่ได้ทำงาน",
   agentConnectorReadOnly: "อ่านอย่างเดียว",
-  agentConnectorReadOnlyHint: "agent ดูสถานะ log และผลวิเคราะห์ได้ แต่สั่งเปิด/ปิดบริการไม่ได้",
+  agentConnectorReadOnlyHint:
+    "agent ดูสถานะ log รายชื่อฐานข้อมูล และผลวิเคราะห์ได้ แต่เปลี่ยนแปลงอะไรไม่ได้ (เปิด/ปิดบริการ สร้างฐานข้อมูล HTTPS Preview)",
   agentConnectorControlHint:
-    "agent สั่ง start, stop และ restart บริการได้ ทุกครั้งที่สั่งจะมีแจ้งเตือนในหน้าหลัก",
+    "agent เปิด/ปิด/รีสตาร์ทบริการ สร้างฐานข้อมูลใหม่ และเปิด/ปิด HTTPS Preview ได้ (ไม่ลบข้อมูล) ทุกครั้งที่สั่งจะมีแจ้งเตือนในหน้าหลัก",
   agentConnectorPort: "พอร์ต",
   agentConnectorEndpoint: "Endpoint",
-  agentConnectorClaudeCode: "Claude Code (รันใน terminal)",
-  agentConnectorJson: "Cursor และ agent อื่น (JSON)",
+  agentConnectorStep1: "1. เลือกโปรแกรม AI ที่ใช้",
+  agentConnectorStep2: "2. คัดลอกไปใช้",
+  agentConnectorStep3: "3. ทดสอบการเชื่อมต่อ",
+  agentConnectorRunIn: "รันใน",
+  agentConnectorPasteInto: "วางในไฟล์",
+  agentConnectorDesktopHint:
+    "Claude Desktop เชื่อมผ่าน mcp-remote จึงต้องติดตั้ง Node.js ก่อน ถ้าไฟล์มี mcpServers อยู่แล้ว ให้เพิ่มเฉพาะส่วน champ",
+  agentConnectorRestartHint:
+    'วางแล้วให้เปิดโปรแกรม AI ใหม่ (หรือเริ่ม session ใหม่) แล้วลองถาม เช่น "สร้างฐานข้อมูล my_app แล้วตั้งค่า .env ให้หน่อย"',
+  agentConnectorTest: "ทดสอบการเชื่อมต่อ",
+  agentConnectorTesting: "กำลังทดสอบ...",
+  agentConnectorTestOk: "เชื่อมต่อได้ agent จะเห็น {count} tools",
+  agentConnectorTestFailed: "เชื่อมต่อไม่ได้",
+  agentConnectorAdvanced: "ขั้นสูง: พอร์ต endpoint และ token",
   agentConnectorCopy: "คัดลอก",
   agentConnectorCopied: "คัดลอกแล้ว",
   agentConnectorTokenHint: "คำสั่งที่คัดลอกมี token ลับอยู่ อย่าแชร์ ถ้าหลุดให้สร้าง token ใหม่",
@@ -794,19 +817,31 @@ const en: Translations = {
   autoCheckUpdates: "Check GitHub for updates once a day at startup",
   agentConnectorTitle: "AI agent connector",
   agentConnectorDescription:
-    "Runs a local MCP server so AI coding agents such as Claude Code, Cursor, or Codex can check status, read logs, run Log Doctor, and start or stop services. It listens on 127.0.0.1 only and requires a token.",
+    "Runs a local MCP server so AI coding agents such as Claude Code, Codex, Cursor, or VS Code can get database settings, read logs, run Log Doctor, create databases, start or stop services, and open HTTPS Preview. It listens on 127.0.0.1 only and requires a token.",
   agentConnectorEnable: "Turn on the agent connector",
   agentConnectorRunning: "Running",
   agentConnectorStopped: "Not running",
   agentConnectorReadOnly: "Read-only",
   agentConnectorReadOnlyHint:
-    "Agents can see status, logs, and diagnoses but cannot start or stop services.",
+    "Agents can see status, logs, database names, and diagnoses but cannot change anything (services, new databases, HTTPS Preview).",
   agentConnectorControlHint:
-    "Agents can start, stop, and restart services. Each action shows a notification on the dashboard.",
+    "Agents can start, stop, and restart services, create new databases, and open or close HTTPS Preview (nothing is deleted). Each action shows a notification on the dashboard.",
   agentConnectorPort: "Port",
   agentConnectorEndpoint: "Endpoint",
-  agentConnectorClaudeCode: "Claude Code (run in a terminal)",
-  agentConnectorJson: "Cursor and other agents (JSON)",
+  agentConnectorStep1: "1. Pick your AI tool",
+  agentConnectorStep2: "2. Copy the setup",
+  agentConnectorStep3: "3. Test the connection",
+  agentConnectorRunIn: "Run in",
+  agentConnectorPasteInto: "Paste into",
+  agentConnectorDesktopHint:
+    "Claude Desktop connects through mcp-remote, so Node.js must be installed. If the file already has mcpServers, add only the champ entry.",
+  agentConnectorRestartHint:
+    'After pasting, restart the AI tool (or start a new session) and try asking "create a my_app database and set up my .env".',
+  agentConnectorTest: "Test connection",
+  agentConnectorTesting: "Testing...",
+  agentConnectorTestOk: "Connected. Agents will see {count} tools",
+  agentConnectorTestFailed: "Connection failed",
+  agentConnectorAdvanced: "Advanced: port, endpoint, and token",
   agentConnectorCopy: "Copy",
   agentConnectorCopied: "Copied",
   agentConnectorTokenHint:

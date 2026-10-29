@@ -302,7 +302,12 @@ export function Dashboard() {
   useEffect(() => {
     const unlisten = listenIfTauri<AgentActivity>("agent-activity", (event) => {
       const activity = event.payload;
-      const target = activity.service ? SERVICE_DISPLAY_NAMES[activity.service] : t.stack;
+      const service = activity.service ? SERVICE_DISPLAY_NAMES[activity.service] : null;
+      const target = activity.target
+        ? service
+          ? `${activity.target} (${service})`
+          : activity.target
+        : (service ?? t.stack);
       notify({
         tone: activity.ok ? "success" : "error",
         title: t.agentActivityTitle,

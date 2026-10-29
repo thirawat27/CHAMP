@@ -187,6 +187,7 @@ pub fn run() {
             agent::get_agent_connector_status,
             agent::configure_agent_connector,
             agent::regenerate_agent_token,
+            agent::test_agent_connector,
             // Log Doctor
             doctor::diagnose_service,
             doctor::get_log_doctor_status,

@@ -82,7 +82,7 @@ src-tauri/src/
   commands.rs         IPC command handlers (process work runs via run_with_manager on the blocking pool)
   tunnel.rs           HTTPS Preview / ngrok tunnel
   doctor/             Log Doctor knowledge base matching + Model2Vec runtime (doctor-knowledge.json)
-  agent/              MCP server for AI agents (hyper, 127.0.0.1, bearer token)
+  agent/              MCP server for AI agents (hyper, 127.0.0.1, bearer token; database.rs = mysql/psql client helpers)
   process/manager/    Caddy, PHP-FPM, MySQL, PostgreSQL process control
   config/             settings and port helpers
   runtime/            package catalog, PHP feeds (php_catalog.rs), downloader, binary locator
@@ -99,7 +99,15 @@ src-tauri/src/
 - Folders/terminal: `open_folder`, `open_project_terminal` (restricted to the CHAMP data folder)
 - HTTPS Preview: `start_https_tunnel`, `stop_https_tunnel`, `get_https_tunnel_status`
 - Log Doctor: `diagnose_service`, `get_log_doctor_status`, `download_log_doctor_model`, `remove_log_doctor_model`
-- Agent connector: `get_agent_connector_status`, `configure_agent_connector`, `regenerate_agent_token`
+- Agent connector: `get_agent_connector_status`, `configure_agent_connector`, `regenerate_agent_token`, `test_agent_connector` (self-test over HTTP like a real client)
+
+## Agent Connector (MCP) Tools
+
+Defined in `src-tauri/src/agent/mod.rs` (database helpers in `agent/database.rs`); client setup snippets in `src/utils/agentSnippets.ts`.
+
+- Read: `get_status`, `get_environment` (includes `.env` lines), `list_projects`, `read_logs`, `diagnose_service`, `list_databases`, `get_https_preview`
+- Write (listed in `WRITE_TOOLS`, hidden and refused in read-only mode): `start_stack`, `stop_stack`, `restart_stack`, `start_service`, `stop_service`, `restart_service`, `create_database`, `start_https_preview`, `stop_https_preview`
+- Write tools emit `agent-activity` so the dashboard shows a notification. Never add a tool that drops data or runs arbitrary SQL/shell commands.
 - Updates: `prepare_for_update` (the update itself uses the updater plugin from the frontend)
 
 ## Runtime Catalog
