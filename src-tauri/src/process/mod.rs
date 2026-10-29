@@ -1,3 +1,4 @@
+pub mod job;
 pub mod manager;
 
 use serde::{Deserialize, Serialize};

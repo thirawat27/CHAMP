@@ -364,7 +364,9 @@ impl ProcessManager {
             .get_mut(&service)
             .ok_or_else(|| format!("Service {:?} not found", service))?;
 
-        if !service_process.state.is_running() {
+        // Error/Starting still clean up: a service that reported an error can
+        // leave its process (or a stray copy) running, and Stop must clear it.
+        if service_process.state == ServiceState::Stopped {
             return Ok(());
         }
 
@@ -413,11 +415,15 @@ impl ProcessManager {
                 let _ = wait_for_port_release(service_process.port, default_port_release_timeout());
             }
         } else {
+            if let Some(ref paths) = self.runtime_paths {
+                let _ = stop_runtime_processes_by_executable(&paths.php_cgi, "PHP");
+            }
             let _ = wait_for_port_release(service_process.port, default_port_release_timeout());
         }
 
         service_process.child = None;
         service_process.state = ServiceState::Stopped;
+        service_process.error_message = None;
 
         Ok(())
     }
@@ -585,7 +591,7 @@ impl ProcessManager {
             let Some(service_process) = self.services.get(&service) else {
                 continue;
             };
-            if service_process.state.is_running() {
+            if service_process.state != ServiceState::Stopped {
                 let _ = self.stop(service);
             }
         }
@@ -598,7 +604,7 @@ impl ProcessManager {
         let services_to_stop: Vec<ServiceType> = self
             .services
             .iter()
-            .filter(|(_, s)| s.state.is_running())
+            .filter(|(_, s)| s.state != ServiceState::Stopped)
             .map(|(ty, _)| *ty)
             .collect();
 
@@ -950,6 +956,7 @@ fn start_postgresql(
                 pid, service_process.port
             ),
         );
+        crate::process::job::bind_pid_to_app_lifetime(pid);
         service_process.child = None;
         service_process.external_pid = Some(pid);
         service_process.log_file = Some(log_path);
@@ -1100,6 +1107,7 @@ fn attach_existing_mysql_process(
     pid: u32,
     log_path: PathBuf,
 ) {
+    crate::process::job::bind_pid_to_app_lifetime(pid);
     service_process.child = None;
     service_process.external_pid = Some(pid);
     service_process.log_file = Some(log_path);
@@ -1207,6 +1215,7 @@ fn attach_started_process(
             Some(&log_path),
         )),
         Ok(None) => {
+            crate::process::job::bind_child_to_app_lifetime(&child);
             service_process.child = Some(child);
             service_process.log_file = Some(log_path);
             Ok(())

@@ -516,6 +516,7 @@ name = "champ"
 version = "1.4.0"
 dependencies = [
  "dirs",
+ "dunce",
  "flate2",
  "getrandom 0.3.4",
  "hex",
@@ -536,6 +537,7 @@ dependencies = [
  "tempfile",
  "tokio",
  "tokio-util",
+ "windows-sys 0.61.2",
  "xz2",
  "zip",
 ]

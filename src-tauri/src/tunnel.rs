@@ -131,6 +131,7 @@ pub async fn start_https_tunnel(web_port: u16) -> Result<HttpsTunnelStatus, Stri
     let mut child = command
         .spawn()
         .map_err(|e| format!("Failed to start HTTPS tunnel: {}", e))?;
+    crate::process::job::bind_child_to_app_lifetime(&child);
     let pid = child.id();
     let stdout = child.stdout.take();
     let stderr = child.stderr.take();

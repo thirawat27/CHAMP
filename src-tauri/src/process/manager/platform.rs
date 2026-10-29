@@ -80,8 +80,11 @@ pub(super) fn find_process_ids_by_executable(executable: &Path) -> Result<Vec<u3
         .unwrap_or("caddy.exe")
         .replace('\'', "''");
 
-    let full_path = executable
-        .canonicalize()
+    // dunce strips the `\\?\` verbatim prefix that std's canonicalize adds on
+    // Windows. Win32_Process.ExecutablePath never carries it, so comparing
+    // against a verbatim path matched nothing and every stale-process cleanup
+    // silently found zero processes.
+    let full_path = dunce::canonicalize(executable)
         .unwrap_or_else(|_| executable.to_path_buf())
         .to_string_lossy()
         .replace('\'', "''");
