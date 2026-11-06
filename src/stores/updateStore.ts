@@ -11,7 +11,7 @@ import { check, Update } from "@tauri-apps/plugin-updater";
 import { create } from "zustand";
 import { isTauriRuntime } from "../utils/tauri";
 
-export type UpdatePhase = "idle" | "checking" | "available" | "current" | "installing" | "error";
+type UpdatePhase = "idle" | "checking" | "available" | "current" | "installing" | "error";
 
 const LAST_CHECK_KEY = "champ:last-update-check";
 const AUTO_CHECK_INTERVAL_MS = 24 * 60 * 60 * 1000;
@@ -74,11 +74,9 @@ export const useUpdateStore = create<UpdateState>((set, get) => ({
     if (!update) return;
     set({ phase: "installing", progress: null, error: null });
     try {
-      // The installer replaces the app, so stop every service first.
-      await invoke("prepare_for_update");
       let total = 0;
       let downloaded = 0;
-      await update.downloadAndInstall((event) => {
+      await update.download((event) => {
         if (event.event === "Started") {
           total = event.data.contentLength ?? 0;
         } else if (event.event === "Progress") {
@@ -86,6 +84,10 @@ export const useUpdateStore = create<UpdateState>((set, get) => ({
           if (total > 0) set({ progress: Math.min(100, Math.round((downloaded / total) * 100)) });
         }
       });
+      // The installer replaces the app, so stop every service first. Only now:
+      // a failed download must leave the running stack alone.
+      await invoke("prepare_for_update");
+      await update.install();
       await relaunch();
     } catch (error) {
       set({ phase: "error", error: String(error), progress: null });

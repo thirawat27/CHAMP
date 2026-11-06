@@ -33,7 +33,7 @@ struct StaticListingEntry {
 }
 
 /// Numeric version segments, ignoring a rebuild suffix ("8.5.12-1" -> [8, 5, 12]).
-pub fn version_key(version: &str) -> Vec<u32> {
+fn version_key(version: &str) -> Vec<u32> {
     version
         .split('-')
         .next()
@@ -52,6 +52,17 @@ fn base_version(version: &str) -> String {
     version.split('-').next().unwrap_or(version).to_string()
 }
 
+/// The branch becomes an install folder name, so a feed value is only accepted
+/// when it really is a number like "8.5".
+fn is_branch_number(branch: &str) -> bool {
+    let mut parts = branch.split('.');
+    let is_number = |part: &str| !part.is_empty() && part.bytes().all(|b| b.is_ascii_digit());
+    matches!(
+        (parts.next(), parts.next(), parts.next()),
+        (Some(major), Some(minor), None) if is_number(major) && is_number(minor)
+    )
+}
+
 /// Branches ("8.5", "8.4", ...) that php.net still supports, newest first.
 fn supported_branches(states: &Value) -> Vec<String> {
     let mut branches: Vec<String> = states
@@ -61,6 +72,7 @@ fn supported_branches(states: &Value) -> Vec<String> {
         .filter_map(Value::as_object)
         .flat_map(|branches| branches.iter())
         .filter(|(_, info)| matches!(info["state"].as_str(), Some("stable" | "security")))
+        .filter(|(branch, _)| is_branch_number(branch))
         .map(|(branch, _)| branch.clone())
         .collect();
     branches.sort_by_key(|branch| std::cmp::Reverse(version_key(branch)));
@@ -71,6 +83,9 @@ fn supported_branches(states: &Value) -> Vec<String> {
 fn windows_build(windows: &Value, branch: &str) -> Option<(String, String, Option<String>)> {
     let release = windows.get(branch)?;
     let version = release["version"].as_str()?.to_string();
+    if !crate::runtime::packages::is_safe_path_segment(&version) {
+        return None;
+    }
     let (_, build) = release.as_object()?.iter().find(|(key, value)| {
         key.starts_with("nts-") && key.ends_with("-x64") && value["zip"]["path"].is_string()
     })?;
@@ -100,7 +115,7 @@ fn static_build(files: &[String], branch: &str, os: &str, arch: &str) -> Option<
 /// Build one catalog entry per supported branch, newest first. The entry's
 /// `version` is the build available for `platform_key`, and the newest branch
 /// that has a build for this platform is marked as the default (`selected`).
-pub fn build_php_versions(
+fn build_php_versions(
     states: &Value,
     windows: Option<&Value>,
     static_files: &[String],
@@ -222,7 +237,7 @@ pub async fn fetch_latest_php(client: &reqwest::Client) -> Option<Vec<VersionInf
         .into_iter()
         .map(|entry| entry.name)
         .collect();
-    let platform = crate::runtime::downloader::Platform::current().url_key();
+    let platform = crate::runtime::platform::Platform::current().url_key();
     let versions = build_php_versions(&states?, windows.as_ref(), &static_files, &platform);
     (!versions.is_empty()).then_some(versions)
 }
@@ -238,6 +253,29 @@ pub fn windows_archive_url(url: &str) -> Option<String> {
 mod tests {
     use super::*;
     use serde_json::json;
+
+    #[test]
+    fn feed_branches_that_are_not_version_numbers_are_ignored() {
+        let states = json!({
+            "8": {
+                "8.5": { "state": "stable" },
+                "../../..": { "state": "stable" },
+                "8.5/../..": { "state": "stable" },
+            }
+        });
+        assert_eq!(supported_branches(&states), vec!["8.5".to_string()]);
+    }
+
+    #[test]
+    fn windows_feed_version_with_a_path_is_ignored() {
+        let feed = json!({
+            "8.5": {
+                "version": "../../evil",
+                "nts-vs17-x64": { "zip": { "path": "php.zip", "sha256": "abc" } }
+            }
+        });
+        assert!(windows_build(&feed, "8.5").is_none());
+    }
 
     fn states() -> Value {
         json!({

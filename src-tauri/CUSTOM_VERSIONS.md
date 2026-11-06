@@ -21,7 +21,7 @@ PHP entries are rebuilt from the official feeds whenever the catalog refreshes (
 - `https://windows.php.net/downloads/releases/releases.json` provides the exact Windows zip and its SHA-256.
 - The static-php-cli bulk listing provides the newest Linux/macOS FPM build that exists.
 
-The refreshed catalog is written to `config/runtime-config.json` in the CHAMP data folder. Entries that use an official branch id such as `php-8.5` are replaced on every refresh; give a custom build its own id (for example `php-8.5-custom`) to keep it (it is listed with an EOL badge).
+The refreshed catalog is written to `config/runtime-config.json` in the CHAMP data folder. Entries that use an official branch id such as `php-8.5` are replaced on every refresh; give a custom build its own id (for example `php-8.5-custom`) to keep it (it is listed with an EOL badge). Caddy, MySQL, and PostgreSQL version lists are replaced by the refresh, so custom entries for those do not survive it.
 
 ## Search Order
 
@@ -37,10 +37,10 @@ The first readable file is used. If no file is found, CHAMP falls back to the em
 
 ## Basic Workflow
 
-1. Copy `src-tauri/runtime-config.json` or `src-tauri/runtime-config.user.json.template`.
+1. Copy `src-tauri/runtime-config.json`.
 2. Place the copy in one of the searched locations.
 3. Change versions, URLs, or selected flags.
-4. Restart CHAMP or run the runtime reload command through the app.
+4. Restart CHAMP.
 5. Reinstall affected runtimes if they were already installed.
 
 ## Version Entry Shape
@@ -132,5 +132,5 @@ CHAMP currently supports:
 ### Wrong version is active
 
 - Ensure only one version is selected.
-- Restart CHAMP or reload the runtime config.
+- Restart CHAMP.
 - Reinstall affected runtime packages after changing URLs or versions.

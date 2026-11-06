@@ -1,0 +1,134 @@
+/* ---------- Buttons ---------- */
+
+.btn-command,
+.btn-primary,
+.btn-secondary,
+.btn-start,
+.btn-stop,
+.btn-restart,
+.btn-diagnose,
+.btn-path,
+.icon-button,
+.rail-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  min-height: 34px;
+  border-radius: var(--radius-sm);
+  border: 1px solid transparent;
+  background: transparent;
+  cursor: pointer;
+  white-space: nowrap;
+  font-size: 13px;
+  font-weight: 600;
+  transition:
+    background-color 0.16s var(--ease),
+    border-color 0.16s var(--ease),
+    color 0.16s var(--ease),
+    opacity 0.16s var(--ease),
+    transform 0.08s var(--ease);
+}
+
+.btn-command:active:not(:disabled),
+.btn-primary:active:not(:disabled),
+.btn-secondary:active:not(:disabled),
+.btn-start:active:not(:disabled),
+.btn-stop:active:not(:disabled),
+.btn-restart:active:not(:disabled),
+.btn-path:active:not(:disabled) {
+  transform: translateY(1px);
+}
+
+button:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.btn-command,
+.btn-secondary,
+.btn-path {
+  padding: 0 13px;
+  border-color: var(--border-strong);
+  color: var(--text-primary);
+}
+
+.btn-command:hover:not(:disabled),
+.btn-secondary:hover:not(:disabled),
+.btn-path:hover:not(:disabled) {
+  background: var(--bg-card-secondary);
+  border-color: color-mix(in srgb, var(--color-primary) 45%, var(--border-strong));
+}
+
+.btn-command.primary,
+.btn-primary,
+.btn-start {
+  padding: 0 14px;
+  background: var(--color-primary);
+  border-color: var(--color-primary);
+  color: var(--color-primary-ink);
+}
+
+.btn-command.primary:hover:not(:disabled),
+.btn-primary:hover:not(:disabled),
+.btn-start:hover:not(:disabled) {
+  background: var(--color-primary-strong);
+  border-color: var(--color-primary-strong);
+}
+
+.btn-command.danger,
+.btn-secondary.danger,
+.btn-stop {
+  padding: 0 13px;
+  border-color: color-mix(in srgb, var(--color-error) 40%, var(--border-strong));
+  color: var(--color-error);
+}
+
+.btn-command.danger:hover:not(:disabled),
+.btn-secondary.danger:hover:not(:disabled),
+.btn-stop:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--color-error) 10%, transparent);
+  border-color: var(--color-error);
+}
+
+.btn-primary.success {
+  background: var(--color-primary);
+}
+
+.btn-restart {
+  width: 34px;
+  flex: 0 0 auto;
+  border-color: var(--border-strong);
+  color: var(--text-primary);
+}
+
+.btn-restart:hover:not(:disabled) {
+  background: var(--bg-card-secondary);
+}
+
+.btn-diagnose {
+  padding: 0 12px;
+  border-color: color-mix(in srgb, var(--color-accent) 50%, var(--border-strong));
+  color: var(--color-accent);
+}
+
+.btn-diagnose:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--color-accent) 12%, transparent);
+}
+
+.compact {
+  min-height: 30px;
+  padding: 0 11px;
+  font-size: 12.5px;
+}
+
+.icon-button {
+  width: 34px;
+  padding: 0;
+  color: var(--text-secondary);
+}
+
+.icon-button:hover:not(:disabled) {
+  background: var(--bg-card-secondary);
+  color: var(--text-primary);
+}

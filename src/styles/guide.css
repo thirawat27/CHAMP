@@ -1,0 +1,346 @@
+/* ---------- Guide ---------- */
+
+.guide-modal {
+  width: min(1040px, 100%);
+  height: min(780px, 92vh);
+  display: grid;
+  grid-template-rows: auto 1fr;
+  overflow: hidden;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg);
+  background: var(--bg-card);
+  box-shadow: var(--shadow-float);
+  animation: modal-in 0.28s var(--ease);
+}
+
+.guide-heading,
+.modal-title-with-icon {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.guide-heading h2 {
+  font-family: var(--font-display);
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.guide-heading-icon,
+.guide-section-icon {
+  display: inline-grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  flex: 0 0 auto;
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--color-primary) 14%, transparent);
+  color: var(--color-primary);
+}
+
+.modal-title-with-icon svg {
+  color: var(--color-primary);
+}
+
+.guide-layout {
+  display: grid;
+  grid-template-columns: 250px minmax(0, 1fr);
+  min-height: 0;
+}
+
+.guide-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-height: 0;
+  padding: 14px 12px;
+  overflow-y: auto;
+  border-right: 1px solid var(--border-color);
+  background: var(--bg-card-secondary);
+}
+
+.guide-search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 10px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--bg-card);
+  color: var(--text-secondary);
+}
+
+.guide-search:focus-within {
+  border-color: var(--color-primary);
+}
+
+.guide-search input {
+  flex: 1;
+  min-width: 0;
+  height: 34px;
+  border: 0;
+  outline: none;
+  background: transparent;
+  color: var(--text-primary);
+  font: inherit;
+  font-size: 13px;
+}
+
+.guide-nav ul {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  list-style: none;
+}
+
+.guide-nav button {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  min-height: 34px;
+  padding: 0 9px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.guide-nav button:hover {
+  color: var(--text-primary);
+}
+
+.guide-nav button.active {
+  background: var(--bg-card);
+  color: var(--text-primary);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
+}
+
+.guide-nav button.active svg {
+  color: var(--color-primary);
+}
+
+.guide-content {
+  min-height: 0;
+  padding: 8px 28px 40px;
+  overflow-y: auto;
+  scroll-behavior: smooth;
+  user-select: text;
+}
+
+.guide-empty {
+  padding: 40px 0;
+  color: var(--text-secondary);
+  text-align: center;
+}
+
+.guide-section {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 24px 0;
+  border-bottom: 1px solid var(--border-color);
+  scroll-margin-top: 8px;
+}
+
+.guide-section:last-child {
+  border-bottom: 0;
+}
+
+.guide-section > header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.guide-section h3 {
+  font-family: var(--font-display);
+  font-size: 19px;
+  font-weight: 600;
+}
+
+.guide-section > header p {
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+
+.guide-section > p,
+.guide-steps li,
+.guide-list li {
+  font-size: 14px;
+  line-height: 1.7;
+}
+
+.guide-section code,
+.guide-table code {
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: var(--bg-sunken);
+  font-size: 12.5px;
+}
+
+.guide-steps {
+  display: grid;
+  gap: 6px;
+  padding-left: 22px;
+}
+
+.guide-steps li::marker {
+  color: var(--color-primary);
+  font-family: var(--font-mono);
+  font-weight: 500;
+}
+
+.guide-list {
+  display: grid;
+  gap: 6px;
+  padding-left: 20px;
+}
+
+.guide-list li::marker {
+  color: var(--color-primary);
+}
+
+.guide-code {
+  margin: 0;
+}
+
+.guide-code figcaption {
+  margin-bottom: 6px;
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.guide-code pre {
+  margin: 0;
+  padding: 12px 14px;
+  overflow-x: auto;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  background: var(--bg-sunken);
+  font-size: 12.5px;
+  line-height: 1.6;
+}
+
+.guide-note {
+  display: flex;
+  gap: 10px;
+  padding: 11px 13px;
+  border-radius: var(--radius-sm);
+  font-size: 13.5px;
+  line-height: 1.6;
+}
+
+.guide-note svg {
+  flex: 0 0 auto;
+  margin-top: 3px;
+}
+
+.guide-note.tip {
+  background: color-mix(in srgb, var(--color-accent) 11%, transparent);
+}
+
+.guide-note.tip svg {
+  color: var(--color-accent);
+}
+
+.guide-note.warning {
+  background: color-mix(in srgb, var(--color-warning) 13%, transparent);
+}
+
+.guide-note.warning svg {
+  color: var(--color-warning);
+}
+
+.guide-table-wrap {
+  overflow-x: auto;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+}
+
+.guide-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.guide-table th,
+.guide-table td {
+  padding: 9px 12px;
+  border-bottom: 1px solid var(--border-color);
+  text-align: left;
+  vertical-align: top;
+}
+
+.guide-table th {
+  background: var(--bg-card-secondary);
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.guide-table tr:last-child td {
+  border-bottom: 0;
+}
+
+.guide-keys {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+  gap: 8px;
+  margin: 0;
+}
+
+.guide-keys div {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+}
+
+.guide-keys dt {
+  display: flex;
+  gap: 4px;
+}
+
+.guide-keys dd {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+
+.shortcut-section h3 {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.help-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+@media (max-width: 760px) {
+  .guide-layout {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto 1fr;
+  }
+
+  .guide-nav {
+    max-height: 180px;
+    border-right: 0;
+    border-bottom: 1px solid var(--border-color);
+  }
+
+  .guide-content {
+    padding: 4px 18px 32px;
+  }
+}

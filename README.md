@@ -22,10 +22,10 @@ CHAMP is a desktop app that runs a complete PHP development stack **without admi
 
 - 🚀 **No admin required** — everything runs in user space on unprivileged ports
 - 🆕 **Always current** — PHP comes straight from php.net / windows.php.net, so installs and updates use the newest patch release (SHA-256 verified on Windows)
-- 🩺 **Log Doctor** — explains why a service failed and how to fix it, with an 8M-parameter offline AI model downloaded automatically on first start
+- 🩺 **Log Doctor** — explains why a service failed and how to fix it, with a 7.6M-parameter offline AI model downloaded automatically on first start
 - 🤖 **AI agent connector** — a built-in MCP server for Claude Code, Cursor, and other coding agents
 - 🔄 **Self-updating** — signed updates from GitHub Releases
-- 🪶 **Light** — Rust backend, ~640 KB UI bundle, no Node.js/Python/Go runtimes to babysit
+- 🪶 **Light** — Rust backend, ~460 KB UI bundle, no Node.js/Python/Go runtimes to babysit
 
 ---
 
@@ -138,13 +138,13 @@ Security: localhost-only, 256-bit bearer token compared in constant time, browse
 ```
 
 - **Portable mode**: place a file named `champ-portable` next to the app, or set `CHAMP_DATA_DIR`.
-- **Runtime catalog**: `src-tauri/runtime-config.json` is bundled and refreshed from upstream release feeds; see [CUSTOM_VERSIONS.md](src-tauri/CUSTOM_VERSIONS.md) to pin your own versions.
+- **Runtime catalog**: `src-tauri/runtime-config.json` is bundled and refreshed from upstream release feeds; see [CUSTOM_VERSIONS.md](src-tauri/CUSTOM_VERSIONS.md) to add custom versions (only custom PHP ids survive a catalog refresh).
 
 ---
 
 ## 💻 Development
 
-Prerequisites: Node.js 22+, pnpm 11+, Rust (stable), and the [Tauri prerequisites](https://tauri.app/start/prerequisites/) for your OS.
+Prerequisites: Node.js 22.22.2+ (or 24.15+), pnpm 12, Rust (stable), and the [Tauri prerequisites](https://tauri.app/start/prerequisites/) for your OS.
 
 ```bash
 pnpm install

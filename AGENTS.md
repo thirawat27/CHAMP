@@ -42,7 +42,7 @@ pnpm format
 
 ```bash
 pnpm tauri dev
-pnpm tauri build
+pnpm tauri build   # needs TAURI_SIGNING_PRIVATE_KEY; without it add --config src-tauri/tauri.ci.conf.json
 ```
 
 ### Rust Backend
@@ -61,16 +61,17 @@ cargo clippy --all-targets -- -D warnings
 
 - Entry point: `src/main.tsx` (font imports, dev-only IPC mock)
 - Main app: `src/App.tsx`
-- Dashboard: `src/components/Dashboard.tsx` (request path, service grid, side rail, update banner)
+- Dashboard: `src/components/Dashboard.tsx` + `src/components/dashboard/*` (request path, HTTPS Preview, side rail, update banner); logic in `src/hooks/useDashboardShortcuts.ts`, `useDatabaseSwitch.ts`, `usePhpUpdate.ts`, `useStatusPolling.ts`
 - Service cards: `src/components/ServiceCard.tsx`
-- First-run setup: `src/components/FirstRunWizard.tsx`, `src/components/PackageSelector.tsx`
+- First-run setup: `src/components/FirstRunWizard.tsx` + `src/components/wizard/*`, `src/components/PackageSelector.tsx`, `src/hooks/useRuntimeInstall.ts`
 - Settings drawer: `src/components/SettingsPanel.tsx` + `src/components/settings/*`
 - Log Doctor: `src/components/LogDoctorModal.tsx`, `src/hooks/useLogDoctorModel.ts`
 - Guide: `src/components/GuideModal.tsx`, content in `src/manual/content.ts`
-- Update state: `src/stores/updateStore.ts`
+- Stores: `src/stores/updateStore.ts`, `src/stores/preferencesStore.ts` (language and sound)
+- Shortcuts table: `src/utils/shortcuts.ts`; modal Esc stack: `src/hooks/useEscape.ts`
 - Translations: `src/i18n/translations.ts`
-- Shared types: `src/types/services.ts`
-- Styles: `src/App.css` (plain CSS design system; tokens on `:root`, dark mode via `prefers-color-scheme`)
+- Shared types: `src/types/services.ts`, `src/types/dashboard.ts`; shared timings: `src/constants.ts`
+- Styles: `src/App.css` imports `src/styles/*.css` in cascade order (plain CSS design system; tokens on `:root`, dark mode via `prefers-color-scheme`)
 
 Frontend communicates with Rust using Tauri `invoke()` from `@tauri-apps/api/core`. Use `listenIfTauri` from `src/utils/tauri.ts` for events.
 
@@ -79,13 +80,31 @@ Frontend communicates with Rust using Tauri `invoke()` from `@tauri-apps/api/cor
 ```text
 src-tauri/src/
   lib.rs              Tauri builder, plugins, tray, invoke handler
-  commands.rs         IPC command handlers (process work runs via run_with_manager on the blocking pool)
-  tunnel.rs           HTTPS Preview / ngrok tunnel
-  doctor/             Log Doctor knowledge base matching + Model2Vec runtime (doctor-knowledge.json)
-  agent/              MCP server for AI agents (hyper, 127.0.0.1, bearer token; database.rs = mysql/psql client helpers)
-  process/manager/    Caddy, PHP-FPM, MySQL, PostgreSQL process control
-  config/             settings and port helpers
-  runtime/            package catalog, PHP feeds (php_catalog.rs), downloader, binary locator
+  constants.rs        shared timeouts and limits
+  fs_util.rs          atomic and owner-only file writes
+  logs.rs             log tail reading, line append
+  metrics.rs          status bar system metrics
+  commands/           IPC handlers: services, settings, runtime, php, database, folders
+  tunnel/             HTTPS Preview: mod.rs (ngrok process), install.rs (find/download ngrok)
+  doctor/             Log Doctor: knowledge, rank, download, model (doctor-knowledge.json)
+  agent/              MCP server (hyper, 127.0.0.1, bearer token): http, token, tools, handlers, database
+  process/
+    mod.rs            ServiceType, ServiceState, ServiceInfo
+    runner.rs         run_with_manager (process work runs on the blocking pool)
+    command.rs        hide_console
+    terminal.rs       spawn_terminal
+    job.rs            Windows job object
+    manager/          ProcessManager: caddy, php, mysql, postgresql, database (shared), logs,
+                      platform, ports, caddyfile, htaccess, php_config, db_tool, welcome
+  config/             settings (write through AppSettings::update) and port helpers
+  runtime/
+    downloader/       component, fetch, verify, extract, install
+    packages/         mod.rs (catalog types, loading), catalog.rs (upstream refresh)
+    php_catalog.rs    PHP feeds
+    locator.rs        data folders, binary detection
+    layout.rs         runtime folder layout, markers
+    platform.rs       Platform enum
+    deps.rs           system dependency check
 ```
 
 ## Important IPC Commands
@@ -99,16 +118,16 @@ src-tauri/src/
 - Folders/terminal: `open_folder`, `open_project_terminal` (restricted to the CHAMP data folder)
 - HTTPS Preview: `start_https_tunnel`, `stop_https_tunnel`, `get_https_tunnel_status`
 - Log Doctor: `diagnose_service`, `get_log_doctor_status`, `download_log_doctor_model`, `remove_log_doctor_model`
+- Updates: `prepare_for_update` (the update itself uses the updater plugin from the frontend)
 - Agent connector: `get_agent_connector_status`, `configure_agent_connector`, `regenerate_agent_token`, `test_agent_connector` (self-test over HTTP like a real client)
 
 ## Agent Connector (MCP) Tools
 
-Defined in `src-tauri/src/agent/mod.rs` (database helpers in `agent/database.rs`); client setup snippets in `src/utils/agentSnippets.ts`.
+Defined in `src-tauri/src/agent/tools.rs` and `agent/handlers.rs` (database helpers in `agent/database.rs`); client setup snippets in `src/utils/agentSnippets.ts`.
 
 - Read: `get_status`, `get_environment` (includes `.env` lines), `list_projects`, `read_logs`, `diagnose_service`, `list_databases`, `get_https_preview`
 - Write (listed in `WRITE_TOOLS`, hidden and refused in read-only mode): `start_stack`, `stop_stack`, `restart_stack`, `start_service`, `stop_service`, `restart_service`, `create_database`, `start_https_preview`, `stop_https_preview`
 - Write tools emit `agent-activity` so the dashboard shows a notification. Never add a tool that drops data or runs arbitrary SQL/shell commands.
-- Updates: `prepare_for_update` (the update itself uses the updater plugin from the frontend)
 
 ## Runtime Catalog
 
@@ -160,6 +179,7 @@ Portable mode can be controlled with `CHAMP_DATA_DIR`, `CHAMP_PORTABLE_DIR`, `CH
 
 - Capabilities live in `src-tauri/capabilities/default.json`; keep them least-privilege.
 - The CSP in `tauri.conf.json` disallows inline scripts in production.
+- Caddy binds to `127.0.0.1` only. phpMyAdmin/Adminer answer only local Hosts and refuse forwarded (tunnel) requests; dotfiles are never served.
 - The agent connector must stay localhost-only, token-protected, and reject requests with an `Origin` header.
 - The updater public key is in `tauri.conf.json`; the private key is a GitHub secret (`TAURI_SIGNING_PRIVATE_KEY`) and must never be committed.
 

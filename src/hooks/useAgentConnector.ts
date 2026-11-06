@@ -1,8 +1,9 @@
 import { invoke } from "@tauri-apps/api/core";
 import { useCallback, useEffect, useState } from "react";
+import { DEFAULT_AGENT_CONNECTOR_PORT } from "../constants";
 import { AgentConnectorStatus, AgentConnectorTestResult } from "../types/services";
 
-export interface AgentConnectorController {
+interface AgentConnectorController {
   status: AgentConnectorStatus | null;
   busy: boolean;
   error: string | null;
@@ -49,7 +50,7 @@ export function useAgentConnector(): AgentConnectorController {
         invoke<AgentConnectorStatus>("configure_agent_connector", {
           enabled: changes.enabled ?? status?.enabled ?? false,
           readOnly: changes.read_only ?? status?.read_only ?? false,
-          port: changes.port ?? status?.port ?? 47823,
+          port: changes.port ?? status?.port ?? DEFAULT_AGENT_CONNECTOR_PORT,
         })
       ),
     [run, status]

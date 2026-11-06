@@ -1,4 +1,5 @@
 import { Component, ErrorInfo, ReactNode } from "react";
+import { usePreferencesStore } from "../stores/preferencesStore";
 
 interface Props {
   children: ReactNode;
@@ -50,6 +51,7 @@ export class ErrorBoundary extends Component<Props, State> {
 
   public render() {
     if (this.state.hasError) {
+      const { t } = usePreferencesStore.getState();
       return (
         <div
           style={{
@@ -60,7 +62,7 @@ export class ErrorBoundary extends Component<Props, State> {
             minHeight: "100vh",
             padding: "2rem",
             textAlign: "center",
-            backgroundColor: "var(--bg-primary, #f5f5f5)",
+            backgroundColor: "var(--bg-app, #f5f5f5)",
             color: "var(--text-primary, #333)",
           }}
         >
@@ -80,17 +82,17 @@ export class ErrorBoundary extends Component<Props, State> {
                 color: "var(--color-error, #ef4444)",
               }}
             >
-              Something went wrong
+              {t.errorBoundaryTitle}
             </h1>
 
             <p style={{ marginBottom: "1rem", fontSize: "0.875rem" }}>
-              {this.state.error?.message || "An unexpected error occurred"}
+              {this.state.error?.message || t.unknownError}
             </p>
 
             {this.state.errorInfo && (
               <details style={{ marginBottom: "1.5rem", textAlign: "left" }}>
                 <summary style={{ cursor: "pointer", marginBottom: "0.5rem", fontWeight: 600 }}>
-                  Error Details
+                  {t.errorBoundaryDetails}
                 </summary>
                 <pre
                   style={{
@@ -121,13 +123,13 @@ export class ErrorBoundary extends Component<Props, State> {
                 transition: "background-color 0.2s",
               }}
               onMouseEnter={(e) => {
-                e.currentTarget.style.backgroundColor = "var(--color-primary-hover, #2563eb)";
+                e.currentTarget.style.backgroundColor = "var(--color-primary-strong, #2563eb)";
               }}
               onMouseLeave={(e) => {
                 e.currentTarget.style.backgroundColor = "var(--color-primary, #3b82f6)";
               }}
             >
-              Reload Application
+              {t.errorBoundaryReload}
             </button>
           </div>
         </div>

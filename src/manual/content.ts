@@ -24,6 +24,7 @@ import {
   Stethoscope,
   TerminalSquare,
 } from "lucide-react";
+import { SHORTCUTS } from "../utils/shortcuts";
 
 export interface Localized {
   th: string;
@@ -404,10 +405,17 @@ export const GUIDE_SECTIONS: GuideSection[] = [
         ],
       },
       {
+        kind: "tip",
+        text: l(
+          "เว็บเซิร์ฟเวอร์ของ CHAMP รับการเชื่อมต่อจากเครื่องนี้เท่านั้น อุปกรณ์อื่นในเครือข่ายเข้าไม่ได้ HTTPS Preview คือวิธีให้คนอื่นหรืออุปกรณ์อื่นเปิดเว็บของคุณ",
+          "CHAMP's web server accepts connections from this computer only, so other devices on your network cannot reach it. HTTPS Preview is the way to show your site to other people or devices."
+        ),
+      },
+      {
         kind: "warning",
         text: l(
-          "ทุกคนที่มีลิงก์เข้าเว็บในเครื่องคุณได้ รวมถึง phpMyAdmin/Adminer อย่าเปิดทิ้งไว้ และอย่าใช้กับข้อมูลจริง",
-          "Anyone with the link can reach your local site, including phpMyAdmin/Adminer. Do not leave it running or use it with real data."
+          "ทุกคนที่มีลิงก์เข้าเว็บในเครื่องคุณได้ อย่าเปิดทิ้งไว้ และอย่าใช้กับข้อมูลจริง phpMyAdmin/Adminer ถูกปิดกั้นผ่านลิงก์นี้โดยตั้งใจ ให้เปิดจากเครื่องนี้ที่ localhost เท่านั้น",
+          "Anyone with the link can reach your local site. Do not leave it running or use it with real data. phpMyAdmin/Adminer are blocked over this link by design; open them on this computer through localhost."
         ),
       },
     ],
@@ -633,15 +641,27 @@ export const GUIDE_SECTIONS: GuideSection[] = [
       {
         kind: "keys",
         items: [
-          { keys: "Ctrl S", text: l("เริ่ม stack", "Start the stack") },
-          { keys: "Ctrl R", text: l("รีสตาร์ท stack", "Restart the stack") },
-          { keys: "Ctrl X", text: l("หยุด stack", "Stop the stack") },
-          { keys: "Ctrl W", text: l("เปิดเว็บไซต์", "Open the website") },
-          { keys: "Ctrl D", text: l("เปิด phpMyAdmin / Adminer", "Open phpMyAdmin / Adminer") },
-          { keys: "Ctrl O", text: l("เปิดโฟลเดอร์ projects", "Open the projects folder") },
-          { keys: "Ctrl L", text: l("เปิดโฟลเดอร์ logs", "Open the logs folder") },
-          { keys: "Ctrl T", text: l("เปิด Terminal", "Open a terminal") },
-          { keys: "Ctrl ,", text: l("เปิด/ปิด Settings", "Toggle Settings") },
+          { keys: `Ctrl ${SHORTCUTS.start.key}`, text: l("เริ่ม stack", "Start the stack") },
+          { keys: `Ctrl ${SHORTCUTS.restart.key}`, text: l("รีสตาร์ท stack", "Restart the stack") },
+          { keys: `Ctrl ${SHORTCUTS.stop.key}`, text: l("หยุด stack", "Stop the stack") },
+          { keys: `Ctrl ${SHORTCUTS.website.key}`, text: l("เปิดเว็บไซต์", "Open the website") },
+          {
+            keys: `Ctrl ${SHORTCUTS.database.key}`,
+            text: l("เปิด phpMyAdmin / Adminer", "Open phpMyAdmin / Adminer"),
+          },
+          {
+            keys: `Ctrl ${SHORTCUTS.projects.key}`,
+            text: l("เปิดโฟลเดอร์ projects", "Open the projects folder"),
+          },
+          {
+            keys: `Ctrl ${SHORTCUTS.logs.key}`,
+            text: l("เปิดโฟลเดอร์ logs", "Open the logs folder"),
+          },
+          { keys: `Ctrl ${SHORTCUTS.terminal.key}`, text: l("เปิด Terminal", "Open a terminal") },
+          {
+            keys: `Ctrl ${SHORTCUTS.settings.key}`,
+            text: l("เปิด/ปิด Settings", "Toggle Settings"),
+          },
           { keys: "F1", text: l("เปิดคู่มือนี้", "Open this guide") },
           { keys: "?", text: l("แสดงคีย์ลัด", "Show shortcuts") },
           { keys: "Esc", text: l("ปิดหน้าต่างหรือแจ้งเตือน", "Close a dialog or notification") },
@@ -649,7 +669,10 @@ export const GUIDE_SECTIONS: GuideSection[] = [
       },
       {
         kind: "tip",
-        text: l("บน macOS ใช้ ⌘ แทน Ctrl", "On macOS use ⌘ instead of Ctrl."),
+        text: l(
+          "บน macOS ใช้ ⌘ แทน Ctrl ขณะพิมพ์ในช่องข้อความหรือเปิดหน้าต่างอื่นอยู่ คีย์ลัดของ stack จะไม่ทำงาน และ Ctrl X ยังใช้ตัดข้อความได้ตามปกติ",
+          "On macOS use ⌘ instead of Ctrl. While you type in a field or another dialog is open, stack shortcuts do nothing, and Ctrl X still cuts text as usual."
+        ),
       },
     ],
   },

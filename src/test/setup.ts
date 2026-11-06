@@ -17,10 +17,6 @@ vi.mock("@tauri-apps/api/core", () => ({
   invoke: vi.fn(),
 }));
 
-vi.mock("@tauri-apps/api/shell", () => ({
-  open: vi.fn(),
-}));
-
 // Mock window.location
 Object.defineProperty(window, "location", {
   value: {

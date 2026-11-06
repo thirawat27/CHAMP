@@ -1,5 +1,4 @@
-import { useCallback, useState, useEffect } from "react";
-import { invoke } from "@tauri-apps/api/core";
+import { ChangeEvent, ReactNode } from "react";
 import {
   PackagesConfig,
   PackageSelection,
@@ -11,29 +10,72 @@ import {
   DATABASE_TOOL_NAMES,
   DatabaseEngine,
   DatabaseTool,
-  EMPTY_PACKAGE_SELECTION,
   databaseToolSupportsEngine,
   getDatabaseEngine,
   getDatabaseTool,
-  hasPackageUrlForPlatform,
+  packagesForPlatform,
   selectionWithEngine,
   selectionWithTool,
 } from "../types/services";
-import { useTranslation } from "../stores/languageStore";
+import { useTranslation } from "../stores/preferencesStore";
 
 interface PackageSelectorProps {
+  selection: PackageSelection;
+  /** Catalog loaded by the wizard; null while it loads */
+  packages: PackagesConfig | null;
+  platformKey: string;
+  loadFailed: boolean;
   onSelectionChange: (selection: PackageSelection) => void;
-  initialSelection?: PackageSelection;
 }
 
-export function PackageSelector({ onSelectionChange, initialSelection }: PackageSelectorProps) {
-  const { t } = useTranslation();
-  const [packages, setPackages] = useState<PackagesConfig | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [runtimePlatformKey, setRuntimePlatformKey] = useState<string>("");
-  const [selection, setSelection] = useState<PackageSelection>(
-    initialSelection || EMPTY_PACKAGE_SELECTION
+function LabeledSelect({
+  label,
+  value,
+  testId,
+  note,
+  onChange,
+  children,
+}: {
+  label: string;
+  value: string;
+  testId?: string;
+  note?: string;
+  onChange: (value: string) => void;
+  children: ReactNode;
+}) {
+  return (
+    <label className="labeled-select">
+      <span>{label}</span>
+      <select
+        className="input"
+        value={value}
+        data-testid={testId}
+        onChange={(event: ChangeEvent<HTMLSelectElement>) => onChange(event.target.value)}
+      >
+        {children}
+      </select>
+      {note && <small>{note}</small>}
+    </label>
   );
+}
+
+/** Version and database choices of the first-run wizard, which owns the selection. */
+export function PackageSelector({
+  selection,
+  packages,
+  platformKey,
+  loadFailed,
+  onSelectionChange,
+}: PackageSelectorProps) {
+  const { t } = useTranslation();
+
+  if (!packages) {
+    return loadFailed ? (
+      <div className="package-selector-status error">{t.wizardFailedToLoadPackages}</div>
+    ) : (
+      <div className="package-selector-status">{t.wizardLoadingPackages}</div>
+    );
+  }
 
   const getPhpLabel = (pkg: PhpPackage): string => {
     const badges: string[] = [];
@@ -50,253 +92,92 @@ export function PackageSelector({ onSelectionChange, initialSelection }: Package
     return `${pkg.display_name} [${badges.join(", ")}]`;
   };
 
-  const loadPackages = useCallback(async () => {
-    try {
-      const [data, platformKey] = await Promise.all([
-        // The wizard refreshes the catalog on open; read the cached result.
-        invoke<PackagesConfig>("get_available_packages_cmd"),
-        invoke<string>("get_runtime_platform"),
-      ]);
-      setPackages(data);
-      setRuntimePlatformKey(platformKey);
-      if (!initialSelection) {
-        setSelection(await invoke<PackageSelection>("get_selected_package_ids"));
-      }
-    } catch (err) {
-      console.error("Failed to load packages:", err);
-    } finally {
-      setLoading(false);
-    }
-  }, [initialSelection]);
-
-  useEffect(() => {
-    loadPackages();
-  }, [loadPackages]);
-
-  useEffect(() => {
-    if (!packages || !runtimePlatformKey) return;
-
-    const availablePhp = packages.php.filter((pkg) =>
-      hasPackageUrlForPlatform(pkg, runtimePlatformKey)
-    );
-    const availableMysql = packages.mysql.filter((pkg) =>
-      hasPackageUrlForPlatform(pkg, runtimePlatformKey)
-    );
-    const availablePostgreSQL = packages.postgresql.filter((pkg) =>
-      hasPackageUrlForPlatform(pkg, runtimePlatformKey)
-    );
-    const availableDatabaseTools = packages.phpmyadmin;
-    const nextSelection = { ...selection };
-
-    if (!availablePhp.some((pkg) => pkg.id === nextSelection.php) && availablePhp[0]) {
-      nextSelection.php = availablePhp[0].id;
-    }
-    if (!availableMysql.some((pkg) => pkg.id === nextSelection.mysql) && availableMysql[0]) {
-      nextSelection.mysql = availableMysql[0].id;
-    }
-    if (
-      !availablePostgreSQL.some((pkg) => pkg.id === nextSelection.postgresql) &&
-      availablePostgreSQL[0]
-    ) {
-      nextSelection.postgresql = availablePostgreSQL[0].id;
-    }
-    if (
-      !availableDatabaseTools.some((pkg) => pkg.id === nextSelection.phpmyadmin) &&
-      availableDatabaseTools[0]
-    ) {
-      nextSelection.phpmyadmin = availableDatabaseTools[0].id;
-    }
-
-    if (
-      nextSelection.php !== selection.php ||
-      nextSelection.mysql !== selection.mysql ||
-      nextSelection.postgresql !== selection.postgresql ||
-      nextSelection.phpmyadmin !== selection.phpmyadmin
-    ) {
-      setSelection(nextSelection);
-      return;
-    }
-
-    onSelectionChange(selection);
-  }, [selection, packages, runtimePlatformKey, onSelectionChange]);
-
-  const handlePhpChange = (value: string) => {
-    setSelection({ ...selection, php: value });
-  };
-
-  const handleMySQLChange = (value: string) => {
-    setSelection({ ...selection, mysql: value });
-  };
-
-  const handlePostgreSQLChange = (value: string) => {
-    setSelection({ ...selection, postgresql: value });
-  };
-
-  // PostgreSQL moves a phpMyAdmin selection onto Adminer; otherwise the
-  // manager is kept.
-  const handleDatabaseEngineChange = (engine: DatabaseEngine) => {
-    setSelection(selectionWithEngine(selection, engine, packages?.phpmyadmin ?? []));
-  };
-
-  const handleDatabaseToolChange = (tool: DatabaseTool) => {
-    setSelection(selectionWithTool(selection, tool, packages?.phpmyadmin ?? []));
-  };
-
-  if (loading) {
-    return (
-      <div
-        style={{
-          textAlign: "center",
-          color: "var(--text-secondary)",
-          fontSize: "0.875rem",
-          padding: "1rem",
-        }}
-      >
-        {t.wizardLoadingPackages}
-      </div>
-    );
-  }
-
-  if (!packages) {
-    return (
-      <div style={{ textAlign: "center", color: "var(--color-error)", fontSize: "0.875rem" }}>
-        {t.wizardFailedToLoadPackages}
-      </div>
-    );
-  }
-
-  const availablePhpPackages = packages.php.filter((pkg) =>
-    hasPackageUrlForPlatform(pkg, runtimePlatformKey)
-  );
-  const availableMysqlPackages = packages.mysql.filter((pkg) =>
-    hasPackageUrlForPlatform(pkg, runtimePlatformKey)
-  );
-  const availablePostgreSQLPackages = packages.postgresql.filter((pkg) =>
-    hasPackageUrlForPlatform(pkg, runtimePlatformKey)
-  );
+  const availablePhpPackages = packagesForPlatform(packages.php, platformKey);
   const databaseEngine = getDatabaseEngine(selection);
   const databaseTool = getDatabaseTool(selection);
   const postgresqlSelected = databaseEngine === "postgresql";
   const activeDatabaseName = DATABASE_ENGINE_NAMES[databaseEngine];
-  const activeDatabasePackages = postgresqlSelected
-    ? availablePostgreSQLPackages
-    : availableMysqlPackages;
-  const activeDatabaseValue = postgresqlSelected ? selection.postgresql : selection.mysql;
-  const handleActiveDatabaseChange = postgresqlSelected ? handlePostgreSQLChange : handleMySQLChange;
+  const activeDatabasePackages = packagesForPlatform(
+    postgresqlSelected ? packages.postgresql : packages.mysql,
+    platformKey
+  );
   const selectedPhpPackage = availablePhpPackages.find((pkg) => pkg.id === selection.php);
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
-      {/* PHP Version Selector */}
-      <div style={{ display: "flex", flexDirection: "column", gap: "0.25rem" }}>
-        <label style={{ fontSize: "0.875rem", fontWeight: 500, color: "var(--text-primary)" }}>
-          {t.phpVersion}
-        </label>
-        <select
-          value={selection.php}
-          onChange={(e) => handlePhpChange(e.target.value)}
-          className="input"
-          style={{
-            cursor: "pointer",
-            padding: "0.375rem 0.5rem",
-            fontSize: "0.875rem",
-            width: "100%",
-          }}
-        >
-          {availablePhpPackages.map((pkg: PhpPackage) => (
-            <option key={pkg.id} value={pkg.id}>
-              {getPhpLabel(pkg)}
-            </option>
-          ))}
-        </select>
-      </div>
+    <div className="package-selector">
+      <LabeledSelect
+        label={t.phpVersion}
+        value={selection.php}
+        onChange={(php) => onSelectionChange({ ...selection, php })}
+      >
+        {availablePhpPackages.map((pkg: PhpPackage) => (
+          <option key={pkg.id} value={pkg.id}>
+            {getPhpLabel(pkg)}
+          </option>
+        ))}
+      </LabeledSelect>
 
       {/* Database engine: MySQL and PostgreSQL fill the same role */}
-      <div style={{ display: "flex", flexDirection: "column", gap: "0.25rem" }}>
-        <label style={{ fontSize: "0.875rem", fontWeight: 500, color: "var(--text-primary)" }}>
-          {t.databaseEngine}
-        </label>
-        <select
-          value={databaseEngine}
-          onChange={(e) => handleDatabaseEngineChange(e.target.value as DatabaseEngine)}
-          className="input"
-          data-testid="database-engine-select"
-          style={{
-            cursor: "pointer",
-            padding: "0.375rem 0.5rem",
-            fontSize: "0.875rem",
-            width: "100%",
-          }}
-        >
-          {DATABASE_ENGINES.map((engine) => (
-            <option key={engine} value={engine}>
-              {DATABASE_ENGINE_NAMES[engine]}
-            </option>
-          ))}
-        </select>
-      </div>
+      <LabeledSelect
+        label={t.databaseEngine}
+        value={databaseEngine}
+        testId="database-engine-select"
+        onChange={(engine) =>
+          // PostgreSQL moves a phpMyAdmin selection onto Adminer; otherwise the
+          // manager is kept.
+          onSelectionChange(
+            selectionWithEngine(selection, engine as DatabaseEngine, packages.phpmyadmin)
+          )
+        }
+      >
+        {DATABASE_ENGINES.map((engine) => (
+          <option key={engine} value={engine}>
+            {DATABASE_ENGINE_NAMES[engine]}
+          </option>
+        ))}
+      </LabeledSelect>
 
       {/* Web database manager: phpMyAdmin is MySQL-only, Adminer serves both */}
-      <div style={{ display: "flex", flexDirection: "column", gap: "0.25rem" }}>
-        <label style={{ fontSize: "0.875rem", fontWeight: 500, color: "var(--text-primary)" }}>
-          {t.databaseManager}
-        </label>
-        <select
-          value={databaseTool}
-          onChange={(e) => handleDatabaseToolChange(e.target.value as DatabaseTool)}
-          className="input"
-          data-testid="database-tool-select"
-          style={{
-            cursor: "pointer",
-            padding: "0.375rem 0.5rem",
-            fontSize: "0.875rem",
-            width: "100%",
-          }}
-        >
-          {DATABASE_TOOLS.filter((tool) => databaseToolSupportsEngine(tool, databaseEngine)).map(
-            (tool) => (
-              <option key={tool} value={tool}>
-                {DATABASE_TOOL_NAMES[tool]}
-              </option>
-            )
-          )}
-        </select>
-        <small style={{ color: "var(--text-secondary)" }}>{t.databaseManagerNote}</small>
-      </div>
-
-      {/* Active Database Version Selector */}
-      <div style={{ display: "flex", flexDirection: "column", gap: "0.25rem" }}>
-        <label style={{ fontSize: "0.875rem", fontWeight: 500, color: "var(--text-primary)" }}>
-          {activeDatabaseName} {t.version}
-        </label>
-        <select
-          value={activeDatabaseValue}
-          onChange={(e) => handleActiveDatabaseChange(e.target.value)}
-          className="input"
-          style={{
-            cursor: "pointer",
-            padding: "0.375rem 0.5rem",
-            fontSize: "0.875rem",
-            width: "100%",
-          }}
-        >
-          {activeDatabasePackages.map((pkg: MySQLPackage) => (
-            <option key={pkg.id} value={pkg.id}>
-              {getPackageLabel(pkg)}
+      <LabeledSelect
+        label={t.databaseManager}
+        value={databaseTool}
+        testId="database-tool-select"
+        note={t.databaseManagerNote}
+        onChange={(tool) =>
+          onSelectionChange(selectionWithTool(selection, tool as DatabaseTool, packages.phpmyadmin))
+        }
+      >
+        {DATABASE_TOOLS.filter((tool) => databaseToolSupportsEngine(tool, databaseEngine)).map(
+          (tool) => (
+            <option key={tool} value={tool}>
+              {DATABASE_TOOL_NAMES[tool]}
             </option>
-          ))}
-        </select>
-      </div>
+          )
+        )}
+      </LabeledSelect>
 
-      {/* Package Info Box */}
-      <div className="info-box" style={{ padding: "0.5rem", fontSize: "0.875rem" }}>
-        <p
-          style={{ fontSize: "0.875rem", color: "var(--text-secondary)", margin: "0 0 0.375rem 0" }}
-        >
+      <LabeledSelect
+        label={`${activeDatabaseName} ${t.version}`}
+        value={postgresqlSelected ? selection.postgresql : selection.mysql}
+        onChange={(id) =>
+          onSelectionChange(
+            postgresqlSelected ? { ...selection, postgresql: id } : { ...selection, mysql: id }
+          )
+        }
+      >
+        {activeDatabasePackages.map((pkg: MySQLPackage) => (
+          <option key={pkg.id} value={pkg.id}>
+            {getPackageLabel(pkg)}
+          </option>
+        ))}
+      </LabeledSelect>
+
+      <div className="info-box package-selector-info">
+        <p>
           <strong>{t.wizardDefault}:</strong> {selectedPhpPackage?.display_name || "PHP"},{" "}
           {activeDatabaseName}, {postgresqlSelected ? "Adminer" : "phpMyAdmin"}
         </p>
-        <p style={{ fontSize: "0.875rem", color: "var(--text-secondary)", margin: 0 }}>
+        <p>
           <strong>{t.wizardNote}:</strong> {t.wizardEolNote}
         </p>
       </div>

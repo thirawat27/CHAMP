@@ -1,14 +1,16 @@
 import { invoke } from "@tauri-apps/api/core";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Translations } from "../i18n/translations";
+import { useCallback, useMemo, useRef, useState } from "react";
+import { getTranslations } from "../stores/preferencesStore";
 import { AudioManager } from "../utils/audioManager";
+import { DashboardNotice } from "../types/dashboard";
 import {
   ServiceCommand,
   SERVICE_COMMAND_COPY,
   StackCommand,
   STACK_COMMAND_COPY,
-} from "../components/dashboard/types";
+} from "./commandCopy";
 import {
+  ALL_SERVICE_TYPES,
   AppSettings,
   DEFAULT_PORTS,
   PackageSelection,
@@ -18,23 +20,13 @@ import {
   ServiceType,
   getStackServiceTypes,
 } from "../types/services";
-import { DashboardNotice } from "../components/dashboard/types";
 
 interface UseServicesOptions {
-  t: Translations;
   settings: AppSettings | null;
   notify: (notice: DashboardNotice) => void;
-  /**
-   * Refreshes HTTPS tunnel status. Runs alongside `get_all_statuses` on mount
-   * and on every visibility-gated poll tick, matching the original combined
-   * fetch behaviour.
-   */
-  refreshTunnel: () => Promise<void>;
-  /** Invoked after a successful `stop_all_services` so the tunnel panel resets. */
-  resetTunnel: () => void;
 }
 
-export interface ServicesController {
+interface ServicesController {
   services: Partial<ServiceMap>;
   busy: string | null;
   busyStackCommand: StackCommand | null;
@@ -45,27 +37,36 @@ export interface ServicesController {
   stackServiceTypes: ServiceType[];
   packageSelection: PackageSelection | null;
   refreshStatuses: () => Promise<void>;
-  runStackCommand: (command: StackCommand) => Promise<void>;
+  /** Resolves true when the command succeeded. */
+  runStackCommand: (command: StackCommand) => Promise<boolean>;
   runServiceCommand: (command: ServiceCommand, service: ServiceType) => Promise<void>;
 }
 
+/** Polls return a new object every tick; keep the old one when nothing changed. */
+function sameServices(current: Partial<ServiceMap>, next: ServiceMap): boolean {
+  if (!next) return false;
+  const keys = Object.keys(next) as ServiceType[];
+  if (keys.length !== Object.keys(current).length) return false;
+  return keys.every((key) => {
+    const a = current[key];
+    const b = next[key];
+    return a?.state === b?.state && a?.port === b?.port && a?.error_message === b?.error_message;
+  });
+}
+
 /**
- * Owns service status state and the stack/service command lifecycle.
- *
- * Preserves the original dashboard behaviour: a single in-flight guard for the
- * 3.5s visibility-gated status poll, optimistic transition states, port
- * fallback messaging, and busy flags that disable the relevant buttons.
+ * Owns service status state and the stack/service command lifecycle: one
+ * command at a time, optimistic transition states, port fallback messaging, and
+ * busy flags that disable the relevant buttons.
  */
-export function useServices({
-  t,
-  settings,
-  notify,
-  refreshTunnel,
-  resetTunnel,
-}: UseServicesOptions): ServicesController {
+export function useServices({ settings, notify }: UseServicesOptions): ServicesController {
   const [services, setServices] = useState<Partial<ServiceMap>>({});
   const [busy, setBusy] = useState<string | null>(null);
   const statusRefreshInFlight = useRef(false);
+  // Single-flight guard for commands: read synchronously, unlike `busy`.
+  const commandRunning = useRef(false);
+  // A poll that started before a command must not overwrite the command's state.
+  const statusGeneration = useRef(0);
 
   const packageSelection = settings?.package_selection ?? null;
   const stackServiceTypes = useMemo(
@@ -95,28 +96,18 @@ export function useServices({
   const refreshStatuses = useCallback(async () => {
     if (statusRefreshInFlight.current) return;
     statusRefreshInFlight.current = true;
+    const generation = statusGeneration.current;
     try {
-      const [statuses] = await Promise.all([
-        invoke<ServiceMap>("get_all_statuses"),
-        refreshTunnel(),
-      ]);
-      setServices(statuses);
+      const statuses = await invoke<ServiceMap>("get_all_statuses");
+      if (generation === statusGeneration.current) {
+        setServices((current) => (sameServices(current, statuses) ? current : statuses));
+      }
     } catch (error) {
       console.error("Failed to refresh dashboard status:", error);
     } finally {
       statusRefreshInFlight.current = false;
     }
-  }, [refreshTunnel]);
-
-  useEffect(() => {
-    refreshStatuses();
-    const interval = window.setInterval(() => {
-      if (document.visibilityState === "visible") {
-        refreshStatuses();
-      }
-    }, 3500);
-    return () => window.clearInterval(interval);
-  }, [refreshStatuses]);
+  }, []);
 
   const markStackTransition = useCallback(
     (command: StackCommand) => {
@@ -158,32 +149,30 @@ export function useServices({
     });
   }, []);
 
-  const fallbackPortMessage = useMemo(() => {
-    return (statuses: ServiceMap, fallbackMessage: string) => {
-      const changedPorts = [
-        ServiceType.Caddy,
-        ServiceType.PhpFpm,
-        ServiceType.MySQL,
-        ServiceType.PostgreSQL,
-      ]
-        .map((serviceType) => {
-          const service = statuses[serviceType];
-          const expectedPort = expectedPorts[serviceType];
-          if (!service || service.port === expectedPort) return null;
-          return `${SERVICE_DISPLAY_NAMES[serviceType]} ${service.port}`;
-        })
-        .filter((value): value is string => Boolean(value));
+  const fallbackPortMessage = useCallback(
+    (statuses: ServiceMap, fallbackMessage: string) => {
+      const changedPorts = ALL_SERVICE_TYPES.map((serviceType) => {
+        const service = statuses[serviceType];
+        const expectedPort = expectedPorts[serviceType];
+        if (!service || service.port === expectedPort) return null;
+        return `${SERVICE_DISPLAY_NAMES[serviceType]} ${service.port}`;
+      }).filter((value): value is string => Boolean(value));
 
       if (changedPorts.length === 0) {
         return fallbackMessage;
       }
 
-      return t.fallbackPortsUsed.replace("{ports}", changedPorts.join(", "));
-    };
-  }, [expectedPorts, t]);
+      return getTranslations().fallbackPortsUsed.replace("{ports}", changedPorts.join(", "));
+    },
+    [expectedPorts]
+  );
 
   const runStackCommand = useCallback(
     async (command: StackCommand) => {
+      if (commandRunning.current) return false;
+      commandRunning.current = true;
+      statusGeneration.current += 1;
+      const t = getTranslations();
       const copy = STACK_COMMAND_COPY[command];
       setBusy(`stack:${command}`);
       notify({
@@ -195,10 +184,8 @@ export function useServices({
       markStackTransition(command);
       try {
         const statuses = await invoke<ServiceMap>(command);
+        statusGeneration.current += 1;
         setServices(statuses);
-        if (command === "stop_all_services") {
-          resetTunnel();
-        }
         AudioManager.playNotification("success", copy.action);
         notify({
           tone: "success",
@@ -206,6 +193,7 @@ export function useServices({
           title: t[copy.successTitleKey],
           message: fallbackPortMessage(statuses, t[copy.successMessageKey]),
         });
+        return true;
       } catch (error) {
         AudioManager.playNotification("error");
         notify({
@@ -213,16 +201,23 @@ export function useServices({
           title: t.commandFailed,
           message: String(error),
         });
+        statusGeneration.current += 1;
         await refreshStatuses();
+        return false;
       } finally {
+        commandRunning.current = false;
         setBusy(null);
       }
     },
-    [fallbackPortMessage, markStackTransition, notify, refreshStatuses, resetTunnel, t]
+    [fallbackPortMessage, markStackTransition, notify, refreshStatuses]
   );
 
   const runServiceCommand = useCallback(
     async (command: ServiceCommand, service: ServiceType) => {
+      if (commandRunning.current) return;
+      commandRunning.current = true;
+      statusGeneration.current += 1;
+      const t = getTranslations();
       const copy = SERVICE_COMMAND_COPY[command];
       const displayName = SERVICE_DISPLAY_NAMES[service];
       setBusy(`${command}:${service}`);
@@ -235,6 +230,7 @@ export function useServices({
       markServiceTransition(command, service);
       try {
         const statuses = await invoke<ServiceMap>(command, { service });
+        statusGeneration.current += 1;
         setServices(statuses);
         AudioManager.playNotification("success", copy.action);
         notify({
@@ -250,12 +246,14 @@ export function useServices({
           title: `${t.commandFailed}: ${displayName}`,
           message: String(error),
         });
+        statusGeneration.current += 1;
         await refreshStatuses();
       } finally {
+        commandRunning.current = false;
         setBusy(null);
       }
     },
-    [fallbackPortMessage, markServiceTransition, notify, refreshStatuses, t]
+    [fallbackPortMessage, markServiceTransition, notify, refreshStatuses]
   );
 
   return {

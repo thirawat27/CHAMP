@@ -1,11 +1,18 @@
-name: Pull Request CI
+name: CI
 
+# Lint, test, and type-check. Runs on direct pushes as well as pull requests
+# because most changes land on main without a PR.
 on:
   pull_request:
     branches: ["main"]
+  push:
+    branches: ["main"]
+
+permissions:
+  contents: read
 
 concurrency:
-  group: pr-${{ github.event.pull_request.number }}
+  group: ci-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: false
 
 jobs:
@@ -14,13 +21,15 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
 
       - name: Setup pnpm
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@f40ffcd9367d9f12939873eb1018b921a783ffaa # v4
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: 22
           cache: pnpm
@@ -38,16 +47,25 @@ jobs:
         run: pnpm build
 
   rust:
-    name: Rust checks
-    runs-on: ubuntu-latest
+    name: Rust checks (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        # Windows is the primary platform and has its own code paths (job objects,
+        # process inspection), so it must be linted and tested too.
+        os: [ubuntu-latest, windows-latest]
     defaults:
       run:
         working-directory: src-tauri
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
 
       - name: Install Linux Tauri dependencies
+        if: runner.os == 'Linux'
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y --no-install-recommends \
@@ -62,15 +80,22 @@ jobs:
             librsvg2-dev
 
       - name: Setup Rust
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
         with:
+          toolchain: stable
           components: rustfmt, clippy
 
       - name: Cache Rust build
-        uses: Swatinem/rust-cache@v2
+        uses: Swatinem/rust-cache@e9d7b9f1e587218970671bac74e5511ed9506e6a # v2
         with:
           workspaces: src-tauri -> target
           cache-on-failure: true
+
+      # tauri::generate_context! fails to compile when frontendDist is missing,
+      # and these checks do not need the real frontend bundle.
+      - name: Create placeholder frontend bundle
+        shell: bash
+        run: mkdir -p ../dist
 
       - name: Check formatting
         run: cargo fmt --check

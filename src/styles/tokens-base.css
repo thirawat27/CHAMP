@@ -1,0 +1,166 @@
+/* ==========================================================================
+   CHAMP design system
+   Midnight slate instrument panel with a single champagne-brass accent.
+   Display: Bai Jamjuree · Body: IBM Plex Sans Thai · Data: IBM Plex Mono
+   ========================================================================== */
+
+:root {
+  --font-body: "IBM Plex Sans Thai", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-display: "Bai Jamjuree", var(--font-body);
+  --font-mono: "IBM Plex Mono", ui-monospace, "Cascadia Code", Consolas, monospace;
+
+  --radius-sm: 6px;
+  --radius: 10px;
+  --radius-lg: 14px;
+  --ease: cubic-bezier(0.2, 0.8, 0.2, 1);
+
+  /* Light: cool porcelain */
+  --bg-app: #eef1f5;
+  --bg-card: #ffffff;
+  --bg-card-secondary: #f4f6f9;
+  --bg-sunken: #e7ebf1;
+  --border-color: #dce2ea;
+  --border-strong: #c7d0dc;
+  --text-primary: #141b26;
+  --text-secondary: #5e6b7d;
+  --color-primary: #9a7536;
+  --color-primary-strong: #835f25;
+  --color-primary-ink: #fffaf1;
+  --color-accent: #2f7488;
+  --color-success: #17895a;
+  --color-warning: #a8740f;
+  --color-error: #c2453a;
+  --shadow-card: 0 1px 2px rgba(20, 27, 38, 0.05), 0 8px 24px rgba(20, 27, 38, 0.06);
+  --shadow-float: 0 18px 48px rgba(20, 27, 38, 0.18);
+
+  --status-stopped-bg: color-mix(in srgb, var(--text-secondary) 12%, transparent);
+  --status-stopped-text: var(--text-secondary);
+  --status-running-bg: color-mix(in srgb, var(--color-success) 14%, transparent);
+  --status-running-text: var(--color-success);
+  --status-starting-bg: color-mix(in srgb, var(--color-warning) 16%, transparent);
+  --status-starting-text: var(--color-warning);
+  --status-error-bg: color-mix(in srgb, var(--color-error) 12%, transparent);
+  --status-error-text: var(--color-error);
+  color-scheme: light;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    /* Dark: midnight slate */
+    --bg-app: #0e131a;
+    --bg-card: #141a23;
+    --bg-card-secondary: #1a222d;
+    --bg-sunken: #0b1016;
+    --border-color: #243041;
+    --border-strong: #33415a;
+    --text-primary: #e7ecf2;
+    --text-secondary: #8d9aad;
+    --color-primary: #d2b07a;
+    --color-primary-strong: #e2c592;
+    --color-primary-ink: #1a1408;
+    --color-accent: #7fb7c9;
+    --color-success: #5bd39b;
+    --color-warning: #e8c063;
+    --color-error: #ef7b6c;
+    --shadow-card: 0 1px 0 rgba(255, 255, 255, 0.03) inset, 0 10px 30px rgba(0, 0, 0, 0.28);
+    --shadow-float: 0 24px 60px rgba(0, 0, 0, 0.5);
+    color-scheme: dark;
+  }
+}
+
+/* ---------- Base ---------- */
+
+* {
+  box-sizing: border-box;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-strong) transparent;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--bg-app);
+  color: var(--text-primary);
+  font-family: var(--font-body);
+  font-size: 14px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  user-select: none;
+}
+
+input,
+select,
+textarea,
+pre,
+code,
+.https-tunnel-url,
+.service-error {
+  user-select: text;
+}
+
+h1,
+h2,
+h3,
+h4,
+p {
+  margin: 0;
+}
+
+button {
+  font: inherit;
+  color: inherit;
+}
+
+img,
+svg {
+  display: block;
+  max-width: 100%;
+}
+
+ol,
+ul {
+  margin: 0;
+  padding: 0;
+}
+
+details > summary {
+  list-style-position: inside;
+}
+
+code,
+kbd,
+pre {
+  font-family: var(--font-mono);
+}
+
+:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+}
+
+.spin-icon {
+  animation: spin 0.9s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-secondary);
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}

@@ -1,0 +1,324 @@
+/* ---------- Modal (help, Log Doctor) ---------- */
+
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 2000;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  background: rgba(6, 9, 14, 0.55);
+  animation: fade-in 0.2s var(--ease);
+}
+
+.modal-content {
+  width: min(580px, 100%);
+  max-height: min(760px, 92vh);
+  display: grid;
+  grid-template-rows: auto 1fr;
+  overflow: hidden;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg);
+  background: var(--bg-card);
+  box-shadow: var(--shadow-float);
+  animation: modal-in 0.28s var(--ease);
+}
+
+@keyframes modal-in {
+  from {
+    opacity: 0;
+    transform: translateY(12px) scale(0.98);
+  }
+}
+
+.modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.modal-header h2 {
+  font-family: var(--font-display);
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.modal-body {
+  overflow-y: auto;
+  padding: 18px 20px;
+}
+
+.help-modal .modal-body {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.shortcut-section h3 {
+  margin-bottom: 10px;
+  color: var(--text-secondary);
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.shortcut-list {
+  display: grid;
+  gap: 6px;
+}
+
+.shortcut-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+}
+
+.shortcut-item span {
+  margin-left: auto;
+  color: var(--text-secondary);
+}
+
+.help-footer {
+  padding-top: 14px;
+  border-top: 1px solid var(--border-color);
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+/* ---------- Log Doctor ---------- */
+
+.log-doctor-modal {
+  width: min(720px, 100%);
+}
+
+.log-doctor-heading {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+.log-doctor-heading p {
+  margin-top: 1px;
+  color: var(--text-secondary);
+  font-size: 12.5px;
+}
+
+.log-doctor-icon {
+  display: inline-grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  flex: 0 0 auto;
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--color-accent) 16%, transparent);
+  color: var(--color-accent);
+}
+
+.log-doctor-body {
+  display: grid;
+  gap: 14px;
+}
+
+.log-doctor-tabs {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 4px;
+  padding: 3px;
+  border-radius: var(--radius);
+  background: var(--bg-sunken);
+}
+
+.log-doctor-tab {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 30px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.log-doctor-tab.selected {
+  background: var(--bg-card);
+  color: var(--text-primary);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.18);
+}
+
+.log-doctor-tab-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--color-error);
+}
+
+.log-doctor-ai {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 11px;
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
+  font-size: 12.5px;
+}
+
+.log-doctor-ai span {
+  flex: 1;
+  min-width: 0;
+}
+
+.log-doctor-ai svg {
+  flex: 0 0 auto;
+  color: var(--color-accent);
+}
+
+.log-doctor-ai.ready {
+  border-style: solid;
+  border-color: color-mix(in srgb, var(--color-accent) 40%, var(--border-color));
+  color: var(--text-primary);
+}
+
+.log-doctor-matches {
+  display: grid;
+  gap: 12px;
+}
+
+.log-doctor-match {
+  display: grid;
+  gap: 8px;
+  padding: 14px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius);
+  background: var(--bg-card-secondary);
+}
+
+.log-doctor-match.primary {
+  border-color: color-mix(in srgb, var(--color-primary) 50%, var(--border-color));
+}
+
+.log-doctor-match header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.log-doctor-match h3 {
+  font-family: var(--font-display);
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.log-doctor-match h4 {
+  color: var(--color-primary);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.log-doctor-match p,
+.log-doctor-match li {
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.log-doctor-match ol {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  padding-left: 20px;
+}
+
+.log-doctor-match li code,
+.log-doctor-match p code {
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: var(--bg-sunken);
+  font-size: 12px;
+}
+
+.log-doctor-match > button {
+  justify-self: start;
+}
+
+.log-doctor-badge {
+  flex: 0 0 auto;
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: var(--status-running-bg);
+  color: var(--status-running-text);
+  font-size: 11.5px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.log-doctor-badge.ai {
+  background: color-mix(in srgb, var(--color-accent) 16%, transparent);
+  color: var(--color-accent);
+}
+
+.log-doctor-evidence {
+  display: grid;
+  gap: 4px;
+  padding: 8px 10px;
+  border-radius: var(--radius-sm);
+  background: var(--bg-sunken);
+}
+
+.log-doctor-evidence small {
+  color: var(--text-secondary);
+  font-size: 11.5px;
+}
+
+.log-doctor-evidence code {
+  font-size: 12px;
+  word-break: break-word;
+}
+
+.log-doctor-empty {
+  display: grid;
+  gap: 4px;
+  padding: 14px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius);
+  font-size: 13px;
+}
+
+.log-doctor-empty p {
+  color: var(--text-secondary);
+}
+
+.log-doctor-excerpt summary {
+  color: var(--text-secondary);
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.log-doctor-excerpt pre {
+  max-height: 220px;
+  margin: 8px 0 0;
+  padding: 10px;
+  overflow: auto;
+  border-radius: var(--radius-sm);
+  background: var(--bg-sunken);
+  font-size: 12px;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.log-doctor-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}

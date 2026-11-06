@@ -1,8 +1,12 @@
 //! PHP configuration generation (php.ini, php-fpm.conf, env, extensions).
-//!
-//! Moved verbatim from the former monolithic `manager.rs` (code-health M-01).
 
-use super::*;
+use super::platform::mysql_socket_path;
+use crate::constants::PHP_ERROR_LOG_MAX_BYTES;
+use crate::runtime::locator::RuntimePaths;
+use std::fs::{self, File};
+use std::io::Write;
+use std::path::{Path, PathBuf};
+use std::process::Command;
 
 /// Generate a basic php.ini
 pub(super) fn generate_php_ini(
@@ -29,6 +33,10 @@ pub(super) fn generate_php_ini(
         .join("php-errors.log")
         .to_string_lossy()
         .replace('\\', "/");
+    rotate_php_error_log(
+        &paths.logs_dir.join("php-errors.log"),
+        PHP_ERROR_LOG_MAX_BYTES,
+    );
     let session_dir = paths.logs_dir.join("php-sessions");
     fs::create_dir_all(&session_dir).map_err(|e| {
         format!(
@@ -81,7 +89,7 @@ mysqli.default_host = 127.0.0.1
 mysqli.default_port = {}
 pgsql.default_host = 127.0.0.1
 pgsql.default_port = {}
-
+{}
 ; Session settings - use absolute path for Windows compatibility
 session.save_path = "{}"
 session.cookie_httponly = 1
@@ -115,6 +123,7 @@ realpath_cache_ttl=300
         env_file_path,
         mysql_port,
         postgresql_port,
+        php_mysql_socket_lines(paths),
         session_path,
         session_path
     );
@@ -191,6 +200,28 @@ defined('CHAMP_WEB_PORT') || define('CHAMP_WEB_PORT', (int) $champWebPort);
     Ok(env_file)
 }
 
+/// PHP appends to its error log forever and CHAMP does not reset it per start
+/// like the service logs, so cap it here (PHP is not running at this point).
+pub(super) fn rotate_php_error_log(log_path: &Path, max_bytes: u64) {
+    let oversized = fs::metadata(log_path).is_ok_and(|metadata| metadata.len() > max_bytes);
+    if oversized {
+        let _ = fs::rename(log_path, log_path.with_extension("log.1"));
+    }
+}
+
+/// A project connecting to host `localhost` uses the Unix socket, so PHP must
+/// know where CHAMP's server keeps it.
+fn php_mysql_socket_lines(paths: &RuntimePaths) -> String {
+    mysql_socket_path(paths)
+        .map(|socket| {
+            let socket = socket.to_string_lossy();
+            format!(
+                "mysqli.default_socket = \"{socket}\"\npdo_mysql.default_socket = \"{socket}\"\n"
+            )
+        })
+        .unwrap_or_default()
+}
+
 pub(super) fn apply_php_database_env(
     command: &mut Command,
     web_port: u16,
@@ -200,6 +231,8 @@ pub(super) fn apply_php_database_env(
     let mysql_port = mysql_port.to_string();
     let postgresql_port = postgresql_port.to_string();
     command
+        // php-cgi otherwise exits after 500 requests, and nothing would respawn it.
+        .env("PHP_FCGI_MAX_REQUESTS", "0")
         .env("CHAMP_MYSQL_HOST", "127.0.0.1")
         .env("CHAMP_MYSQL_PORT", &mysql_port)
         .env("CHAMP_MYSQL_USER", "root")

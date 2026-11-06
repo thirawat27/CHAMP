@@ -16,7 +16,6 @@
     "preview": "vite preview",
     "tauri": "tauri",
     "test": "vitest",
-    "test:ui": "vitest --ui",
     "test:run": "vitest run",
     "lint": "oxlint --deny-warnings",
     "lint:fix": "oxlint --fix",

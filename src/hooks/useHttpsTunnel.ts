@@ -1,25 +1,22 @@
 import { invoke } from "@tauri-apps/api/core";
-import { useCallback, useState } from "react";
-import { Translations } from "../i18n/translations";
+import { useCallback, useRef, useState } from "react";
+import { getTranslations } from "../stores/preferencesStore";
 import { AudioManager } from "../utils/audioManager";
-import {
-  DashboardNotice,
-  DEFAULT_TUNNEL_STATUS,
-  normalizeTunnelStatus,
-} from "../components/dashboard/types";
+import { DashboardNotice, DEFAULT_TUNNEL_STATUS, normalizeTunnelStatus } from "../types/dashboard";
 import { HttpsTunnelStatus } from "../types/services";
 
 interface UseHttpsTunnelOptions {
-  t: Translations;
   notify: (notice: DashboardNotice) => void;
-  /** Refreshes service statuses after a tunnel start (matches original flow). */
+  /** Refreshes service statuses after a tunnel start. */
   refreshStatuses: () => Promise<void>;
-  /** Refreshes app metadata after a tunnel start (matches original flow). */
+  /** Refreshes app metadata after a tunnel start: ngrok may have been installed. */
   refreshMetadata: () => Promise<void>;
 }
 
 export interface HttpsTunnelController {
   tunnelStatus: HttpsTunnelStatus;
+  /** The first status query finished, so `authtoken_configured` is trustworthy. */
+  tunnelStatusLoaded: boolean;
   tunnelBusy: "start" | "stop" | null;
   tunnelReady: boolean;
   tunnelHasPendingUrl: boolean;
@@ -32,36 +29,64 @@ export interface HttpsTunnelController {
   resetTunnel: () => void;
 }
 
+function sameTunnelStatus(a: HttpsTunnelStatus, b: HttpsTunnelStatus): boolean {
+  return (
+    a.running === b.running &&
+    a.url === b.url &&
+    a.ready === b.ready &&
+    a.local_url === b.local_url &&
+    a.error === b.error &&
+    a.log_path === b.log_path &&
+    a.pid === b.pid &&
+    a.authtoken_configured === b.authtoken_configured
+  );
+}
+
 /**
  * Owns the ngrok tunnel (HTTPS Preview) state and lifecycle.
  *
  * Notices are pushed through the shared `notify` callback so only one toast is
- * visible at a time. `resetTunnel` is passed to the services hook so a
- * successful stop-all clears the tunnel panel back to its not-running state.
+ * visible at a time. `resetTunnel` clears the panel after a stack stop.
  */
 export function useHttpsTunnel({
-  t,
   notify,
   refreshStatuses,
   refreshMetadata,
 }: UseHttpsTunnelOptions): HttpsTunnelController {
   const [tunnelStatus, setTunnelStatus] = useState<HttpsTunnelStatus>(DEFAULT_TUNNEL_STATUS);
+  const [tunnelStatusLoaded, setTunnelStatusLoaded] = useState(false);
   const [tunnelBusy, setTunnelBusy] = useState<"start" | "stop" | null>(null);
+  // A poll that started before a stop or reset must not bring the old URL back.
+  const statusGeneration = useRef(0);
 
   const refreshTunnelStatus = useCallback(async () => {
+    const generation = statusGeneration.current;
     try {
-      const status = await invoke<HttpsTunnelStatus>("get_https_tunnel_status");
-      setTunnelStatus(normalizeTunnelStatus(status));
+      const status = normalizeTunnelStatus(
+        await invoke<HttpsTunnelStatus>("get_https_tunnel_status")
+      );
+      if (generation === statusGeneration.current) {
+        setTunnelStatus((current) => (sameTunnelStatus(current, status) ? current : status));
+      }
     } catch (error) {
       console.error("Failed to get HTTPS tunnel status:", error);
+    } finally {
+      setTunnelStatusLoaded(true);
     }
   }, []);
 
   const resetTunnel = useCallback(() => {
-    setTunnelStatus(DEFAULT_TUNNEL_STATUS);
+    statusGeneration.current += 1;
+    // Stopping the tunnel does not forget the saved authtoken.
+    setTunnelStatus((current) => ({
+      ...DEFAULT_TUNNEL_STATUS,
+      authtoken_configured: current.authtoken_configured,
+    }));
   }, []);
 
   const startHttpsTunnel = useCallback(async () => {
+    statusGeneration.current += 1;
+    const t = getTranslations();
     setTunnelBusy("start");
     notify({
       tone: "info",
@@ -72,6 +97,7 @@ export function useHttpsTunnel({
 
     try {
       const status = normalizeTunnelStatus(await invoke<HttpsTunnelStatus>("start_https_tunnel"));
+      statusGeneration.current += 1;
       setTunnelStatus(status);
       await Promise.all([refreshStatuses(), refreshMetadata()]);
       AudioManager.playNotification("success", "start");
@@ -92,12 +118,15 @@ export function useHttpsTunnel({
     } finally {
       setTunnelBusy(null);
     }
-  }, [notify, refreshMetadata, refreshStatuses, refreshTunnelStatus, t]);
+  }, [notify, refreshMetadata, refreshStatuses, refreshTunnelStatus]);
 
   const stopHttpsTunnel = useCallback(async () => {
+    statusGeneration.current += 1;
+    const t = getTranslations();
     setTunnelBusy("stop");
     try {
       const status = normalizeTunnelStatus(await invoke<HttpsTunnelStatus>("stop_https_tunnel"));
+      statusGeneration.current += 1;
       setTunnelStatus(status);
       AudioManager.playNotification("success", "stop");
       notify({
@@ -116,10 +145,11 @@ export function useHttpsTunnel({
     } finally {
       setTunnelBusy(null);
     }
-  }, [notify, t]);
+  }, [notify]);
 
   const copyHttpsTunnelUrl = useCallback(async () => {
     if (!tunnelStatus.url) return;
+    const t = getTranslations();
     try {
       await navigator.clipboard.writeText(tunnelStatus.url);
       notify({
@@ -134,10 +164,11 @@ export function useHttpsTunnel({
         message: String(error),
       });
     }
-  }, [notify, t, tunnelStatus.url]);
+  }, [notify, tunnelStatus.url]);
 
   const saveNgrokAuthtoken = useCallback(
     async (token: string) => {
+      const t = getTranslations();
       try {
         const status = normalizeTunnelStatus(
           await invoke<HttpsTunnelStatus>("set_ngrok_authtoken", { token })
@@ -158,7 +189,7 @@ export function useHttpsTunnel({
         return false;
       }
     },
-    [notify, t]
+    [notify]
   );
 
   const tunnelReady = Boolean(tunnelStatus.running && tunnelStatus.ready && tunnelStatus.url);
@@ -166,6 +197,7 @@ export function useHttpsTunnel({
 
   return {
     tunnelStatus,
+    tunnelStatusLoaded,
     tunnelBusy,
     tunnelReady,
     tunnelHasPendingUrl,

@@ -1,7 +1,7 @@
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::{Component, Path, PathBuf};
 
-const APP_DIR_NAME: &str = "CHAMP";
+pub const APP_DIR_NAME: &str = "CHAMP";
 // Deliberate legacy migration name: the app was previously named "campp".
 // resolve_runtime_dir still reads this directory so old installs keep working.
 // Do not "fix" this to "champ" — it is intentional back-compat, not a typo.
@@ -50,6 +50,9 @@ pub struct AppDataPaths {
     pub logs_dir: PathBuf,
     /// Projects directory
     pub projects_dir: PathBuf,
+    /// Downloaded runtime archives waiting to be installed. Inside the user's own
+    /// data folder: a shared temp folder lets another local user plant an archive.
+    pub downloads_dir: PathBuf,
 }
 
 impl AppDataPaths {
@@ -87,6 +90,7 @@ fn app_data_paths_from_base(data_dir: PathBuf, portable: bool) -> AppDataPaths {
         postgresql_data_dir: data_dir.join("postgresql").join("data"),
         logs_dir: data_dir.join("logs"),
         projects_dir: data_dir.join("projects"),
+        downloads_dir: data_dir.join("downloads"),
     }
 }
 
@@ -172,10 +176,24 @@ fn resolve_portable_marker_data_dir(marker: &Path, marker_dir: &Path) -> PathBuf
         .and_then(|content| portable_marker_configured_dir(&content));
 
     match configured_dir {
-        Some(path) if path.is_absolute() => path,
-        Some(path) => marker_dir.join(path),
+        Some(path) if is_contained_relative_path(&path) => marker_dir.join(path),
+        Some(path) => {
+            eprintln!(
+                "Ignoring portable data folder {}: a marker file may only name a folder beside it. Use CHAMP_DATA_DIR for any other location.",
+                path.display()
+            );
+            marker_dir.join(PORTABLE_DATA_DIR_NAME)
+        }
         None => marker_dir.join(PORTABLE_DATA_DIR_NAME),
     }
+}
+
+/// A marker file is often in a folder others can write to (Downloads, a shared
+/// drive), and CHAMP executes binaries from its data folder. So it can only pick
+/// a folder beside itself, never an absolute or UNC path or a `..` escape.
+fn is_contained_relative_path(path: &Path) -> bool {
+    path.components()
+        .all(|component| matches!(component, Component::Normal(_) | Component::CurDir))
 }
 
 fn portable_marker_configured_dir(content: &str) -> Option<PathBuf> {
@@ -213,10 +231,14 @@ pub fn locate_runtime_binaries() -> Result<RuntimePaths, String> {
 
     // Setup installs only the selected database, so a missing database binary
     // must not block the rest of the stack; `require_database_binary` reports it
-    // when that database is started.
+    // when that database is started. PHP is the same: a broken PHP install must
+    // not stop MySQL or Caddy from starting.
     Ok(RuntimePaths {
         caddy: detect_caddy_binary(&runtime_dir)?,
-        php_cgi: detect_php_binary(&runtime_dir)?,
+        php_cgi: detect_php_binary(&runtime_dir).unwrap_or_else(|error| {
+            eprintln!("{error}");
+            missing_binary_path(&runtime_dir, "php", "php-cgi")
+        }),
         php_ini: detect_php_ini(&runtime_dir)?,
         mysql: detect_mysql_binary(&runtime_dir)
             .unwrap_or_else(|_| missing_binary_path(&runtime_dir, "mysql", "mysqld")),
@@ -289,10 +311,8 @@ fn resolve_runtime_dir(app_paths: &AppDataPaths) -> Result<PathBuf, String> {
 
 fn active_php_runtime_dir(runtime_dir: &Path) -> Option<PathBuf> {
     let php_id = crate::config::AppSettings::load().package_selection.php;
-    let version_dir = runtime_dir.join("php_versions").join(&php_id);
-    let version_marker = runtime_dir
-        .join("php_versions")
-        .join(format!("{}_installed.txt", php_id));
+    let version_dir = crate::runtime::layout::php_version_dir(runtime_dir, &php_id);
+    let version_marker = crate::runtime::layout::php_version_marker(runtime_dir, &php_id);
 
     if version_dir.exists() || version_marker.exists() {
         Some(version_dir)
@@ -313,10 +333,8 @@ fn detect_caddy_binary(runtime_dir: &Path) -> Result<PathBuf, String> {
             runtime_dir.join("caddy").join("caddy.exe"),
         ];
 
-        for path in paths_to_check {
-            if path.exists() {
-                return Ok(path);
-            }
+        if let Some(path) = first_existing(paths_to_check) {
+            return Ok(path);
         }
     }
 
@@ -328,10 +346,8 @@ fn detect_caddy_binary(runtime_dir: &Path) -> Result<PathBuf, String> {
             runtime_dir.join("caddy").join("caddy"),
         ];
 
-        for path in paths_to_check {
-            if path.exists() {
-                return Ok(path);
-            }
+        if let Some(path) = first_existing(paths_to_check) {
+            return Ok(path);
         }
     }
 
@@ -352,7 +368,7 @@ fn detect_php_binary(runtime_dir: &Path) -> Result<PathBuf, String> {
     detect_php_binary_in_dir(runtime_dir)
 }
 
-fn detect_php_binary_in_dir(runtime_dir: &Path) -> Result<PathBuf, String> {
+pub(crate) fn detect_php_binary_in_dir(runtime_dir: &Path) -> Result<PathBuf, String> {
     #[cfg(target_os = "windows")]
     {
         // Windows PHP distribution structure:
@@ -387,10 +403,8 @@ fn detect_php_binary_in_dir(runtime_dir: &Path) -> Result<PathBuf, String> {
             runtime_dir.join("php").join("php.exe"),
         ];
 
-        for path in paths_to_check {
-            if path.exists() {
-                return Ok(path);
-            }
+        if let Some(path) = first_existing(paths_to_check) {
+            return Ok(path);
         }
     }
 
@@ -413,10 +427,8 @@ fn detect_php_binary_in_dir(runtime_dir: &Path) -> Result<PathBuf, String> {
             runtime_dir.join("php"),
         ];
 
-        for path in paths_to_check {
-            if path.exists() {
-                return Ok(path);
-            }
+        if let Some(path) = first_existing(paths_to_check) {
+            return Ok(path);
         }
     }
 
@@ -435,10 +447,8 @@ fn detect_php_binary_in_dir(runtime_dir: &Path) -> Result<PathBuf, String> {
             runtime_dir.join("php"),
         ];
 
-        for path in paths_to_check {
-            if path.exists() {
-                return Ok(path);
-            }
+        if let Some(path) = first_existing(paths_to_check) {
+            return Ok(path);
         }
 
         // Check for wrong-platform binaries (Windows .exe files on Linux)
@@ -515,10 +525,8 @@ fn detect_mysql_binary(runtime_dir: &Path) -> Result<PathBuf, String> {
             runtime_dir.join("mysqld.exe"),
         ];
 
-        for path in paths_to_check {
-            if path.exists() {
-                return Ok(path);
-            }
+        if let Some(path) = first_existing(paths_to_check) {
+            return Ok(path);
         }
     }
 
@@ -554,10 +562,8 @@ fn detect_mysql_binary(runtime_dir: &Path) -> Result<PathBuf, String> {
             runtime_dir.join("mysqld"),
         ];
 
-        for path in paths_to_check {
-            if path.exists() {
-                return Ok(path);
-            }
+        if let Some(path) = first_existing(paths_to_check) {
+            return Ok(path);
         }
     }
 
@@ -621,15 +627,13 @@ fn detect_mysql_binary(runtime_dir: &Path) -> Result<PathBuf, String> {
             runtime_dir.join("mysqld"), // Fallback for older versions
         ];
 
-        for path in paths_to_check {
-            if path.exists() {
-                return Ok(path);
-            }
+        if let Some(path) = first_existing(paths_to_check) {
+            return Ok(path);
         }
     }
 
     Err(format!(
-        "MariaDB binary not found in {}. Please ensure runtime binaries are downloaded.",
+        "MySQL binary not found in {}. Please ensure runtime binaries are downloaded.",
         runtime_dir.display()
     ))
 }
@@ -666,10 +670,8 @@ fn detect_postgresql_binary(runtime_dir: &Path) -> Result<PathBuf, String> {
         }
     }
 
-    for path in paths_to_check {
-        if path.exists() {
-            return Ok(path);
-        }
+    if let Some(path) = first_existing(paths_to_check) {
+        return Ok(path);
     }
 
     Err(format!(
@@ -678,17 +680,30 @@ fn detect_postgresql_binary(runtime_dir: &Path) -> Result<PathBuf, String> {
     ))
 }
 
-pub fn postgresql_initdb_binary(postgres_binary: &Path) -> PathBuf {
-    let initdb_name = if cfg!(target_os = "windows") {
-        "initdb.exe"
-    } else {
-        "initdb"
-    };
+fn first_existing(paths: impl IntoIterator<Item = PathBuf>) -> Option<PathBuf> {
+    paths.into_iter().find(|path| path.exists())
+}
 
-    postgres_binary
+pub fn postgresql_initdb_binary(postgres_binary: &Path) -> PathBuf {
+    sibling_binary(postgres_binary, "initdb")
+}
+
+/// `name` with the platform's executable suffix.
+pub fn exe_name(name: &str) -> String {
+    if cfg!(target_os = "windows") {
+        format!("{name}.exe")
+    } else {
+        name.to_string()
+    }
+}
+
+/// A tool shipped in the same folder as `server_binary`, such as `mysql` next to `mysqld`.
+pub fn sibling_binary(server_binary: &Path, name: &str) -> PathBuf {
+    let file = exe_name(name);
+    server_binary
         .parent()
-        .map(|bin_dir| bin_dir.join(initdb_name))
-        .unwrap_or_else(|| PathBuf::from(initdb_name))
+        .map(|bin_dir| bin_dir.join(&file))
+        .unwrap_or_else(|| PathBuf::from(file))
 }
 
 #[cfg(test)]
@@ -755,6 +770,7 @@ mod tests {
             postgresql_data_dir: base_dir.join("postgresql").join("data"),
             logs_dir: base_dir.join("logs"),
             projects_dir: base_dir.join("projects"),
+            downloads_dir: base_dir.join("downloads"),
         };
 
         let result = paths.ensure_directories();
@@ -791,6 +807,45 @@ mod tests {
     fn test_portable_marker_config_supports_plain_path() {
         let path = portable_marker_configured_dir("custom-data").unwrap();
         assert_eq!(path, PathBuf::from("custom-data"));
+    }
+
+    #[test]
+    fn portable_marker_can_name_a_folder_beside_itself() {
+        let temp_dir = TempDir::new().unwrap();
+        let marker = temp_dir.path().join("champ-portable");
+        fs::write(&marker, "custom-data").unwrap();
+
+        assert_eq!(
+            resolve_portable_marker_data_dir(&marker, temp_dir.path()),
+            temp_dir.path().join("custom-data")
+        );
+    }
+
+    #[test]
+    fn portable_marker_cannot_redirect_data_outside_its_folder() {
+        let temp_dir = TempDir::new().unwrap();
+        let marker = temp_dir.path().join("champ-portable");
+        let fallback = temp_dir.path().join(PORTABLE_DATA_DIR_NAME);
+        let absolute = temp_dir.path().join("elsewhere");
+        for target in [
+            absolute.to_string_lossy().into_owned(),
+            "../escape".to_string(),
+            "nested/../../escape".to_string(),
+            r"\\attacker\share".to_string(),
+            r"C:\Temp\evil".to_string(),
+        ] {
+            let target_for_marker = target.replace('\\', "\\\\");
+            fs::write(&marker, format!(r#"{{"data_dir":"{target_for_marker}"}}"#)).unwrap();
+            let resolved = resolve_portable_marker_data_dir(&marker, temp_dir.path());
+            if Path::new(&target).components().any(|c| {
+                matches!(
+                    c,
+                    Component::Prefix(_) | Component::RootDir | Component::ParentDir
+                )
+            }) {
+                assert_eq!(resolved, fallback, "marker target {target}");
+            }
+        }
     }
 
     #[test]
@@ -905,6 +960,7 @@ mod tests {
             postgresql_data_dir: base_dir.join("postgresql").join("data"),
             logs_dir: base_dir.join("logs"),
             projects_dir: base_dir.join("projects"),
+            downloads_dir: base_dir.join("downloads"),
         };
 
         let paths2 = paths1.clone();

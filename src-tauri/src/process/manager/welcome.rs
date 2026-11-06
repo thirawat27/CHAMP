@@ -5,7 +5,9 @@
 //! explains nothing. The page is regenerated on every Caddy start, so it always
 //! shows the current folder, the installed database tool, and the sites found.
 
-use super::*;
+use crate::runtime::locator::RuntimePaths;
+use std::fs;
+use std::path::{Path, PathBuf};
 
 const INDEX_FILES: [&str; 3] = ["index.html", "index.htm", "index.php"];
 
@@ -119,7 +121,7 @@ pub(super) fn list_sites(projects_dir: &Path) -> Vec<String> {
 }
 
 fn render(projects_dir: &Path, sites: &[String], database_tool_id: &str) -> String {
-    let (tool_name, tool_path) = if database_tool_id.starts_with("adminer") {
+    let (tool_name, tool_path) = if crate::runtime::packages::is_adminer_id(database_tool_id) {
         ("Adminer", "/adminer/")
     } else {
         ("phpMyAdmin", "/phpmyadmin/")

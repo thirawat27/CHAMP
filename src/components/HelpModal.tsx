@@ -1,56 +1,48 @@
 import { BookOpen, Keyboard, LayoutGrid, Play, X, Zap } from "lucide-react";
-import { useEffect } from "react";
-import { useTranslation } from "../stores/languageStore";
+import { useEscape } from "../hooks/useEscape";
+import { useTranslation } from "../stores/preferencesStore";
 import { AudioManager } from "../utils/audioManager";
+import { shortcutKeys } from "../utils/shortcuts";
 
 interface HelpModalProps {
   onClose: () => void;
   onOpenGuide: () => void;
 }
 
-const MOD = /mac/i.test(navigator.userAgent) ? "⌘" : "Ctrl";
-
 export function HelpModal({ onClose, onOpenGuide }: HelpModalProps) {
-  const { t, language } = useTranslation();
+  const { t } = useTranslation();
 
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.code === "Escape") {
-        AudioManager.playClick();
-        onClose();
-      }
-    };
-
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [onClose]);
+  useEscape(() => {
+    AudioManager.playClick();
+    onClose();
+  });
 
   const groups = [
     {
       icon: Play,
       title: t.services,
       items: [
-        [`${MOD} S`, t.shortcutStart],
-        [`${MOD} R`, t.shortcutRestart],
-        [`${MOD} X`, t.shortcutStop],
+        [shortcutKeys("start"), t.shortcutStart],
+        [shortcutKeys("restart"), t.shortcutRestart],
+        [shortcutKeys("stop"), t.shortcutStop],
       ],
     },
     {
       icon: Zap,
       title: t.quickAccess,
       items: [
-        [`${MOD} W`, t.shortcutWebsite],
-        [`${MOD} D`, t.shortcutDatabase],
-        [`${MOD} O`, t.shortcutProjects],
-        [`${MOD} L`, t.shortcutLogs],
-        [`${MOD} T`, t.terminal],
+        [shortcutKeys("website"), t.shortcutWebsite],
+        [shortcutKeys("database"), t.shortcutDatabase],
+        [shortcutKeys("projects"), t.shortcutProjects],
+        [shortcutKeys("logs"), t.shortcutLogs],
+        [shortcutKeys("terminal"), t.terminal],
       ],
     },
     {
       icon: LayoutGrid,
-      title: language === "th" ? "หน้าต่าง" : "Windows",
+      title: t.shortcutGroupWindows,
       items: [
-        [`${MOD} ,`, t.shortcutSettings],
+        [shortcutKeys("settings"), t.shortcutSettings],
         ["F1", t.manual],
         ["?", t.shortcutHelp],
         ["Esc", t.close],
@@ -99,11 +91,7 @@ export function HelpModal({ onClose, onOpenGuide }: HelpModalProps) {
           })}
 
           <footer className="help-footer">
-            <p>
-              {language === "th"
-                ? "คีย์ลัดทำงานได้ทุกภาษาของแป้นพิมพ์ (ไทย, อังกฤษ ฯลฯ)"
-                : "Shortcuts work in any keyboard layout (Thai, English, and others)."}
-            </p>
+            <p>{t.shortcutsAnyLayout}</p>
             <button type="button" className="btn-secondary compact" onClick={onOpenGuide}>
               <BookOpen size={14} /> {t.manualTitle}
             </button>

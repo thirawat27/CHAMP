@@ -29,36 +29,14 @@ pub fn is_port_available(port: u16) -> bool {
 mod tests {
     use super::*;
 
-    /// Find an available port starting from the preferred port (test helper).
-    fn find_available_port(preferred: u16) -> u16 {
-        if is_port_available(preferred) {
-            return preferred;
-        }
-
-        // Try alternative ports
-        for port in (preferred + 1)..65535 {
-            if is_port_available(port) {
-                return port;
-            }
-        }
-
-        preferred // Fallback
-    }
-
     #[test]
-    fn test_is_port_available_for_unused_port() {
-        // Port 59999 is unlikely to be in use
-        // This test just verifies the function doesn't panic
-        let _result = is_port_available(59999);
-    }
+    fn test_port_with_a_listener_is_not_available() {
+        let listener = TcpListener::bind("127.0.0.1:0").expect("failed to bind test port");
+        let port = listener.local_addr().expect("no local addr").port();
 
-    #[test]
-    fn test_find_available_port_returns_preferred_if_available() {
-        // Find a port that's definitely available
-        let test_port = 59998;
-        if is_port_available(test_port) {
-            let found = find_available_port(test_port);
-            assert_eq!(found, test_port);
-        }
+        assert!(!is_port_available(port));
+
+        drop(listener);
+        assert!(is_port_available(port));
     }
 }

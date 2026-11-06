@@ -1,12 +1,11 @@
 import { useState, useEffect } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { listen } from "@tauri-apps/api/event";
 import { Dashboard } from "./components/Dashboard";
+import { DebugMenu } from "./components/DebugMenu";
 import { FirstRunWizard } from "./components/FirstRunWizard";
-import { initializeLanguage, useTranslation } from "./stores/languageStore";
+import { initializeLanguage, useTranslation } from "./stores/preferencesStore";
+import { listenIfTauri } from "./utils/tauri";
 import "./App.css";
-
-const isTauriRuntime = () => "__TAURI_INTERNALS__" in window;
 
 function App() {
   const { t } = useTranslation();
@@ -32,12 +31,20 @@ function App() {
       if (opensDevtools) {
         e.preventDefault();
         e.stopPropagation();
+        return;
+      }
+
+      // A webview reload would drop in-flight commands (and the wizard's place)
+      // while the backend keeps working. Ctrl+R itself is the stack shortcut.
+      const reloads = e.key === "F5" || ((e.ctrlKey || e.metaKey) && e.code === "KeyR");
+      if (reloads && import.meta.env.PROD) {
+        e.preventDefault();
       }
     };
 
     // Debug mode: press Ctrl+Shift+D to toggle debug menu
     const handleKeyPress = (e: KeyboardEvent) => {
-      if (e.ctrlKey && e.shiftKey && e.key === "D") {
+      if (e.ctrlKey && e.shiftKey && e.code === "KeyD") {
         setShowDebugMenu((prev) => !prev);
       }
     };
@@ -45,12 +52,9 @@ function App() {
     window.addEventListener("keydown", blockDevtoolsShortcuts, true);
     window.addEventListener("keydown", handleKeyPress);
 
-    const tauriRuntime = isTauriRuntime();
-    const unlistenWizard = tauriRuntime
-      ? listen("show-wizard", () => {
-          setIsFirstRun(true);
-        })
-      : Promise.resolve(() => {});
+    const unlistenWizard = listenIfTauri("show-wizard", () => {
+      setIsFirstRun(true);
+    });
 
     // NOTE: Closing the window must NOT stop services. The Rust side
     // (lib.rs on_window_event CloseRequested) hides the window to the tray and
@@ -66,194 +70,25 @@ function App() {
     };
   }, []);
 
-  const handleWizardComplete = () => {
-    setIsFirstRun(false);
-  };
-
-  const handleResetInstallation = async () => {
-    if (confirm(t.resetInstallationConfirm)) {
-      try {
-        // reset_installation stops every service before deleting the runtime.
-        await invoke("reset_installation");
-        setIsFirstRun(true);
-        setShowDebugMenu(false);
-      } catch (error) {
-        console.error("Failed to reset:", error);
-        alert(`${t.resetFailed}: ${error}`);
-      }
-    }
-  };
-
-  const handleOpenRuntimeFolder = async () => {
-    try {
-      const runtimeDir = await invoke<string>("get_runtime_dir");
-      await invoke("open_folder", { path: runtimeDir });
-    } catch (error) {
-      console.error("Failed to open folder:", error);
-      alert(`${t.openFolderFailed}: ${error}`);
-    }
-  };
-
-  const handleOpenDownloadFolder = async () => {
-    try {
-      const downloadDir = await invoke<string>("get_download_dir");
-      await invoke("open_folder", { path: downloadDir });
-    } catch (error) {
-      console.error("Failed to open download folder:", error);
-      alert(`${t.openDownloadFolderFailed}: ${error}`);
-    }
-  };
-
   if (isFirstRun === null) {
     return (
-      <div
-        style={{
-          minHeight: "100vh",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          color: "var(--text-secondary)",
-        }}
-      >
-        <p style={{ fontSize: "1.25rem" }}>{t.loading}</p>
+      <div className="app-loading">
+        <p>{t.loading}</p>
       </div>
     );
   }
 
   if (isFirstRun) {
-    return <FirstRunWizard onComplete={handleWizardComplete} />;
+    return <FirstRunWizard onComplete={() => setIsFirstRun(false)} />;
   }
 
   return (
     <>
       {showDebugMenu && (
-        <div
-          style={{
-            position: "fixed",
-            top: "0.625rem",
-            right: "0.625rem",
-            backgroundColor: "var(--bg-card)",
-            border: "1px solid var(--border-color)",
-            borderRadius: "0.5rem",
-            boxShadow: "0 4px 12px rgba(0, 0, 0, 0.15)",
-            zIndex: 9999,
-            minWidth: "12.5rem",
-          }}
-        >
-          <div
-            style={{
-              display: "flex",
-              justifyContent: "space-between",
-              alignItems: "center",
-              padding: "0.5rem 1rem",
-              borderBottom: "1px solid var(--border-color)",
-              fontWeight: 500,
-            }}
-          >
-            <span>{t.debugMenu}</span>
-            <button
-              onClick={() => setShowDebugMenu(false)}
-              style={{
-                background: "none",
-                border: "none",
-                fontSize: "1.25rem",
-                cursor: "pointer",
-                padding: 0,
-                lineHeight: 1,
-              }}
-            >
-              ×
-            </button>
-          </div>
-          <div
-            style={{ display: "flex", flexDirection: "column", padding: "0.5rem", gap: "0.5rem" }}
-          >
-            <button
-              onClick={handleOpenRuntimeFolder}
-              style={{
-                padding: "0.5rem 1rem",
-                borderRadius: "0.375rem",
-                border: "1px solid var(--border-color)",
-                backgroundColor: "var(--bg-card-secondary)",
-                cursor: "pointer",
-                textAlign: "left",
-                fontSize: "0.875rem",
-                color: "var(--text-primary)",
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.backgroundColor = "var(--bg-card)";
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.backgroundColor = "var(--bg-card-secondary)";
-              }}
-            >
-              {t.openRuntimeFolder}
-            </button>
-            <button
-              onClick={handleOpenDownloadFolder}
-              style={{
-                padding: "0.5rem 1rem",
-                borderRadius: "0.375rem",
-                border: "1px solid var(--border-color)",
-                backgroundColor: "var(--bg-card-secondary)",
-                cursor: "pointer",
-                textAlign: "left",
-                fontSize: "0.875rem",
-                color: "var(--text-primary)",
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.backgroundColor = "var(--bg-card)";
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.backgroundColor = "var(--bg-card-secondary)";
-              }}
-            >
-              {t.viewDownloadFolder}
-            </button>
-            <button
-              onClick={handleResetInstallation}
-              style={{
-                padding: "0.5rem 1rem",
-                borderRadius: "0.375rem",
-                border: "1px solid var(--border-color)",
-                backgroundColor: "var(--bg-card-secondary)",
-                cursor: "pointer",
-                textAlign: "left",
-                fontSize: "0.875rem",
-                color: "var(--text-primary)",
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.backgroundColor = "var(--bg-card)";
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.backgroundColor = "var(--bg-card-secondary)";
-              }}
-            >
-              {t.resetInstallation}
-            </button>
-            <button
-              onClick={() => setIsFirstRun(true)}
-              style={{
-                padding: "0.5rem 1rem",
-                borderRadius: "0.375rem",
-                border: "1px solid var(--border-color)",
-                backgroundColor: "var(--bg-card-secondary)",
-                cursor: "pointer",
-                textAlign: "left",
-                fontSize: "0.875rem",
-                color: "var(--text-primary)",
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.backgroundColor = "var(--bg-card)";
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.backgroundColor = "var(--bg-card-secondary)";
-              }}
-            >
-              {t.showFirstRunWizard}
-            </button>
-          </div>
-        </div>
+        <DebugMenu
+          onClose={() => setShowDebugMenu(false)}
+          onShowWizard={() => setIsFirstRun(true)}
+        />
       )}
       <Dashboard />
     </>

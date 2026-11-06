@@ -6,19 +6,12 @@
  */
 
 import { openUrl } from "@tauri-apps/plugin-opener";
-import {
-  Database,
-  Download,
-  FileCode2,
-  Globe2,
-  LoaderCircle,
-  Play,
-  RotateCw,
-  Square,
-  Stethoscope,
-} from "lucide-react";
-import { useTranslation } from "../stores/languageStore";
-import { AudioManager } from "../utils/audioManager";
+import { HTMLAttributes } from "react";
+import { Download, LoaderCircle, Play, RotateCw, Square, Stethoscope } from "lucide-react";
+import { useTranslation } from "../stores/preferencesStore";
+import { SERVICE_ERROR_PREVIEW_LENGTH } from "../constants";
+import { SERVICE_ICONS } from "./serviceIcons";
+import { SoundButton } from "./SoundButton";
 import {
   DATABASE_ENGINES,
   DATABASE_ENGINE_NAMES,
@@ -28,18 +21,11 @@ import {
   DatabaseEngine,
   DatabaseTool,
   databaseToolSupportsEngine,
-  SERVICE_DESCRIPTIONS,
+  SERVICE_DESCRIPTION_KEYS,
   SERVICE_DISPLAY_NAMES,
   ServiceState,
   ServiceType,
 } from "../types/services";
-
-const SERVICE_ICONS = {
-  [ServiceType.Caddy]: Globe2,
-  [ServiceType.PhpFpm]: FileCode2,
-  [ServiceType.MySQL]: Database,
-  [ServiceType.PostgreSQL]: Database,
-};
 
 /** A segmented choice on the database card that installs on first use. */
 interface Switch<T extends string> {
@@ -84,18 +70,14 @@ function OptionSwitch<T extends string>({
         const selected = value === option;
         const pending = switching === option;
         return (
-          <button
+          <SoundButton
             key={option}
-            type="button"
             role="radio"
             aria-checked={selected}
             className={`engine-option${selected ? " selected" : ""}${pending ? " pending" : ""}`}
             disabled={selected || locked}
             data-testid={`${testIdPrefix}-${option}`}
-            onClick={() => {
-              AudioManager.playClick();
-              onChange(option);
-            }}
+            onClick={() => onChange(option)}
           >
             {pending ? (
               <LoaderCircle size={13} className="spin-icon" />
@@ -104,14 +86,14 @@ function OptionSwitch<T extends string>({
             ) : null}
             {names[option]}
             {pending && percent > 0 ? ` ${percent}%` : ""}
-          </button>
+          </SoundButton>
         );
       })}
     </div>
   );
 }
 
-interface ServiceCardProps {
+interface ServiceCardProps extends HTMLAttributes<HTMLElement> {
   serviceType: ServiceType;
   state: ServiceState;
   port?: number;
@@ -120,6 +102,8 @@ interface ServiceCardProps {
   busy?: boolean;
   /** Label to show when busy (e.g., "Starting...", "Stopping...") */
   busyLabel?: string;
+  /** Another command is running: controls stay disabled without showing a spinner */
+  actionsLocked?: boolean;
   /** Present on the database card only */
   engineSwitch?: EngineSwitch;
   /** Present on the database card only */
@@ -129,7 +113,6 @@ interface ServiceCardProps {
   onRestart: () => void;
   /** Open Log Doctor for this service (shown on errors) */
   onDiagnose?: () => void;
-  [key: string]: unknown;
 }
 
 /** Address shown under the port: a link for the web server, plain text otherwise. */
@@ -149,6 +132,7 @@ export function ServiceCard({
   error,
   busy = false,
   busyLabel,
+  actionsLocked = false,
   engineSwitch,
   toolSwitch,
   onStart,
@@ -170,6 +154,8 @@ export function ServiceCard({
     state === ServiceState.Starting ||
     state === ServiceState.Stopping;
   const isError = state === ServiceState.Error;
+  const actionsDisabled = isTransitioning || actionsLocked;
+  const switchesLocked = actionsDisabled;
   const actionLabel = busyLabel || (state === ServiceState.Stopping ? t.stopping : t.starting);
 
   const stateLabels: Record<ServiceState, string> = {
@@ -193,7 +179,7 @@ export function ServiceCard({
         </span>
         <div className="service-identity">
           <h3>{SERVICE_DISPLAY_NAMES[serviceType]}</h3>
-          <p>{SERVICE_DESCRIPTIONS[serviceType]}</p>
+          <p>{t[SERVICE_DESCRIPTION_KEYS[serviceType]]}</p>
         </div>
         <span className={`status-pill ${state}`} data-testid={`service-state-${serviceType}`}>
           {stateLabels[state]}
@@ -206,7 +192,7 @@ export function ServiceCard({
           options={DATABASE_ENGINES}
           names={DATABASE_ENGINE_NAMES}
           testIdPrefix="engine-option"
-          locked={switching !== null || toolSwitching !== null}
+          locked={switchesLocked}
           {...engineSwitch}
         />
       )}
@@ -219,7 +205,7 @@ export function ServiceCard({
           )}
           names={DATABASE_TOOL_NAMES}
           testIdPrefix="tool-option"
-          locked={switching !== null || toolSwitching !== null}
+          locked={switchesLocked}
           {...toolSwitch}
         />
       )}
@@ -230,18 +216,16 @@ export function ServiceCard({
           {port}
         </span>
         {serviceType === ServiceType.Caddy ? (
-          <button
-            type="button"
+          <SoundButton
             className="readout-address link"
             onClick={() => {
-              AudioManager.playClick();
               openUrl(address).catch((openError) =>
                 console.error("Failed to open service URL:", openError)
               );
             }}
           >
             {address}
-          </button>
+          </SoundButton>
         ) : (
           <code className="readout-address">{address}</code>
         )}
@@ -249,33 +233,27 @@ export function ServiceCard({
 
       {isError && error && (
         <div className="service-error" title={error}>
-          {error.length > 180 ? `${error.substring(0, 180)}…` : error}
+          {error.length > SERVICE_ERROR_PREVIEW_LENGTH
+            ? `${error.substring(0, SERVICE_ERROR_PREVIEW_LENGTH)}…`
+            : error}
         </div>
       )}
 
       <div className="service-actions">
         {isError && onDiagnose && (
-          <button
-            type="button"
-            onClick={() => {
-              AudioManager.playClick();
-              onDiagnose();
-            }}
+          <SoundButton
+            onClick={onDiagnose}
             className="btn-diagnose"
             data-testid={`diagnose-button-${serviceType}`}
           >
             <Stethoscope size={15} />
             {t.diagnose}
-          </button>
+          </SoundButton>
         )}
         {!isRunning ? (
-          <button
-            type="button"
-            onClick={() => {
-              AudioManager.playClick();
-              onStart();
-            }}
-            disabled={isTransitioning}
+          <SoundButton
+            onClick={onStart}
+            disabled={actionsDisabled}
             className="btn-start"
             data-testid={`start-button-${serviceType}`}
           >
@@ -285,16 +263,12 @@ export function ServiceCard({
               <Play size={15} />
             )}
             {isTransitioning ? actionLabel : t.start}
-          </button>
+          </SoundButton>
         ) : (
           <>
-            <button
-              type="button"
-              onClick={() => {
-                AudioManager.playClick();
-                onStop();
-              }}
-              disabled={isTransitioning}
+            <SoundButton
+              onClick={onStop}
+              disabled={actionsDisabled}
               className="btn-stop"
               data-testid={`stop-button-${serviceType}`}
             >
@@ -304,21 +278,17 @@ export function ServiceCard({
                 <Square size={13} />
               )}
               {isTransitioning ? actionLabel : t.stop}
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                AudioManager.playClick();
-                onRestart();
-              }}
-              disabled={isTransitioning}
+            </SoundButton>
+            <SoundButton
+              onClick={onRestart}
+              disabled={actionsDisabled}
               className="btn-restart"
               data-testid={`restart-button-${serviceType}`}
               aria-label={busy ? t.restarting : t.restart}
               title={t.restart}
             >
               {busy ? <LoaderCircle size={15} className="spin-icon" /> : <RotateCw size={15} />}
-            </button>
+            </SoundButton>
           </>
         )}
       </div>

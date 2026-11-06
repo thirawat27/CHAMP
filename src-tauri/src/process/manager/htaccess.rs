@@ -1,8 +1,8 @@
 //! `.htaccess` discovery/parsing and Caddyfile-fragment writers.
-//!
-//! Moved verbatim from the former monolithic `manager.rs` (code-health M-01).
 
-use super::*;
+use super::caddyfile::DATABASE_TOOL_PATHS;
+use std::fs;
+use std::path::{Path, PathBuf};
 
 #[derive(Debug, Clone, Default)]
 pub(super) struct HtaccessCompatibilityRule {
@@ -106,6 +106,10 @@ pub(super) fn parse_htaccess_file(
         ..Default::default()
     };
 
+    let mut scoped_depth = 0_usize;
+    let mut denies = false;
+    let mut allows_exception = false;
+
     for raw_line in content.lines() {
         let line = strip_htaccess_comment(raw_line);
         if line.is_empty() {
@@ -113,8 +117,27 @@ pub(super) fn parse_htaccess_file(
         }
 
         let lower = line.to_ascii_lowercase();
+        if opens_scoped_section(&lower) {
+            scoped_depth += 1;
+            continue;
+        }
+        if closes_scoped_section(&lower) {
+            scoped_depth = scoped_depth.saturating_sub(1);
+            continue;
+        }
+
+        // `<Files secret.php> Deny from all </Files>` protects one file, not the
+        // whole directory, and CHAMP has no per-file rule to translate it to.
+        if scoped_depth > 0 {
+            continue;
+        }
+
         if lower.contains("deny from all") || lower.contains("require all denied") {
-            rule.deny_all = true;
+            denies = true;
+            continue;
+        }
+        if lower.starts_with("allow from") || lower.starts_with("require ip") {
+            allows_exception = true;
             continue;
         }
 
@@ -156,6 +179,10 @@ pub(super) fn parse_htaccess_file(
         }
     }
 
+    // "Deny from all" plus "Allow from 127.0.0.1" is a local-only area, and CHAMP
+    // is local-only, so only an unconditional deny becomes a 403 rule.
+    rule.deny_all = denies && !allows_exception;
+
     if rule.extensionless_php
         || rule.front_controller.is_some()
         || rule.error_404.is_some()
@@ -167,6 +194,36 @@ pub(super) fn parse_htaccess_file(
     } else {
         None
     }
+}
+
+/// Sections whose directives apply to some requests only. `<IfModule>` is not
+/// one of them: its content applies to the whole directory on a stock Apache.
+const SCOPED_SECTIONS: [&str; 7] = [
+    "files",
+    "filesmatch",
+    "limit",
+    "limitexcept",
+    "if",
+    "elseif",
+    "else",
+];
+
+fn section_name(lower_line: &str) -> Option<&str> {
+    lower_line
+        .split(|ch: char| ch.is_whitespace() || ch == '>')
+        .next()
+}
+
+fn opens_scoped_section(lower_line: &str) -> bool {
+    lower_line
+        .strip_prefix('<')
+        .is_some_and(|rest| section_name(rest).is_some_and(|name| SCOPED_SECTIONS.contains(&name)))
+}
+
+fn closes_scoped_section(lower_line: &str) -> bool {
+    lower_line
+        .strip_prefix("</")
+        .is_some_and(|rest| section_name(rest).is_some_and(|name| SCOPED_SECTIONS.contains(&name)))
 }
 
 pub(super) fn strip_htaccess_comment(line: &str) -> String {
@@ -331,6 +388,33 @@ pub(super) fn caddy_matcher_name(prefix: &str, index: usize, suffix: &str) -> St
     }
 }
 
+/// A directory an `.htaccess` closes off must refuse PHP as well as static files.
+/// `respond` sorts after `handle` in Caddy, so a deny written with it would let
+/// every `handle` rule below execute the script first. (Rules are already sorted
+/// longest prefix first.)
+pub(super) fn append_htaccess_deny_rules(
+    content: &mut String,
+    rules: &[HtaccessCompatibilityRule],
+) {
+    for (index, rule) in rules.iter().enumerate().filter(|(_, rule)| rule.deny_all) {
+        let matcher = caddy_matcher_name(&rule.request_prefix, index, "Deny");
+        content.push_str("    # Apache .htaccess compatibility: Deny from all\n");
+        content.push_str(&format!("    @{} {{\n", matcher));
+        match caddy_path_matcher_line(&rule.request_prefix) {
+            Some(path_line) => content.push_str(&path_line),
+            None => {
+                // A deny at the projects root must not lock out the database tools.
+                content.push_str("        path /*\n");
+                content.push_str(&format!("        not path {}\n", DATABASE_TOOL_PATHS));
+            }
+        }
+        content.push_str("    }\n");
+        content.push_str(&format!("    handle @{} {{\n", matcher));
+        content.push_str("        respond 403\n");
+        content.push_str("    }\n\n");
+    }
+}
+
 pub(super) fn append_htaccess_route_rules(
     content: &mut String,
     rules: &[HtaccessCompatibilityRule],
@@ -342,17 +426,6 @@ pub(super) fn append_htaccess_route_rules(
 
     content.push_str("    # Apache .htaccess compatibility: project-specific rewrites\n");
     for (index, rule) in rules.iter().enumerate() {
-        if rule.deny_all {
-            let matcher = caddy_matcher_name(&rule.request_prefix, index, "Deny");
-            content.push_str(&format!("    @{} {{\n", matcher));
-            if let Some(path_line) = caddy_path_matcher_line(&rule.request_prefix) {
-                content.push_str(&path_line);
-            }
-            content.push_str("    }\n");
-            content.push_str(&format!("    respond @{} 403\n", matcher));
-            content.push('\n');
-        }
-
         if rule.extensionless_php {
             let matcher = caddy_matcher_name(&rule.request_prefix, index, "ExtPhp");
             content.push_str(&format!("    @{} {{\n", matcher));
@@ -489,8 +562,37 @@ pub(super) fn append_htaccess_no_browse_rules(
                 caddy_token(&format!("{}/*/", prefix))
             ));
         }
+        // `Options -Indexes` forbids listings only. A directory with an index
+        // page has nothing to list, so `file_server` must still serve that page.
+        content.push_str("        not file {\n");
+        content.push_str(
+            "            try_files {path}/index.html {path}index.html {path}/index.htm {path}index.htm\n",
+        );
+        content.push_str("        }\n");
         content.push_str("    }\n");
         content.push_str(&format!("    respond @{} 403\n", matcher));
         content.push('\n');
+    }
+}
+
+#[cfg(test)]
+mod no_browse_tests {
+    use super::*;
+
+    #[test]
+    fn no_browse_rule_keeps_index_pages_servable() {
+        let rule = HtaccessCompatibilityRule {
+            request_prefix: "/site".to_string(),
+            disable_indexes: true,
+            ..Default::default()
+        };
+        let mut content = String::new();
+
+        append_htaccess_no_browse_rules(&mut content, &[rule]);
+
+        assert!(content.contains("path /site /site/ /site/*/"));
+        assert!(content.contains("not file {"));
+        assert!(content.contains("{path}/index.html {path}index.html"));
+        assert!(content.contains("respond @htaccessNoBrowse_0_site 403"));
     }
 }

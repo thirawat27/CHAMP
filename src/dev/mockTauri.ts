@@ -112,6 +112,20 @@ const responses: Record<string, unknown> = {
     },
   ],
   get_runtime_platform: "windowsX64",
+  refresh_runtime_catalog: { php: [], mysql: [], postgresql: [], phpmyadmin: [] },
+  get_selected_package_ids: {
+    php: "php-8.4",
+    mysql: "mysql-8.4",
+    postgresql: "postgresql-17",
+    phpmyadmin: "phpmyadmin-5.2",
+  },
+  // Stack and service commands answer with the status map, like the backend.
+  start_all_services: services,
+  restart_all_services: services,
+  stop_all_services: services,
+  start_service: services,
+  restart_service: services,
+  stop_service: services,
   switch_database_engine: null,
   switch_database_tool: null,
 };

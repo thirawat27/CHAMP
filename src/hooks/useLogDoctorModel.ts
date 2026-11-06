@@ -1,9 +1,10 @@
 import { invoke } from "@tauri-apps/api/core";
 import { useCallback, useEffect, useState } from "react";
+import { create } from "zustand";
 import { LogDoctorProgress, LogDoctorStatus } from "../types/services";
 import { listenIfTauri } from "../utils/tauri";
 
-export interface LogDoctorModelController {
+interface LogDoctorModelController {
   status: LogDoctorStatus | null;
   /** Download percent while the model is downloading, otherwise null. */
   progress: number | null;
@@ -12,10 +13,19 @@ export interface LogDoctorModelController {
   remove: () => Promise<void>;
 }
 
+/**
+ * Log Doctor and Settings can be open together. They share one copy of the
+ * model state, so a download started in one finishes in both.
+ */
+const useModelState = create<Pick<LogDoctorModelController, "status" | "progress">>(() => ({
+  status: null,
+  progress: null,
+}));
+
 /** Status and install/remove actions for the Log Doctor AI model (installed by default). */
 export function useLogDoctorModel(): LogDoctorModelController {
-  const [status, setStatus] = useState<LogDoctorStatus | null>(null);
-  const [progress, setProgress] = useState<number | null>(null);
+  const status = useModelState((state) => state.status);
+  const progress = useModelState((state) => state.progress);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -23,18 +33,19 @@ export function useLogDoctorModel(): LogDoctorModelController {
     invoke<LogDoctorStatus>("get_log_doctor_status")
       .then((value) => {
         if (!active) return;
-        setStatus(value);
-        if (value.downloading) setProgress(0);
+        useModelState.setState((state) => ({
+          status: value,
+          progress: value.downloading ? (state.progress ?? 0) : state.progress,
+        }));
       })
       .catch((statusError) => console.error("Failed to load Log Doctor status:", statusError));
 
     const unlisten = listenIfTauri<LogDoctorProgress>("log-doctor-progress", (event) => {
-      setProgress(event.payload.percent);
+      useModelState.setState({ progress: event.payload.percent });
     });
     // The model is downloaded in the background on app start by default.
     const unlistenStatus = listenIfTauri<LogDoctorStatus>("log-doctor-status", (event) => {
-      setStatus(event.payload);
-      setProgress(null);
+      useModelState.setState({ status: event.payload, progress: null });
     });
 
     return () => {
@@ -46,22 +57,26 @@ export function useLogDoctorModel(): LogDoctorModelController {
 
   const download = useCallback(async () => {
     setError(null);
-    setProgress(0);
+    useModelState.setState({ progress: 0 });
     try {
-      setStatus(await invoke<LogDoctorStatus>("download_log_doctor_model"));
+      useModelState.setState({
+        status: await invoke<LogDoctorStatus>("download_log_doctor_model"),
+      });
       return true;
     } catch (downloadError) {
       setError(String(downloadError));
       return false;
     } finally {
-      setProgress(null);
+      useModelState.setState({ progress: null });
     }
   }, []);
 
   const remove = useCallback(async () => {
     setError(null);
     try {
-      setStatus(await invoke<LogDoctorStatus>("remove_log_doctor_model"));
+      useModelState.setState({
+        status: await invoke<LogDoctorStatus>("remove_log_doctor_model"),
+      });
     } catch (removeError) {
       setError(String(removeError));
     }
@@ -69,5 +84,3 @@ export function useLogDoctorModel(): LogDoctorModelController {
 
   return { status, progress, error, download, remove };
 }
-
-export const formatModelSize = (bytes: number): string => `${Math.round(bytes / 1024 / 1024)} MB`;

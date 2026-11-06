@@ -25,11 +25,4 @@ mod tests {
         assert_eq!(settings.mysql_port, 3306);
         assert_eq!(settings.postgresql_port, 5432);
     }
-
-    #[test]
-    fn test_is_port_available() {
-        // Port 1 is typically unavailable (reserved)
-        // This test just verifies the function works
-        let _result = is_port_available(8080);
-    }
 }

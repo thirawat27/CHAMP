@@ -1,7 +1,7 @@
 /** Ready-to-paste MCP setup for common AI coding agents. */
 export type AgentClientId = "claude-code" | "codex" | "cursor" | "vscode" | "claude-desktop";
 
-export interface AgentClientSetup {
+interface AgentClientSetup {
   id: AgentClientId;
   label: string;
   /** Where to run or paste the snippet. */
@@ -9,6 +9,8 @@ export interface AgentClientSetup {
   /** "command" runs in a terminal; "file" goes into a config file. */
   kind: "command" | "file";
   snippet: string;
+  /** The snippet holds no token: the client asks for it when connecting. */
+  promptsForToken?: boolean;
 }
 
 export const AGENT_CLIENT_IDS: AgentClientId[] = [
@@ -20,6 +22,9 @@ export const AGENT_CLIENT_IDS: AgentClientId[] = [
 ];
 
 const json = (value: unknown) => JSON.stringify(value, null, 2);
+
+/** Exact version: `npx -y` would otherwise run whatever is newest, with the token. */
+const MCP_REMOTE_PACKAGE = "mcp-remote@0.15.2";
 
 export function agentClientSetup(id: AgentClientId, url: string, token: string): AgentClientSetup {
   const bearer = `Bearer ${token}`;
@@ -49,13 +54,29 @@ export function agentClientSetup(id: AgentClientId, url: string, token: string):
         snippet: json({ mcpServers: { champ: { url, headers: { Authorization: bearer } } } }),
       };
     case "vscode":
+      // .vscode/mcp.json is usually committed, so it must not hold the token.
       return {
         id,
         label: "VS Code",
         target: ".vscode/mcp.json",
         kind: "file",
+        promptsForToken: true,
         snippet: json({
-          servers: { champ: { type: "http", url, headers: { Authorization: bearer } } },
+          inputs: [
+            {
+              type: "promptString",
+              id: "champ-token",
+              description: "CHAMP agent connector token",
+              password: true,
+            },
+          ],
+          servers: {
+            champ: {
+              type: "http",
+              url,
+              headers: { Authorization: "Bearer ${input:champ-token}" },
+            },
+          },
         }),
       };
     case "claude-desktop":
@@ -69,7 +90,7 @@ export function agentClientSetup(id: AgentClientId, url: string, token: string):
           mcpServers: {
             champ: {
               command: "npx",
-              args: ["-y", "mcp-remote", url, "--header", "Authorization:${CHAMP_AUTH}"],
+              args: ["-y", MCP_REMOTE_PACKAGE, url, "--header", "Authorization:${CHAMP_AUTH}"],
               env: { CHAMP_AUTH: bearer },
             },
           },

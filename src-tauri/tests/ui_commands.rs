@@ -1,11 +1,13 @@
 #[cfg(test)]
 mod ui_command_tests {
-    use tauri_app_lib::{ProcessManager, ServiceInfo, ServiceMap, ServiceState, ServiceType};
+    use tauri_app_lib::{
+        AppSettings, ProcessManager, ServiceInfo, ServiceMap, ServiceState, ServiceType,
+    };
 
     /// Test that all service statuses can be retrieved
     #[test]
     fn test_get_all_statuses_returns_all_services() {
-        let manager = ProcessManager::new();
+        let manager = ProcessManager::with_settings(AppSettings::default());
         let statuses = manager.get_all_statuses();
 
         // Should return all services
@@ -19,7 +21,7 @@ mod ui_command_tests {
     /// Test that initial service state is Stopped
     #[test]
     fn test_initial_service_state_is_stopped() {
-        let manager = ProcessManager::new();
+        let manager = ProcessManager::with_settings(AppSettings::default());
         let statuses = manager.get_all_statuses();
 
         for (service_type, service_info) in statuses.iter() {
@@ -48,15 +50,6 @@ mod ui_command_tests {
         assert_eq!(ServiceType::PhpFpm.default_port(), 9000);
         assert_eq!(ServiceType::MySQL.default_port(), 3306);
         assert_eq!(ServiceType::PostgreSQL.default_port(), 5432);
-    }
-
-    /// Test that service type has correct descriptions
-    #[test]
-    fn test_service_type_descriptions() {
-        assert_eq!(ServiceType::Caddy.description(), "Web Server");
-        assert_eq!(ServiceType::PhpFpm.description(), "PHP Runtime");
-        assert_eq!(ServiceType::MySQL.description(), "Database Server");
-        assert_eq!(ServiceType::PostgreSQL.description(), "PostgreSQL Server");
     }
 
     /// Test service state serialization for frontend
@@ -103,7 +96,7 @@ mod ui_command_tests {
     /// Test that status check returns correct state
     #[test]
     fn test_status_check_returns_correct_state() {
-        let manager = ProcessManager::new();
+        let manager = ProcessManager::with_settings(AppSettings::default());
         let status = manager.status(ServiceType::Caddy);
         assert_eq!(status, ServiceState::Stopped);
     }
@@ -111,7 +104,7 @@ mod ui_command_tests {
     /// Test that stopping already stopped service is idempotent
     #[test]
     fn test_stop_stopped_service_is_ok() {
-        let mut manager = ProcessManager::new();
+        let mut manager = ProcessManager::with_settings(AppSettings::default());
 
         // Should not error when stopping already stopped service
         let result = manager.stop(ServiceType::Caddy);
@@ -159,7 +152,7 @@ mod ui_command_tests {
     /// Test service port assignment
     #[test]
     fn test_service_port_assignment() {
-        let manager = ProcessManager::new();
+        let manager = ProcessManager::with_settings(AppSettings::default());
         let statuses = manager.get_all_statuses();
 
         assert_eq!(statuses[&ServiceType::Caddy].port, 8080);
@@ -217,15 +210,5 @@ mod ui_command_tests {
         assert!(!ServiceState::Starting.is_running());
         assert!(!ServiceState::Stopping.is_running());
         assert!(!ServiceState::Error.is_running());
-    }
-
-    /// Test service state is_transitioning method
-    #[test]
-    fn test_service_state_is_transitioning() {
-        assert!(ServiceState::Starting.is_transitioning());
-        assert!(ServiceState::Stopping.is_transitioning());
-        assert!(!ServiceState::Stopped.is_transitioning());
-        assert!(!ServiceState::Running.is_transitioning());
-        assert!(!ServiceState::Error.is_transitioning());
     }
 }

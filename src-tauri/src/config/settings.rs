@@ -2,6 +2,12 @@ use crate::runtime::{locator::get_app_data_paths, packages::PackageSelection};
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::PathBuf;
+use std::sync::{Mutex, PoisonError};
+
+const DEFAULT_AGENT_CONNECTOR_PORT: u16 = 47823;
+
+/// Serializes read-modify-write cycles of `settings.json`.
+static SETTINGS_WRITE_LOCK: Mutex<()> = Mutex::new(());
 
 pub const DEFAULT_PORTS: Ports = Ports {
     web: 8080,
@@ -25,6 +31,9 @@ pub struct AppSettings {
     pub mysql_port: u16,
     #[serde(default = "default_postgresql_port")]
     pub postgresql_port: u16,
+    /// Port for local HTTPS sites (`https://<name>.localhost:<port>`).
+    #[serde(default = "default_https_port")]
+    pub https_port: u16,
     #[serde(default)]
     pub auto_start_services: bool,
     #[serde(default)]
@@ -53,6 +62,7 @@ impl Default for AppSettings {
             php_port: DEFAULT_PORTS.php,
             mysql_port: DEFAULT_PORTS.mysql,
             postgresql_port: DEFAULT_PORTS.postgresql,
+            https_port: default_https_port(),
             auto_start_services: false,
             package_selection: PackageSelection::default(),
             language: default_language(),
@@ -92,6 +102,8 @@ impl AppSettings {
                 }
                 Err(e) => {
                     eprintln!("Failed to parse settings file: {}, using defaults", e);
+                    // The next save replaces this file, so keep what was in it.
+                    let _ = fs::copy(&path, path.with_extension("json.corrupt"));
                     Self::default()
                 }
             },
@@ -103,7 +115,7 @@ impl AppSettings {
     }
 
     /// Save settings to file
-    pub fn save(&self) -> Result<(), String> {
+    fn save(&self) -> Result<(), String> {
         let path = Self::settings_path()
             .ok_or_else(|| "Cannot determine settings file path".to_string())?;
 
@@ -116,9 +128,25 @@ impl AppSettings {
         let content = serde_json::to_string_pretty(self)
             .map_err(|e| format!("Failed to serialize settings: {}", e))?;
 
-        fs::write(&path, content).map_err(|e| format!("Failed to write settings file: {}", e))?;
+        crate::fs_util::atomic_write(&path, content)
+            .map_err(|e| format!("Failed to write settings file: {}", e))?;
 
         Ok(())
+    }
+
+    /// Change settings based on what is on disk right now, under a lock.
+    ///
+    /// Use this for every write. A `load()` followed later by `save()` silently
+    /// reverts anything another command saved in between, such as a language
+    /// change made during a long runtime download.
+    pub fn update(change: impl FnOnce(&mut Self)) -> Result<Self, String> {
+        let _guard = SETTINGS_WRITE_LOCK
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner);
+        let mut settings = Self::load();
+        change(&mut settings);
+        settings.save()?;
+        Ok(settings)
     }
 
     /// Validate settings (check for port conflicts, valid paths, etc.)
@@ -157,6 +185,7 @@ impl AppSettings {
             || self.php_port == 0
             || self.mysql_port == 0
             || self.postgresql_port == 0
+            || self.https_port == 0
         {
             errors.push("Port numbers must be greater than 0".to_string());
         }
@@ -168,6 +197,7 @@ impl AppSettings {
             ("PHP-FPM", self.php_port),
             ("MySQL", self.mysql_port),
             ("PostgreSQL", self.postgresql_port),
+            ("HTTPS", self.https_port),
         ];
         // Compare each unique pair once, in a stable, deterministic order.
         for i in 0..labeled_ports.len() {
@@ -195,6 +225,10 @@ fn default_postgresql_port() -> u16 {
     DEFAULT_PORTS.postgresql
 }
 
+fn default_https_port() -> u16 {
+    8443
+}
+
 fn default_language() -> String {
     "en".to_string()
 }
@@ -204,7 +238,7 @@ fn default_true() -> bool {
 }
 
 fn default_agent_connector_port() -> u16 {
-    47823
+    DEFAULT_AGENT_CONNECTOR_PORT
 }
 
 #[cfg(test)]

@@ -15,32 +15,12 @@ export interface Translations {
   help: string;
   error: string;
   success: string;
-  warning: string;
   info: string;
-  confirm: string;
-  no: string;
-  retry: string;
-  remove: string;
-  refresh: string;
-  more: string;
-  search: string;
-  filter: string;
   back: string;
-  next: string;
-  done: string;
-  install: string;
   installed: string;
   available: string;
   active: string;
-  enabled: string;
-  disabled: string;
   version: string;
-  status: string;
-  name: string;
-  description: string;
-  type: string;
-  action: string;
-  actions: string;
   start: string;
   stop: string;
   restart: string;
@@ -49,29 +29,18 @@ export interface Translations {
   restarting: string;
   running: string;
   stopped: string;
-  failed: string;
-  pending: string;
 
   // App
-  appName: string;
   appDescription: string;
 
   // Dashboard
-  dashboard: string;
   services: string;
-  php: string;
-  mysql: string;
-  database: string;
-  phpMyAdmin: string;
-  adminer: string;
-  caddy: string;
   projects: string;
   logs: string;
   website: string;
   databaseTool: string;
   openWebsite: string;
   openDatabaseTool: string;
-  openProjectsFolder: string;
   openLogsFolder: string;
   network: string;
   phpUpdateTo: string;
@@ -165,7 +134,6 @@ export interface Translations {
   doctorActionOpenMysqlData: string;
   doctorActionOpenPostgresqlData: string;
   httpsPreview: string;
-  publicHttpsDomain: string;
   httpsTunnelDescription: string;
   httpsTunnelStart: string;
   httpsTunnelStop: string;
@@ -185,7 +153,6 @@ export interface Translations {
   httpsTunnelTokenSaved: string;
   httpsTunnelTokenChange: string;
   terminal: string;
-  openTerminal: string;
   openConfigFolder: string;
   startAllServices: string;
   stopAllServices: string;
@@ -214,13 +181,9 @@ export interface Translations {
   startup: string;
   autoStartServices: string;
   autoStartDescription: string;
-  language: string;
-  thai: string;
   soundEffects: string;
   enableSoundEffects: string;
   soundEffectsDescription: string;
-  databaseToolSelect: string;
-  webDatabaseManager: string;
   runtime: string;
   openRuntimeFolder: string;
   sourceRepository: string;
@@ -301,6 +264,19 @@ export interface Translations {
   wizardInstallStep: string;
   wizardDownloadRuntime: string;
   wizardStackDescription: string;
+  serviceDescriptionCaddy: string;
+  serviceDescriptionPhp: string;
+  serviceDescriptionMysql: string;
+  serviceDescriptionPostgresql: string;
+  shortcutGroupWindows: string;
+  shortcutsAnyLayout: string;
+  dataLocationPortable: string;
+  dataLocationLocal: string;
+  errorBoundaryTitle: string;
+  errorBoundaryDetails: string;
+  errorBoundaryReload: string;
+  agentConnectorCopyToken: string;
+  agentConnectorPromptHint: string;
   wizardWelcomeBody: string;
   wizardUserSpaceRuntime: string;
   wizardUserSpaceRuntimeCopy: string;
@@ -344,8 +320,6 @@ export interface Translations {
   unknownError: string;
 
   // Footer / Status
-  ready: string;
-  processing: string;
 }
 
 const th: Translations = {
@@ -359,32 +333,12 @@ const th: Translations = {
   help: "ช่วยเหลือ",
   error: "ข้อผิดพลาด",
   success: "สำเร็จ",
-  warning: "คำเตือน",
   info: "ข้อมูล",
-  confirm: "ยืนยัน",
-  no: "ไม่",
-  retry: "ลองใหม่",
-  remove: "นำออก",
-  refresh: "รีเฟรช",
-  more: "เพิ่มเติม",
-  search: "ค้นหา",
-  filter: "กรอง",
   back: "ย้อนกลับ",
-  next: "ถัดไป",
-  done: "เสร็จแล้ว",
-  install: "ติดตั้ง",
   installed: "ติดตั้งแล้ว",
   available: "พร้อมใช้งาน",
   active: "ใช้งานอยู่",
-  enabled: "เปิดใช้งาน",
-  disabled: "ปิดใช้งาน",
   version: "เวอร์ชัน",
-  status: "สถานะ",
-  name: "ชื่อ",
-  description: "คำอธิบาย",
-  type: "ประเภท",
-  action: "การกระทำ",
-  actions: "การกระทำ",
   start: "เริ่ม",
   stop: "หยุด",
   restart: "รีสตาร์ท",
@@ -393,29 +347,18 @@ const th: Translations = {
   restarting: "กำลังรีสตาร์ท...",
   running: "กำลังทำงาน",
   stopped: "หยุดทำงาน",
-  failed: "ล้มเหลว",
-  pending: "รอดำเนินการ",
 
   // App
-  appName: "CHAMP",
   appDescription: "เว็บเซิร์ฟเวอร์สำหรับนักพัฒนา",
 
   // Dashboard
-  dashboard: "แดชบอร์ด",
   services: "บริการ",
-  php: "PHP",
-  mysql: "MySQL",
-  database: "ฐานข้อมูล",
-  phpMyAdmin: "phpMyAdmin",
-  adminer: "Adminer",
-  caddy: "Caddy",
   projects: "โปรเจกต์",
   logs: "บันทึก",
   website: "เว็บไซต์",
   databaseTool: "เครื่องมือฐานข้อมูล",
   openWebsite: "เปิดเว็บไซต์",
   openDatabaseTool: "เปิดเครื่องมือฐานข้อมูล",
-  openProjectsFolder: "เปิดโฟลเดอร์โปรเจกต์",
   openLogsFolder: "เปิดโฟลเดอร์ Log",
   network: "เครือข่าย",
   phpUpdateTo: "อัปเดตเป็น {version}",
@@ -517,7 +460,6 @@ const th: Translations = {
   doctorActionOpenMysqlData: "เปิดโฟลเดอร์ข้อมูล MySQL",
   doctorActionOpenPostgresqlData: "เปิดโฟลเดอร์ข้อมูล PostgreSQL",
   httpsPreview: "พรีวิว HTTPS",
-  publicHttpsDomain: "โดเมน HTTPS ฟรีสำหรับทดสอบเว็บ",
   httpsTunnelDescription:
     "สร้างลิงก์ HTTPS สาธารณะอัตโนมัติผ่าน ngrok สำหรับทดสอบและแชร์งานชั่วคราว",
   httpsTunnelStart: "เริ่ม HTTPS",
@@ -538,7 +480,6 @@ const th: Translations = {
   httpsTunnelTokenSaved: "บันทึก ngrok authtoken แล้ว",
   httpsTunnelTokenChange: "เปลี่ยน authtoken",
   terminal: "เทอร์มินัล",
-  openTerminal: "เปิดเทอร์มินัลในโฟลเดอร์โปรเจกต์",
   openConfigFolder: "เปิดโฟลเดอร์ config",
   startAllServices: "เริ่มบริการทั้งหมด",
   stopAllServices: "หยุดบริการทั้งหมด",
@@ -567,13 +508,9 @@ const th: Translations = {
   startup: "การเริ่มต้น",
   autoStartServices: "เริ่มบริการอัตโนมัติ",
   autoStartDescription: "เริ่มบริการทั้งหมดเมื่อเปิด CHAMP",
-  language: "ภาษา",
-  thai: "ไทย",
   soundEffects: "เสียงเอฟเฟกต์",
   enableSoundEffects: "เปิดใช้งานเสียงเอฟเฟกต์",
   soundEffectsDescription: "เล่นเสียงเมื่อกดปุ่มและดำเนินการต่างๆ",
-  databaseToolSelect: "เครื่องมือฐานข้อมูล",
-  webDatabaseManager: "ตัวจัดการฐานข้อมูลบนเว็บ",
   runtime: "รันไทม์",
   openRuntimeFolder: "เปิดโฟลเดอร์รันไทม์",
   sourceRepository: "ซอร์สโค้ดบน GitHub",
@@ -655,6 +592,19 @@ const th: Translations = {
   wizardInstallStep: "ติดตั้ง",
   wizardDownloadRuntime: "ดาวน์โหลดรันไทม์",
   wizardStackDescription: "Caddy + HTTP(S) + phpMyAdmin/Adminer + MySQL/PostgreSQL + PHP",
+  serviceDescriptionCaddy: "เว็บเซิร์ฟเวอร์",
+  serviceDescriptionPhp: "รันไทม์ PHP",
+  serviceDescriptionMysql: "เซิร์ฟเวอร์ฐานข้อมูล",
+  serviceDescriptionPostgresql: "เซิร์ฟเวอร์ PostgreSQL",
+  shortcutGroupWindows: "หน้าต่าง",
+  shortcutsAnyLayout: "คีย์ลัดทำงานได้ทุกภาษาของแป้นพิมพ์ (ไทย, อังกฤษ ฯลฯ)",
+  dataLocationPortable: "พกพา",
+  dataLocationLocal: "ในเครื่อง",
+  errorBoundaryTitle: "เกิดข้อผิดพลาดบางอย่าง",
+  errorBoundaryDetails: "รายละเอียดข้อผิดพลาด",
+  errorBoundaryReload: "โหลดแอปใหม่",
+  agentConnectorCopyToken: "คัดลอก token",
+  agentConnectorPromptHint: "VS Code จะถาม token ตอนเชื่อมต่อครั้งแรก จึงไม่มี token อยู่ในไฟล์นี้",
   wizardWelcomeBody:
     "CHAMP จะติดตั้ง Caddy, PHP-FPM, ฐานข้อมูลที่เลือก และ phpMyAdmin หรือ Adminer ไว้ในโปรไฟล์ผู้ใช้ เพื่อให้สแต็กทำงานได้โดยไม่ต้องเขียนไฟล์ config ลงโฟลเดอร์ระบบที่ถูกป้องกัน",
   wizardUserSpaceRuntime: "รันไทม์ในพื้นที่ผู้ใช้",
@@ -702,8 +652,6 @@ const th: Translations = {
   unknownError: "ข้อผิดพลาดที่ไม่รู้จัก",
 
   // Footer / Status
-  ready: "พร้อม",
-  processing: "กำลังประมวลผล",
 };
 
 const en: Translations = {
@@ -717,32 +665,12 @@ const en: Translations = {
   help: "Help",
   error: "Error",
   success: "Success",
-  warning: "Warning",
   info: "Info",
-  confirm: "Confirm",
-  no: "No",
-  retry: "Retry",
-  remove: "Remove",
-  refresh: "Refresh",
-  more: "More",
-  search: "Search",
-  filter: "Filter",
   back: "Back",
-  next: "Next",
-  done: "Done",
-  install: "Install",
   installed: "Installed",
   available: "Available",
   active: "Active",
-  enabled: "Enabled",
-  disabled: "Disabled",
   version: "Version",
-  status: "Status",
-  name: "Name",
-  description: "Description",
-  type: "Type",
-  action: "Action",
-  actions: "Actions",
   start: "Start",
   stop: "Stop",
   restart: "Restart",
@@ -751,29 +679,18 @@ const en: Translations = {
   restarting: "Restarting...",
   running: "Running",
   stopped: "Stopped",
-  failed: "Failed",
-  pending: "Pending",
 
   // App
-  appName: "CHAMP",
   appDescription: "Web Server for Developers",
 
   // Dashboard
-  dashboard: "Dashboard",
   services: "Services",
-  php: "PHP",
-  mysql: "MySQL",
-  database: "Database",
-  phpMyAdmin: "phpMyAdmin",
-  adminer: "Adminer",
-  caddy: "Caddy",
   projects: "Projects",
   logs: "Logs",
   website: "Website",
   databaseTool: "Database Tool",
   openWebsite: "Open Website",
   openDatabaseTool: "Open Database Tool",
-  openProjectsFolder: "Open Projects Folder",
   openLogsFolder: "Open Logs Folder",
   network: "Network",
   phpUpdateTo: "Update to {version}",
@@ -876,7 +793,6 @@ const en: Translations = {
   doctorActionOpenMysqlData: "Open MySQL data folder",
   doctorActionOpenPostgresqlData: "Open PostgreSQL data folder",
   httpsPreview: "HTTPS Preview",
-  publicHttpsDomain: "Free HTTPS domain for website testing",
   httpsTunnelDescription:
     "Automatically creates a temporary public HTTPS link through ngrok for testing and sharing work.",
   httpsTunnelStart: "Start HTTPS",
@@ -891,13 +807,13 @@ const en: Translations = {
   httpsTunnelError: "HTTPS tunnel failed",
   httpsTunnelDevOnly: "This link is intended for testing and development only.",
   httpsTunnelTokenLabel: "ngrok authtoken",
-  httpsTunnelTokenHelp: "ngrok needs a free authtoken from your ngrok account. Enter it once and CHAMP remembers it.",
+  httpsTunnelTokenHelp:
+    "ngrok needs a free authtoken from your ngrok account. Enter it once and CHAMP remembers it.",
   httpsTunnelTokenGet: "Get authtoken",
   httpsTunnelTokenSave: "Save",
   httpsTunnelTokenSaved: "ngrok authtoken saved",
   httpsTunnelTokenChange: "Change authtoken",
   terminal: "Terminal",
-  openTerminal: "Open Terminal in Projects",
   openConfigFolder: "Open config folder",
   startAllServices: "Start All Services",
   stopAllServices: "Stop All Services",
@@ -926,13 +842,9 @@ const en: Translations = {
   startup: "Startup",
   autoStartServices: "Start stack when CHAMP opens",
   autoStartDescription: "Automatically start all services when CHAMP opens",
-  language: "Language",
-  thai: "ไทย",
   soundEffects: "Sound Effects",
   enableSoundEffects: "Enable sound effects",
   soundEffectsDescription: "Play sounds when pressing buttons and performing actions",
-  databaseToolSelect: "Database Tool",
-  webDatabaseManager: "Web database manager",
   runtime: "Runtime",
   openRuntimeFolder: "Open Runtime Folder",
   sourceRepository: "Source repository",
@@ -1015,6 +927,20 @@ const en: Translations = {
   wizardInstallStep: "Install",
   wizardDownloadRuntime: "Download runtime",
   wizardStackDescription: "Caddy + HTTP(S) + phpMyAdmin/Adminer + MySQL/PostgreSQL + PHP",
+  serviceDescriptionCaddy: "Web Server",
+  serviceDescriptionPhp: "PHP Runtime",
+  serviceDescriptionMysql: "Database Server",
+  serviceDescriptionPostgresql: "PostgreSQL Server",
+  shortcutGroupWindows: "Windows",
+  shortcutsAnyLayout: "Shortcuts work in any keyboard layout (Thai, English, and others).",
+  dataLocationPortable: "Portable",
+  dataLocationLocal: "Local",
+  errorBoundaryTitle: "Something went wrong",
+  errorBoundaryDetails: "Error Details",
+  errorBoundaryReload: "Reload Application",
+  agentConnectorCopyToken: "Copy token",
+  agentConnectorPromptHint:
+    "VS Code asks for the token when it first connects, so this file holds no secret.",
   wizardWelcomeBody:
     "CHAMP installs Caddy, PHP-FPM, the database you select, and phpMyAdmin or Adminer into your user profile so the stack can run without writing config files into protected system folders.",
   wizardUserSpaceRuntime: "User-space runtime",
@@ -1062,8 +988,6 @@ const en: Translations = {
   unknownError: "Unknown error",
 
   // Footer / Status
-  ready: "Ready",
-  processing: "Processing",
 };
 
 export const translations: Record<Language, Translations> = { th, en };

@@ -705,3 +705,179 @@ describe("Dashboard Component", () => {
     });
   });
 });
+
+describe("Dashboard keyboard and command safety", () => {
+  const stopped = (service_type: ServiceType, port: number) => ({
+    service_type,
+    state: ServiceState.Stopped,
+    port,
+  });
+  const running = (service_type: ServiceType, port: number) => ({
+    service_type,
+    state: ServiceState.Running,
+    port,
+  });
+  const runningMap = {
+    [ServiceType.Caddy]: running(ServiceType.Caddy, 8080),
+    [ServiceType.PhpFpm]: running(ServiceType.PhpFpm, 9000),
+    [ServiceType.MySQL]: running(ServiceType.MySQL, 3306),
+    [ServiceType.PostgreSQL]: stopped(ServiceType.PostgreSQL, 5432),
+  };
+  const stoppedMap = {
+    [ServiceType.Caddy]: stopped(ServiceType.Caddy, 8080),
+    [ServiceType.PhpFpm]: stopped(ServiceType.PhpFpm, 9000),
+    [ServiceType.MySQL]: stopped(ServiceType.MySQL, 3306),
+    [ServiceType.PostgreSQL]: stopped(ServiceType.PostgreSQL, 5432),
+  };
+
+  const mockBackend = (statuses: unknown, overrides: Record<string, unknown> = {}) => {
+    vi.mocked(invoke).mockImplementation(async (cmd: string) => {
+      if (cmd in overrides) return overrides[cmd];
+      if (cmd === "get_all_statuses") return statuses;
+      if (cmd === "get_https_tunnel_status") {
+        return {
+          running: false,
+          url: null,
+          ready: false,
+          local_url: "",
+          error: null,
+          log_path: null,
+          pid: null,
+          authtoken_configured: false,
+        };
+      }
+      return {};
+    });
+  };
+
+  const invoked = (command: string) =>
+    vi.mocked(invoke).mock.calls.some(([name]) => name === command);
+
+  const caddyRunning = () =>
+    waitFor(() => expect(screen.getByTestId("service-state-caddy")).toHaveTextContent("Running"));
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("keeps Ctrl+X as Cut while typing instead of stopping the stack", async () => {
+    mockBackend(runningMap);
+    render(<Dashboard />);
+    await caddyRunning();
+
+    const input = await screen.findByLabelText("ngrok authtoken");
+    const notPrevented = fireEvent.keyDown(input, { code: "KeyX", ctrlKey: true });
+
+    expect(notPrevented).toBe(true);
+    expect(invoked("stop_all_services")).toBe(false);
+  });
+
+  it("stops the stack with Ctrl+X outside a text field", async () => {
+    mockBackend(runningMap, { stop_all_services: stoppedMap });
+    render(<Dashboard />);
+    await caddyRunning();
+
+    fireEvent.keyDown(document.body, { code: "KeyX", ctrlKey: true });
+
+    await waitFor(() => expect(invoked("stop_all_services")).toBe(true));
+  });
+
+  it("ignores stack shortcuts while a modal is open, but still claims the key", async () => {
+    mockBackend(stoppedMap);
+    render(<Dashboard />);
+    await screen.findByTestId("start-button-caddy");
+
+    fireEvent.keyDown(document.body, { key: "F1", code: "F1" });
+    await screen.findByTestId("guide");
+    const notPrevented = fireEvent.keyDown(document.body, { code: "KeyS", ctrlKey: true });
+
+    expect(notPrevented).toBe(false);
+    expect(invoked("start_all_services")).toBe(false);
+  });
+
+  it("does not treat Ctrl+Shift+D as the database shortcut", async () => {
+    mockBackend(runningMap);
+    render(<Dashboard />);
+    await caddyRunning();
+
+    const notPrevented = fireEvent.keyDown(document.body, {
+      code: "KeyD",
+      ctrlKey: true,
+      shiftKey: true,
+    });
+
+    expect(notPrevented).toBe(true);
+  });
+
+  it("closes only the top dialog on Esc", async () => {
+    mockBackend(stoppedMap);
+    render(<Dashboard />);
+    await screen.findByTestId("start-button-caddy");
+
+    fireEvent.keyDown(document.body, { code: "Comma", ctrlKey: true });
+    await screen.findByRole("dialog", { name: /settings/i });
+    fireEvent.keyDown(document.body, { key: "F1", code: "F1" });
+    await screen.findByTestId("guide");
+
+    fireEvent.keyDown(window, { code: "Escape" });
+
+    await waitFor(() => expect(screen.queryByTestId("guide")).not.toBeInTheDocument());
+    expect(screen.getByRole("dialog", { name: /settings/i })).toBeInTheDocument();
+  });
+
+  it("runs one service command at a time", async () => {
+    let finish: (value: unknown) => void = () => {};
+    mockBackend(stoppedMap, {
+      start_service: new Promise((resolve) => {
+        finish = resolve;
+      }),
+    });
+    render(<Dashboard />);
+
+    fireEvent.click(await screen.findByTestId("start-button-caddy"));
+    await waitFor(() => expect(invoked("start_service")).toBe(true));
+
+    // Every other card is locked while the first command runs.
+    expect(screen.getByTestId("start-button-php-fpm")).toBeDisabled();
+    expect(screen.getByTestId("start-button-mysql")).toBeDisabled();
+    expect(screen.getByTestId("start-button-php-fpm")).not.toHaveTextContent(/starting/i);
+    fireEvent.click(screen.getByTestId("start-button-php-fpm"));
+
+    const startCalls = vi.mocked(invoke).mock.calls.filter(([name]) => name === "start_service");
+    expect(startCalls).toEqual([["start_service", { service: ServiceType.Caddy }]]);
+
+    finish(stoppedMap);
+    await waitFor(() => expect(screen.getByTestId("start-button-php-fpm")).toBeEnabled());
+  });
+
+  it("does not let an older poll overwrite the state of a running command", async () => {
+    let finishPoll: (value: unknown) => void = () => {};
+    let polls = 0;
+    vi.mocked(invoke).mockImplementation(async (cmd: string) => {
+      if (cmd === "get_all_statuses") {
+        polls += 1;
+        if (polls === 2) {
+          return new Promise((resolve) => {
+            finishPoll = resolve;
+          });
+        }
+        return stoppedMap;
+      }
+      if (cmd === "start_service") return new Promise(() => {});
+      return {};
+    });
+    render(<Dashboard />);
+    await screen.findByTestId("start-button-caddy");
+    await waitFor(() => expect(polls).toBeGreaterThanOrEqual(2), { timeout: 5000 });
+
+    fireEvent.click(screen.getByTestId("start-button-caddy"));
+    await waitFor(() =>
+      expect(screen.getByTestId("service-state-caddy")).toHaveTextContent("Starting")
+    );
+
+    finishPoll(stoppedMap);
+    await new Promise((resolve) => setTimeout(resolve, 20));
+
+    expect(screen.getByTestId("service-state-caddy")).toHaveTextContent("Starting");
+  }, 10000);
+});

@@ -1,57 +1,258 @@
 //! OS process primitives and runtime stale-process cleanup helpers.
-//!
-//! Moved verbatim from the former monolithic `manager.rs` (code-health M-01).
 
-use super::*;
+use crate::constants::{
+    child_exit_poll, database_shutdown_timeout, graceful_stop_timeout, process_probe_delay,
+    process_stop_wait_timeout,
+};
+use crate::logs::append_line as append_log_line;
+use crate::process::ServiceType;
+use crate::runtime::locator::RuntimePaths;
+use std::collections::HashMap;
+use std::path::{Path, PathBuf};
+use std::process::{Child, Command, Stdio};
+use std::sync::{Mutex, OnceLock, PoisonError};
+use std::thread;
+use std::time::{Duration, Instant};
 
-// Windows-specific: Constant to hide console window
-#[cfg(target_os = "windows")]
-pub(super) const CREATE_NO_WINDOW: u32 = 0x08000000;
-
-/// Configure command to hide console window on Windows
-#[cfg(target_os = "windows")]
+/// Hide the console window a spawned process would otherwise open on Windows.
 pub(super) fn configure_no_window(mut command: Command) -> Command {
-    use std::os::windows::process::CommandExt;
-    command.creation_flags(CREATE_NO_WINDOW);
+    crate::process::command::hide_console(&mut command);
     command
 }
 
-#[cfg(not(target_os = "windows"))]
-pub(super) fn configure_no_window(command: Command) -> Command {
-    command
-}
+/// How long a force-killed process gets to disappear.
+const KILLED_PROCESS_WAIT: Duration = Duration::from_secs(1);
+/// Settle time after force-stopping Caddy, so its port is free for the next start.
+pub(super) const CADDY_STOP_SETTLE: Duration = Duration::from_millis(500);
+/// mysqld needs longer than Caddy to release its files after a force-stop.
+pub(super) const MYSQL_STOP_SETTLE: Duration = Duration::from_secs(2);
 
 /// Wait for a child process to exit, polling until `timeout` elapses.
 ///
-/// A kill signal is assumed to have already been sent. This polls `try_wait`
+/// The stop request is assumed to have already been sent. This polls `try_wait`
 /// in short intervals so the caller is not blocked indefinitely on a process
 /// that refuses to exit. If the process is still alive when the deadline is
-/// reached, one final `kill` + `try_wait` is attempted before giving up.
-pub(super) fn wait_child_with_timeout(child: &mut Child, timeout: std::time::Duration) {
+/// reached, it is killed and given a moment to go. Returns whether it exited.
+pub(super) fn wait_child_with_timeout(child: &mut Child, timeout: std::time::Duration) -> bool {
+    if poll_child_exit(child, timeout) {
+        return true;
+    }
+
+    let _ = child.kill();
+    poll_child_exit(child, KILLED_PROCESS_WAIT)
+}
+
+fn poll_child_exit(child: &mut Child, timeout: std::time::Duration) -> bool {
     let deadline = std::time::Instant::now() + timeout;
     loop {
         match child.try_wait() {
-            Ok(Some(_)) => return,
+            Ok(Some(_)) => return true,
             Ok(None) => {
                 if std::time::Instant::now() >= deadline {
-                    break;
+                    return false;
                 }
-                thread::sleep(std::time::Duration::from_millis(50));
+                thread::sleep(child_exit_poll());
             }
-            Err(_) => return,
+            Err(_) => return false,
         }
     }
-
-    // Still alive at the deadline: force another kill and reap once more.
-    let _ = child.kill();
-    let _ = child.try_wait();
 }
 
-pub(super) fn stop_runtime_processes_by_executable(
+/// Run a helper command, killing it if it outlives `timeout`. True on success.
+#[cfg(target_os = "windows")]
+fn run_with_timeout(mut command: Command, timeout: std::time::Duration) -> bool {
+    let Ok(mut child) = command
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .stdin(Stdio::null())
+        .spawn()
+    else {
+        return false;
+    };
+    let deadline = std::time::Instant::now() + timeout;
+    loop {
+        match child.try_wait() {
+            Ok(Some(status)) => return status.success(),
+            Ok(None) if std::time::Instant::now() < deadline => {
+                thread::sleep(std::time::Duration::from_millis(100));
+            }
+            _ => {
+                let _ = child.kill();
+                let _ = child.wait();
+                return false;
+            }
+        }
+    }
+}
+
+/// How long `service` gets to exit on its own after a clean stop request.
+pub(super) fn graceful_stop_timeout_for(service: ServiceType) -> std::time::Duration {
+    match service {
+        ServiceType::MySQL | ServiceType::PostgreSQL => database_shutdown_timeout(),
+        ServiceType::Caddy | ServiceType::PhpFpm => graceful_stop_timeout(),
+    }
+}
+
+/// Ask a service to exit cleanly. True when the request was delivered, so the
+/// caller should wait for the exit instead of killing it right away.
+///
+/// A killed database has to run crash recovery on its next start, loses
+/// PostgreSQL's unlogged tables, and leaves stale pid files behind. A killed
+/// php-fpm master leaves workers holding its port.
+#[cfg(not(target_os = "windows"))]
+pub(super) fn request_graceful_stop(
+    service: ServiceType,
+    _paths: Option<&RuntimePaths>,
+    _port: u16,
+    pid: u32,
+) -> bool {
+    // PostgreSQL's SIGTERM ("smart") would wait for every client to disconnect;
+    // SIGINT is its fast shutdown.
+    let signal = if service == ServiceType::PostgreSQL {
+        "-INT"
+    } else {
+        "-TERM"
+    };
+    Command::new("kill")
+        .args([signal, &pid.to_string()])
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status()
+        .is_ok_and(|status| status.success())
+}
+
+/// Windows has no signals for console-less processes, so databases are asked
+/// through their own admin tools. Other services are simply terminated.
+#[cfg(target_os = "windows")]
+pub(super) fn request_graceful_stop(
+    service: ServiceType,
+    paths: Option<&RuntimePaths>,
+    port: u16,
+    _pid: u32,
+) -> bool {
+    let Some(paths) = paths else {
+        return false;
+    };
+    let timeout = database_shutdown_timeout();
+    let command = match service {
+        ServiceType::MySQL => {
+            let admin = crate::runtime::locator::sibling_binary(&paths.mysql, "mysqladmin");
+            if !admin.exists() {
+                return false;
+            }
+            let mut command = configure_no_window(Command::new(admin));
+            command.args([
+                "--no-defaults",
+                "--protocol=TCP",
+                "-h",
+                "127.0.0.1",
+                "-P",
+                &port.to_string(),
+                "-u",
+                "root",
+                "--password=",
+                "--connect-timeout=2",
+                &format!("--shutdown-timeout={}", timeout.as_secs()),
+                "shutdown",
+            ]);
+            command
+        }
+        ServiceType::PostgreSQL => {
+            let pg_ctl = crate::runtime::locator::sibling_binary(&paths.postgresql, "pg_ctl");
+            if !pg_ctl.exists() {
+                return false;
+            }
+            let mut command = configure_no_window(Command::new(pg_ctl));
+            command
+                .arg("stop")
+                .arg("-D")
+                .arg(&paths.postgresql_data_dir)
+                .args(["-m", "fast", "-w", "-t", &timeout.as_secs().to_string()]);
+            command
+        }
+        ServiceType::Caddy | ServiceType::PhpFpm => return false,
+    };
+    // A little over the tools' own limit, so they get to report failure themselves.
+    run_with_timeout(command, timeout + std::time::Duration::from_secs(2))
+}
+
+fn wait_pid_exit(pid: u32, timeout: std::time::Duration) -> bool {
+    let deadline = std::time::Instant::now() + timeout;
+    while process_exists_uncached(pid) {
+        if std::time::Instant::now() >= deadline {
+            return false;
+        }
+        thread::sleep(process_probe_delay());
+    }
+    true
+}
+
+#[cfg(target_os = "windows")]
+fn force_kill_pid(pid: u32) {
+    let _ = terminate_process_by_pid(pid);
+}
+
+#[cfg(not(target_os = "windows"))]
+fn force_kill_pid(pid: u32) {
+    let _ = Command::new("kill")
+        .args(["-KILL", &pid.to_string()])
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status();
+}
+
+/// Stop a process CHAMP adopted by PID and has no `Child` handle for.
+/// Returns whether it is gone.
+pub(super) fn stop_adopted_process(
+    pid: u32,
+    graceful_requested: bool,
+    grace: std::time::Duration,
+) -> bool {
+    if graceful_requested && wait_pid_exit(pid, grace) {
+        return true;
+    }
+    let _ = terminate_process_by_pid(pid);
+    if wait_pid_exit(pid, process_stop_wait_timeout()) {
+        return true;
+    }
+    force_kill_pid(pid);
+    wait_pid_exit(pid, KILLED_PROCESS_WAIT)
+}
+
+/// Unix socket paths are limited to about 100 bytes (`sun_path`).
+const MAX_UNIX_SOCKET_PATH_BYTES: usize = 100;
+
+/// Where CHAMP's mysqld keeps its Unix socket, instead of a shared default such
+/// as /tmp/mysql.sock that a system MySQL may own. `None` on Windows, and when
+/// the data folder path is too long for a socket (TCP still works then).
+pub(super) fn mysql_socket_path(paths: &RuntimePaths) -> Option<PathBuf> {
+    if cfg!(target_os = "windows") {
+        return None;
+    }
+    let socket = paths.mysql_data_dir.join("mysql.sock");
+    (socket.as_os_str().len() <= MAX_UNIX_SOCKET_PATH_BYTES).then_some(socket)
+}
+
+/// Stale-process cleanup is best effort: when PowerShell or WMI is unavailable
+/// (AppLocker, broken WMI) the service can still start, so log it and go on.
+pub(super) fn find_processes_best_effort(executable: &Path, log_path: &Path) -> Vec<u32> {
+    find_process_ids_by_executable(executable).unwrap_or_else(|error| {
+        append_log_line(log_path, &format!("Skipped stale-process check: {error}"));
+        Vec::new()
+    })
+}
+
+pub(crate) fn stop_runtime_processes_by_executable(
     executable: &Path,
     service_label: &str,
-) -> Result<usize, String> {
-    let pids = find_process_ids_by_executable(executable)?;
+) -> usize {
+    let pids = match find_process_ids_by_executable(executable) {
+        Ok(pids) => pids,
+        Err(error) => {
+            eprintln!("Skipped stale {service_label} process check: {error}");
+            return 0;
+        }
+    };
     let mut stopped = 0;
     for pid in pids {
         if terminate_process_by_pid(pid).is_ok() {
@@ -59,7 +260,7 @@ pub(super) fn stop_runtime_processes_by_executable(
         }
     }
     if stopped > 0 {
-        thread::sleep(std::time::Duration::from_millis(250));
+        thread::sleep(process_probe_delay());
     }
     eprintln!(
         "Stopped {} stale {} process(es) for {}",
@@ -67,7 +268,7 @@ pub(super) fn stop_runtime_processes_by_executable(
         service_label,
         executable.display()
     );
-    Ok(stopped)
+    stopped
 }
 
 #[cfg(target_os = "windows")]
@@ -181,30 +382,18 @@ pub(super) fn find_process_ids_by_executable(executable: &Path) -> Result<Vec<u3
 
             #[cfg(target_os = "macos")]
             {
-                // On macOS there is no /proc; use `lsof -p <pid>` and look
-                // for a "txt" (text/executable) entry that matches our path.
+                // On macOS there is no /proc; ask `lsof` for the process's
+                // "txt" (text/executable) entries in its field output format,
+                // which unlike the column view is safe to parse.
                 let lsof_out = Command::new("lsof")
-                    .args(["-p", &pid.to_string()])
+                    .args(["-a", "-p", &pid.to_string(), "-d", "txt", "-Fn"])
                     .stdout(Stdio::piped())
                     .stderr(Stdio::null())
                     .output();
 
                 match lsof_out {
                     Ok(o) => {
-                        let text = String::from_utf8_lossy(&o.stdout);
-                        text.lines().any(|line| {
-                            let cols: Vec<&str> = line
-                                .splitn(10, char::is_whitespace)
-                                .filter(|s| !s.is_empty())
-                                .collect();
-                            // lsof columns: COMMAND PID USER FD TYPE DEVICE SIZE/OFF NODE NAME
-                            // FD == "txt" identifies the executable
-                            cols.get(3).copied() == Some("txt")
-                                && cols
-                                    .last()
-                                    .map(|name| *name == canonical_str.as_ref())
-                                    .unwrap_or(false)
-                        })
+                        lsof_lists_executable(&String::from_utf8_lossy(&o.stdout), &canonical_str)
                     }
                     Err(_) => {
                         // lsof not available: accept the pgrep match as-is
@@ -222,6 +411,14 @@ pub(super) fn find_process_ids_by_executable(executable: &Path) -> Result<Vec<u3
         .collect();
 
     Ok(verified)
+}
+
+/// `lsof -Fn` prints one field per line; file names start with `n`.
+#[cfg(any(target_os = "macos", test))]
+pub(super) fn lsof_lists_executable(field_output: &str, executable: &str) -> bool {
+    field_output
+        .lines()
+        .any(|line| line.strip_prefix('n') == Some(executable))
 }
 
 // R-11: `update_health` polls process liveness on every frontend refresh
@@ -314,192 +511,41 @@ pub(super) fn terminate_process_by_pid(pid: u32) -> Result<(), String> {
         })
 }
 
-// ---------------------------------------------------------------------------
-// Caddy stale-process helpers (mirrors the MySQL pattern)
-// ---------------------------------------------------------------------------
+/// Force-stop every process running `executable` (used when stopping a service),
+/// even if the child handle was already lost, for example after a crash. Matching
+/// is full-path verified, so a user's own install is never touched. (R-03)
+pub(super) fn force_stop_all_processes(
+    executable: &Path,
+    label: &str,
+    settle: Duration,
+) -> Result<usize, String> {
+    let pids = find_process_ids_by_executable(executable)?;
 
-/// Find all Caddy processes currently running from our runtime executable
-pub(super) fn find_all_caddy_processes(caddy_executable: &Path) -> Result<Vec<u32>, String> {
-    find_process_ids_by_executable(caddy_executable)
-}
-
-/// Cleanup duplicate / stale Caddy processes before starting.
-/// Prevents "port already in use" errors when a previous Caddy instance
-/// was left running after CHAMP crashed or was force-quit.
-pub(super) fn cleanup_duplicate_caddy_processes(
-    paths: &RuntimePaths,
-    port: u16,
-) -> Result<(), String> {
-    let log_path = paths.logs_dir.join("caddy.log");
-
-    let caddy_pids = find_all_caddy_processes(&paths.caddy)?;
-
-    if caddy_pids.is_empty() {
-        return Ok(());
+    if pids.is_empty() {
+        return Ok(0);
     }
 
-    if caddy_pids.len() > 1 {
-        append_log_line(
-            &log_path,
-            &format!(
-                "WARNING: Found {} Caddy processes running. Cleaning up duplicates...",
-                caddy_pids.len()
-            ),
-        );
-    } else {
-        append_log_line(
-            &log_path,
-            &format!(
-                "Found a stale Caddy process (pid {}). Stopping it before re-launch...",
-                caddy_pids[0]
-            ),
-        );
-    }
+    eprintln!("Force stopping {} {} process(es)...", pids.len(), label);
 
     let mut stopped = 0;
-    for pid in &caddy_pids {
-        if terminate_process_by_pid(*pid).is_ok() {
+    for pid in pids {
+        if terminate_process_by_pid(pid).is_ok() {
             stopped += 1;
-            append_log_line(
-                &log_path,
-                &format!("Stopped stale Caddy process (pid {})", pid),
-            );
+            eprintln!("Stopped {} process (pid {})", label, pid);
         }
     }
 
     if stopped > 0 {
-        append_log_line(
-            &log_path,
-            &format!("Cleaned up {} stale Caddy process(es)", stopped),
-        );
-        thread::sleep(std::time::Duration::from_millis(500));
-        let _ = wait_for_port_release(port, std::time::Duration::from_secs(5));
+        thread::sleep(settle);
     }
 
-    Ok(())
+    Ok(stopped)
 }
 
-/// Force stop all Caddy processes (used when stopping the service).
-/// Ensures no Caddy processes are left running even if the child handle
-/// was already lost (e.g. after a crash).
 pub(super) fn force_stop_all_caddy_processes(caddy_executable: &Path) -> Result<usize, String> {
-    let pids = find_all_caddy_processes(caddy_executable)?;
-
-    if pids.is_empty() {
-        return Ok(0);
-    }
-
-    eprintln!("Force stopping {} Caddy process(es)...", pids.len());
-
-    let mut stopped = 0;
-    for pid in pids {
-        if terminate_process_by_pid(pid).is_ok() {
-            stopped += 1;
-            eprintln!("Stopped Caddy process (pid {})", pid);
-        }
-    }
-
-    if stopped > 0 {
-        thread::sleep(std::time::Duration::from_millis(500));
-    }
-
-    Ok(stopped)
+    force_stop_all_processes(caddy_executable, "Caddy", CADDY_STOP_SETTLE)
 }
 
-// ---------------------------------------------------------------------------
-
-/// Cleanup duplicate MySQL processes automatically
-/// This prevents the "exit code 1" error caused by multiple MySQL instances
-pub(super) fn cleanup_duplicate_mysql_processes(
-    paths: &RuntimePaths,
-    port: u16,
-) -> Result<(), String> {
-    let log_path = paths.logs_dir.join("mysql.log");
-
-    // ค้นหา MySQL processes ที่เป็นของ CHAMP เท่านั้น (ตรวจ full path ไม่ใช่แค่ชื่อไฟล์)
-    // เพื่อไม่ให้ไปฆ่า MySQL/MariaDB ที่ผู้ใช้ติดตั้งเองบนเครื่อง (R-03)
-    let mysql_pids = find_process_ids_by_executable(&paths.mysql)?;
-
-    if mysql_pids.is_empty() {
-        return Ok(());
-    }
-
-    // ถ้ามีมากกว่า 1 process แสดงว่ามีซ้ำซ้อน
-    if mysql_pids.len() > 1 {
-        append_log_line(
-            &log_path,
-            &format!(
-                "WARNING: Found {} MySQL processes running. Cleaning up duplicates...",
-                mysql_pids.len()
-            ),
-        );
-
-        // หยุดทุก process
-        let mut stopped = 0;
-        for pid in &mysql_pids {
-            if terminate_process_by_pid(*pid).is_ok() {
-                stopped += 1;
-                append_log_line(
-                    &log_path,
-                    &format!("Stopped duplicate MySQL process (pid {})", pid),
-                );
-            }
-        }
-
-        if stopped > 0 {
-            append_log_line(
-                &log_path,
-                &format!("Cleaned up {} duplicate MySQL process(es)", stopped),
-            );
-
-            // รอให้ processes หยุดและ port ว่าง
-            thread::sleep(std::time::Duration::from_secs(2));
-            let _ = wait_for_port_release(port, std::time::Duration::from_secs(5));
-        }
-    } else if mysql_pids.len() == 1 {
-        // มี 1 process แต่อาจจะไม่ใช่ของเรา หรือ port ไม่ตรง
-        let pid = mysql_pids[0];
-
-        // ตรวจสอบว่า process นี้ใช้ port ที่เราต้องการหรือไม่
-        if !tcp_port_accepts(port) {
-            // Process มีอยู่แต่ไม่ได้ใช้ port ของเรา - อาจจะ crashed หรือ starting
-            if !process_exists(pid) {
-                append_log_line(
-                    &log_path,
-                    &format!("Found stale MySQL PID {} (process not running)", pid),
-                );
-            }
-        }
-    }
-
-    Ok(())
-}
-
-/// Force stop all MySQL processes (used when stopping service)
-/// This ensures no MySQL processes are left running
 pub(super) fn force_stop_all_mysql_processes(mysql_executable: &Path) -> Result<usize, String> {
-    // Only match processes that resolve to *our* mysqld binary (full-path
-    // verified), so a user's own MySQL/MariaDB install is never force-killed. (R-03)
-    let pids = find_process_ids_by_executable(mysql_executable)?;
-
-    if pids.is_empty() {
-        return Ok(0);
-    }
-
-    eprintln!("Force stopping {} MySQL process(es)...", pids.len());
-
-    let mut stopped = 0;
-    for pid in pids {
-        if terminate_process_by_pid(pid).is_ok() {
-            stopped += 1;
-            eprintln!("Stopped MySQL process (pid {})", pid);
-        }
-    }
-
-    // รอให้ processes หยุดจริงๆ
-    if stopped > 0 {
-        thread::sleep(std::time::Duration::from_secs(2));
-    }
-
-    Ok(stopped)
+    force_stop_all_processes(mysql_executable, "MySQL", MYSQL_STOP_SETTLE)
 }

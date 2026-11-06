@@ -1,0 +1,66 @@
+/* ---------- Icons and update badges ---------- */
+
+.service-icon {
+  position: relative;
+  display: inline-grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  flex: 0 0 auto;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius);
+  background: var(--bg-card-secondary);
+  color: var(--color-primary);
+}
+
+.service-icon .service-led {
+  position: absolute;
+  right: -3px;
+  bottom: -3px;
+  border: 2px solid var(--bg-card);
+  box-sizing: content-box;
+}
+
+.path-node .node-name svg {
+  color: var(--text-secondary);
+}
+
+.path-node.running .node-name svg {
+  color: var(--color-primary);
+}
+
+.settings-section > button,
+.settings-section > .btn-secondary {
+  align-self: flex-start;
+}
+
+.php-update-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 2px;
+  color: var(--color-primary) !important;
+  font-weight: 600;
+}
+
+.version-update {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border: 1px solid color-mix(in srgb, var(--color-primary) 40%, var(--border-color));
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--color-primary) 8%, transparent);
+  font-size: 12.5px;
+}
+
+.version-update > svg {
+  flex: 0 0 auto;
+  color: var(--color-primary);
+}
+
+.version-update span {
+  flex: 1;
+  font-family: var(--font-mono);
+  font-size: 12px;
+}

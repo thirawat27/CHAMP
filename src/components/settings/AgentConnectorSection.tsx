@@ -1,8 +1,10 @@
 import { Bot, Check, Copy, KeyRound, PlugZap } from "lucide-react";
 import { useState } from "react";
 import { useAgentConnector } from "../../hooks/useAgentConnector";
-import { useTranslation } from "../../stores/languageStore";
+import { useTranslation } from "../../stores/preferencesStore";
+import { COPIED_FEEDBACK_MS } from "../../constants";
 import { AudioManager } from "../../utils/audioManager";
+import { SoundButton } from "../SoundButton";
 import {
   AGENT_CLIENT_IDS,
   AgentClientId,
@@ -19,17 +21,28 @@ export function AgentConnectorSection() {
   const [client, setClient] = useState<AgentClientId>("claude-code");
   const [copied, setCopied] = useState(false);
 
-  if (!status) return null;
+  if (!status) {
+    return error ? (
+      <div className="settings-section">
+        <h3>
+          <Bot size={16} /> {t.agentConnectorTitle}
+        </h3>
+        <div className="error-box">
+          <p className="error-box-text">{error}</p>
+        </div>
+      </div>
+    ) : null;
+  }
 
   const token = status.token ?? "";
   const setup = agentClientSetup(client, status.url, token);
 
-  const copy = async () => {
+  const copy = async (text: string) => {
     try {
-      await navigator.clipboard.writeText(setup.snippet);
+      await navigator.clipboard.writeText(text);
       AudioManager.playClick();
       setCopied(true);
-      window.setTimeout(() => setCopied(false), 1600);
+      window.setTimeout(() => setCopied(false), COPIED_FEEDBACK_MS);
     } catch (copyError) {
       console.error("Failed to copy agent config:", copyError);
     }
@@ -85,20 +98,18 @@ export function AgentConnectorSection() {
           <p className="agent-step">{t.agentConnectorStep1}</p>
           <div className="agent-clients" role="tablist">
             {AGENT_CLIENT_IDS.map((id) => (
-              <button
+              <SoundButton
                 key={id}
-                type="button"
                 role="tab"
                 aria-selected={client === id}
                 className={`agent-client ${client === id ? "selected" : ""}`}
                 onClick={() => {
-                  AudioManager.playClick();
                   setClient(id);
                   setCopied(false);
                 }}
               >
                 {agentClientSetup(id, status.url, token).label}
-              </button>
+              </SoundButton>
             ))}
           </div>
 
@@ -112,7 +123,7 @@ export function AgentConnectorSection() {
               <button
                 type="button"
                 className="btn-secondary compact"
-                onClick={copy}
+                onClick={() => copy(setup.snippet)}
                 disabled={!token}
               >
                 {copied ? <Check size={14} /> : <Copy size={14} />}
@@ -124,21 +135,30 @@ export function AgentConnectorSection() {
           {client === "claude-desktop" && (
             <p className="settings-muted">{t.agentConnectorDesktopHint}</p>
           )}
+          {setup.promptsForToken && (
+            <div className="settings-inline-actions">
+              <span className="settings-muted">{t.agentConnectorPromptHint}</span>
+              <button
+                type="button"
+                className="btn-secondary compact"
+                onClick={() => copy(token)}
+                disabled={!token}
+              >
+                <KeyRound size={14} /> {t.agentConnectorCopyToken}
+              </button>
+            </div>
+          )}
           <p className="settings-muted">{t.agentConnectorRestartHint}</p>
 
           <p className="agent-step">{t.agentConnectorStep3}</p>
           <div className="settings-inline-actions">
-            <button
-              type="button"
+            <SoundButton
               className="btn-secondary compact"
-              onClick={() => {
-                AudioManager.playClick();
-                test();
-              }}
+              onClick={test}
               disabled={busy || testing || !status.running}
             >
               <PlugZap size={14} /> {testing ? t.agentConnectorTesting : t.agentConnectorTest}
-            </button>
+            </SoundButton>
           </div>
           {testResult &&
             (testResult.ok ? (
@@ -200,17 +220,13 @@ export function AgentConnectorSection() {
             </div>
             <div className="settings-inline-actions">
               <span className="settings-muted">{t.agentConnectorTokenHint}</span>
-              <button
-                type="button"
+              <SoundButton
                 className="btn-secondary compact"
-                onClick={() => {
-                  AudioManager.playClick();
-                  regenerateToken();
-                }}
+                onClick={regenerateToken}
                 disabled={busy}
               >
                 <KeyRound size={14} /> {t.agentConnectorRegenerate}
-              </button>
+              </SoundButton>
             </div>
           </details>
         </>

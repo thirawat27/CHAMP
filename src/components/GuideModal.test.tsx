@@ -2,11 +2,11 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, fireEvent } from "@testing-library/react";
 import { GuideModal } from "./GuideModal";
 import { GUIDE_SECTIONS } from "../manual/content";
-import { useLanguageStore } from "../stores/languageStore";
+import { usePreferencesStore } from "../stores/preferencesStore";
 
 describe("GuideModal", () => {
   beforeEach(() => {
-    useLanguageStore.getState().setLanguage("en");
+    usePreferencesStore.getState().setLanguage("en");
     Element.prototype.scrollIntoView = vi.fn();
   });
 

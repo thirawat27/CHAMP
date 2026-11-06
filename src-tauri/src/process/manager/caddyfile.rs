@@ -1,8 +1,53 @@
 //! Caddyfile generation.
-//!
-//! Moved verbatim from the former monolithic `manager.rs` (code-health M-01).
 
-use super::*;
+use super::htaccess::{
+    append_htaccess_deny_rules, append_htaccess_error_rules, append_htaccess_no_browse_rules,
+    append_htaccess_route_rules, discover_htaccess_rules, HtaccessCompatibilityRule,
+};
+use crate::runtime::locator::RuntimePaths;
+use std::fs::File;
+use std::io::Write;
+use std::path::{Path, PathBuf};
+
+/// Every URL path that reaches the database tools.
+pub(super) const DATABASE_TOOL_PATHS: &str = "/adminer /adminer/* /phpmyadmin /phpmyadmin/*";
+
+/// Rules that refuse a request outright. Caddy runs `handle` blocks in the order
+/// they are written and before `handle_path`, `respond`, and `file_server`, so
+/// these must be emitted ahead of every other `handle`.
+fn append_access_gates(content: &mut String, htaccess_rules: &[HtaccessCompatibilityRule]) {
+    // The database tools log in without a real password. A Host other than this
+    // machine means HTTPS Preview or a DNS-rebinding page; X-Forwarded-For means
+    // the request came through a proxy such as ngrok.
+    content.push_str("    # Database tools are reachable from this machine only\n");
+    content.push_str("    @dbToolsNotLocal {\n");
+    content.push_str(&format!("        path {}\n", DATABASE_TOOL_PATHS));
+    content.push_str("        not host localhost 127.0.0.1 *.localhost\n");
+    content.push_str("    }\n");
+    content.push_str("    handle @dbToolsNotLocal {\n");
+    content.push_str("        respond 403\n");
+    content.push_str("    }\n");
+    content.push_str("    @dbToolsForwarded {\n");
+    content.push_str(&format!("        path {}\n", DATABASE_TOOL_PATHS));
+    content.push_str("        header X-Forwarded-For *\n");
+    content.push_str("    }\n");
+    content.push_str("    handle @dbToolsForwarded {\n");
+    content.push_str("        respond 403\n");
+    content.push_str("    }\n\n");
+
+    // Matching any "/." path segment also covers .htaccess, .htpasswd, .env,
+    // .git, and Windows trailing-dot spellings, for PHP as well as static files.
+    content.push_str("    # Never serve dotfiles (.env, .git, .htaccess, ...)\n");
+    content.push_str("    @dotfiles {\n");
+    content.push_str("        path */.*\n");
+    content.push_str("        not path */.well-known/*\n");
+    content.push_str("    }\n");
+    content.push_str("    handle @dotfiles {\n");
+    content.push_str("        respond 404\n");
+    content.push_str("    }\n\n");
+
+    append_htaccess_deny_rules(content, htaccess_rules);
+}
 
 /// Generate a basic Caddyfile
 pub(super) fn generate_caddyfile(
@@ -41,6 +86,9 @@ pub(super) fn generate_caddyfile(
     content.push_str("    admin off\n");
     content.push_str("}\n\n");
     content.push_str(&format!(":{} {{\n", port));
+    // Local development only. HTTPS Preview reaches this through 127.0.0.1 too.
+    content.push_str("    bind 127.0.0.1\n\n");
+    append_access_gates(&mut content, &htaccess_rules);
     content.push_str("    # Database tools - must come before project root directives\n");
     content.push_str("    redir /adminer /adminer/\n");
     content.push_str("    redir /phpmyadmin /phpmyadmin/\n");
@@ -61,12 +109,6 @@ pub(super) fn generate_caddyfile(
     content.push('\n');
     content.push_str("    # Root directory for serving files (default project root)\n");
     content.push_str(&format!("    root * \"{}\"\n", projects));
-    content.push('\n');
-    content.push_str("    # Apache .htaccess compatibility: never serve control files\n");
-    content.push_str("    @apacheControlFiles {\n");
-    content.push_str("        path .htaccess .htpasswd */.htaccess */.htpasswd\n");
-    content.push_str("    }\n");
-    content.push_str("    respond @apacheControlFiles 404\n");
     content.push('\n');
     append_htaccess_route_rules(&mut content, &htaccess_rules, php_port);
     content.push_str("    # Apache .htaccess compatibility: extensionless PHP rewrites\n");

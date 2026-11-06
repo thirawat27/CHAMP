@@ -23,8 +23,8 @@ tauri-plugin-opener = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 dirs = "7"
-reqwest = { version = "0.13", default-features = false, features = ["json", "stream", "rustls"] }
-tokio = { version = "1", features = ["rt-multi-thread", "macros", "fs", "net", "process", "sync", "time"] }
+reqwest = { version = "0.13", default-features = false, features = ["json", "rustls"] }
+tokio = { version = "1", features = ["rt", "macros", "fs", "io-util", "net", "sync", "time"] }
 tokio-util = "0.7"
 sha2 = "0.11"
 hex = "0.4"

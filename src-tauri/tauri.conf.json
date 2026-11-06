@@ -50,7 +50,7 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ],
-    "resources": ["runtime-config.json", "runtime-config.schema.json"],
+    "resources": ["runtime-config.json"],
     "macOS": {
       "entitlements": "entitlements.plist",
       "hardenedRuntime": true,

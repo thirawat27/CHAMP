@@ -115,7 +115,7 @@ fn check_libaio() -> Dependency {
     Dependency {
         name: "libaio".to_string(),
         installed,
-        description: "Linux AIO library - Required by MySQL/MariaDB".to_string(),
+        description: "Linux AIO library - Required by MySQL".to_string(),
         install_commands,
     }
 }

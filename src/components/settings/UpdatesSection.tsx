@@ -1,8 +1,9 @@
 import { ArrowUpCircle, CheckCircle2, LoaderCircle, RefreshCw } from "lucide-react";
 import packageInfo from "../../../package.json";
-import { useTranslation } from "../../stores/languageStore";
+import { useTranslation } from "../../stores/preferencesStore";
 import { useUpdateStore } from "../../stores/updateStore";
 import { AudioManager } from "../../utils/audioManager";
+import { SoundButton } from "../SoundButton";
 
 interface UpdatesSectionProps {
   autoCheck: boolean;
@@ -42,15 +43,7 @@ export function UpdatesSection({ autoCheck, onAutoCheckChange }: UpdatesSectionP
           </p>
         </div>
         {phase === "available" || installing ? (
-          <button
-            type="button"
-            className="btn-primary compact"
-            onClick={() => {
-              AudioManager.playClick();
-              install();
-            }}
-            disabled={installing}
-          >
+          <SoundButton className="btn-primary compact" onClick={install} disabled={installing}>
             {installing ? (
               <>
                 <LoaderCircle size={14} className="spin-icon" />
@@ -59,15 +52,11 @@ export function UpdatesSection({ autoCheck, onAutoCheckChange }: UpdatesSectionP
             ) : (
               t.updateInstall
             )}
-          </button>
+          </SoundButton>
         ) : (
-          <button
-            type="button"
+          <SoundButton
             className="btn-secondary compact"
-            onClick={() => {
-              AudioManager.playClick();
-              checkNow();
-            }}
+            onClick={() => checkNow()}
             disabled={checking}
           >
             {checking ? (
@@ -78,7 +67,7 @@ export function UpdatesSection({ autoCheck, onAutoCheckChange }: UpdatesSectionP
               <RefreshCw size={14} />
             )}
             {checking ? t.updateChecking : t.updateCheck}
-          </button>
+          </SoundButton>
         )}
       </div>
       {update?.body && phase === "available" && (

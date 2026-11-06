@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useState } from "react";
-import { DashboardNotice } from "../components/dashboard/types";
+import { TOAST_DISMISS_MS } from "../constants";
+import { DashboardNotice } from "../types/dashboard";
 
-export interface ToastController {
+interface ToastController {
   notice: DashboardNotice | null;
   notify: (notice: DashboardNotice) => void;
   dismiss: () => void;
@@ -10,8 +11,8 @@ export interface ToastController {
 /**
  * Owns the single toast notice state shared across the dashboard.
  *
- * Only one notice is visible at a time. Non-`info` notices auto-dismiss after
- * 4.2s; `info` (pending) notices persist until replaced or dismissed.
+ * Only one notice is visible at a time. Non-`info` notices auto-dismiss;
+ * `info` (pending) notices persist until replaced or dismissed.
  */
 export function useToast(): ToastController {
   const [notice, setNotice] = useState<DashboardNotice | null>(null);
@@ -29,7 +30,7 @@ export function useToast(): ToastController {
 
     const timeout = window.setTimeout(() => {
       setNotice(null);
-    }, 4200);
+    }, TOAST_DISMISS_MS);
 
     return () => window.clearTimeout(timeout);
   }, [notice]);

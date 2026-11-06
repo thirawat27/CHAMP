@@ -12,10 +12,14 @@
  * - Pentatonic scale (C, D, E, G, A) to ensure all tones sound harmonious and "Zen"
  */
 
-import { useLanguageStore } from "../stores/languageStore";
+import { usePreferencesStore } from "../stores/preferencesStore";
 
 // Audio context singleton
 let audioContext: AudioContext | null = null;
+let suspendTimer: ReturnType<typeof setTimeout> | undefined;
+
+/** Longer than the longest note, so the audio thread sleeps while CHAMP sits in the tray. */
+const SUSPEND_AFTER_IDLE_MS = 5000;
 
 function getAudioContext(): AudioContext | null {
   if (typeof window === "undefined") return null;
@@ -33,11 +37,16 @@ function getAudioContext(): AudioContext | null {
   if (audioContext.state === "suspended") {
     audioContext.resume().catch(console.error);
   }
-  return audioContext;
+  const context = audioContext;
+  clearTimeout(suspendTimer);
+  suspendTimer = setTimeout(() => {
+    context.suspend().catch(console.error);
+  }, SUSPEND_AFTER_IDLE_MS);
+  return context;
 }
 
 function isSoundEnabled(): boolean {
-  return useLanguageStore.getState().soundEnabled;
+  return usePreferencesStore.getState().soundEnabled;
 }
 
 // ---------------------------------------------------------------------------
@@ -91,51 +100,11 @@ function playNote(
 // ---------------------------------------------------------------------------
 
 /**
- * START – uplifting crystalline phrase
- * C5 → E5 → A5  (523 / 659 / 880 Hz)
- * Feels like: "system online", modern, airy
- */
-export function playStartSound(): void {
-  if (!isSoundEnabled()) return;
-  const ctx = getAudioContext();
-  if (!ctx) return;
-  const now = ctx.currentTime;
-
-  const phrase = [
-    { freq: 523.25, t: 0.0 }, // C5
-    { freq: 659.25, t: 0.15 }, // E5
-    { freq: 880.0, t: 0.3 }, // A5
-  ];
-
-  phrase.forEach(({ freq, t }) => playNote(ctx, freq, now + t, 0.05, 1.2, 0.18));
-}
-
-/**
- * RESTART – gentle cyclical refresh
- * E5 → C5 → E5  (659 / 523 / 659 Hz)
- * Feels like: "recalibrating", soft reset
- */
-export function playRestartSound(): void {
-  if (!isSoundEnabled()) return;
-  const ctx = getAudioContext();
-  if (!ctx) return;
-  const now = ctx.currentTime;
-
-  const phrase = [
-    { freq: 659.25, t: 0.0 }, // E5
-    { freq: 523.25, t: 0.15 }, // C5
-    { freq: 659.25, t: 0.3 }, // E5
-  ];
-
-  phrase.forEach(({ freq, t }) => playNote(ctx, freq, now + t, 0.05, 1.0, 0.16));
-}
-
-/**
  * STOP – polite power down
  * A4 → E4 → C4  (440 / 329 / 261 Hz)
  * Feels like: "safely disengaged", standby
  */
-export function playStopSound(): void {
+function playStopSound(): void {
   if (!isSoundEnabled()) return;
   const ctx = getAudioContext();
   if (!ctx) return;
@@ -155,7 +124,7 @@ export function playStopSound(): void {
  * C4 → E4 → G4 → C5  (261 / 329 / 392 / 523 Hz)
  * Feels like: "action successful", positive reinforcement
  */
-export function playCompleteSound(): void {
+function playCompleteSound(): void {
   if (!isSoundEnabled()) return;
   const ctx = getAudioContext();
   if (!ctx) return;
@@ -176,7 +145,7 @@ export function playCompleteSound(): void {
  * E5 → D#5  (659 / 622 Hz)
  * Feels like: "attention needed", polite alert
  */
-export function playErrorSound(): void {
+function playErrorSound(): void {
   if (!isSoundEnabled()) return;
   const ctx = getAudioContext();
   if (!ctx) return;
@@ -197,7 +166,7 @@ export function playErrorSound(): void {
 /**
  * CLICK – clean short tap
  */
-export function playClickSound(): void {
+function playClickSound(): void {
   if (!isSoundEnabled()) return;
   const ctx = getAudioContext();
   if (!ctx) return;
@@ -207,46 +176,13 @@ export function playClickSound(): void {
 /**
  * TOGGLE – two-note quick confirmation
  */
-export function playToggleSound(): void {
+function playToggleSound(): void {
   if (!isSoundEnabled()) return;
   const ctx = getAudioContext();
   if (!ctx) return;
   const now = ctx.currentTime;
   playNote(ctx, 880.0, now, 0.02, 0.15, 0.1); // A5
   playNote(ctx, 659.25, now + 0.1, 0.02, 0.2, 0.08); // E5
-}
-
-/**
- * HOVER – silent (no sound on hover per UX decision)
- */
-export function playHoverSound(): void {
-  // intentionally silent
-}
-
-// ---------------------------------------------------------------------------
-// Loading / progress sounds
-// ---------------------------------------------------------------------------
-
-/**
- * LOADING PULSE – gentle recurring chime
- */
-export function playLoadingPulseSound(): void {
-  if (!isSoundEnabled()) return;
-  const ctx = getAudioContext();
-  if (!ctx) return;
-  playNote(ctx, 329.63, ctx.currentTime, 0.05, 0.6, 0.1); // E4
-}
-
-/**
- * LOADING STREAM – very subtle sweeping confirmation tone
- */
-export function playLoadingStreamSound(progress: number): void {
-  if (!isSoundEnabled()) return;
-  const ctx = getAudioContext();
-  if (!ctx) return;
-  // G4 (392 Hz) rising gently to C5 (523 Hz)
-  const freq = 392.0 + (progress / 100) * (523.25 - 392.0);
-  playNote(ctx, freq, ctx.currentTime, 0.03, 0.15, 0.06);
 }
 
 // ---------------------------------------------------------------------------
@@ -258,40 +194,22 @@ export function playLoadingStreamSound(progress: number): void {
  *
  * tone    action   sound
  * ------  -------  -----
- * info    start    playStartSound  (pending start)
- * info    restart  playRestartSound
- * info    stop     (silent – don't interrupt)
  * success start    playCompleteSound
  * success restart  playCompleteSound
  * success stop     playStopSound
  * error   *        playErrorSound
  */
-export function playNotificationSound(
-  tone: "info" | "success" | "error",
+function playNotificationSound(
+  tone: "success" | "error",
   action?: "start" | "restart" | "stop"
 ): void {
   if (tone === "error") {
     playErrorSound();
-    return;
+  } else if (action === "stop") {
+    playStopSound();
+  } else {
+    playCompleteSound();
   }
-  if (tone === "success") {
-    if (action === "stop") {
-      playStopSound();
-    } else {
-      playCompleteSound();
-    }
-    return;
-  }
-  // info
-  if (action === "start") {
-    playStartSound();
-    return;
-  }
-  if (action === "restart") {
-    playRestartSound();
-    return;
-  }
-  // info + stop → silent (user already heard the stop click)
 }
 
 // ---------------------------------------------------------------------------
@@ -299,36 +217,12 @@ export function playNotificationSound(
 // ---------------------------------------------------------------------------
 
 export const AudioManager = {
-  // Service lifecycle
-  playStart: playStartSound,
-  playRestart: playRestartSound,
-  playStop: playStopSound,
-  playComplete: playCompleteSound,
-
-  // Loading / wizard
-  playLoadingPulse: playLoadingPulseSound,
-  playLoadingStream: playLoadingStreamSound,
-
-  // UI interactions
   playClick: playClickSound,
   playToggle: playToggleSound,
-  playHover: playHoverSound,
-
-  // Notification banner
   playNotification: playNotificationSound,
 
-  // Legacy aliases
-  playSuccess: playCompleteSound,
-  playError: playErrorSound,
-
-  isSupported: () =>
-    typeof window !== "undefined" &&
-    !!(
-      window.AudioContext ||
-      (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext
-    ),
-
-  initialize: getAudioContext,
+  // Browsers only allow audio after a user gesture, so unlock it on the first click.
+  initialize: () => {
+    if (isSoundEnabled()) getAudioContext();
+  },
 };
-
-export default AudioManager;

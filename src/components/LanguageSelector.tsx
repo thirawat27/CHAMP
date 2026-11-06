@@ -3,7 +3,7 @@
  */
 
 import { Language } from "../i18n/translations";
-import { useLanguageStore } from "../stores/languageStore";
+import { usePreferencesStore } from "../stores/preferencesStore";
 import { AudioManager } from "../utils/audioManager";
 
 const LANGUAGES: { lang: Language; label: string }[] = [
@@ -12,7 +12,7 @@ const LANGUAGES: { lang: Language; label: string }[] = [
 ];
 
 export function LanguageSelector() {
-  const { language, setLanguage } = useLanguageStore();
+  const { language, setLanguage } = usePreferencesStore();
 
   return (
     <div
@@ -39,5 +39,3 @@ export function LanguageSelector() {
     </div>
   );
 }
-
-export default LanguageSelector;

@@ -11,13 +11,17 @@ import {
   Stethoscope,
   X,
 } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
-import { formatModelSize, useLogDoctorModel } from "../hooks/useLogDoctorModel";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { useEscape } from "../hooks/useEscape";
+import { useLogDoctorModel } from "../hooks/useLogDoctorModel";
 import { Translations } from "../i18n/translations";
-import { useTranslation } from "../stores/languageStore";
+import { useTranslation } from "../stores/preferencesStore";
 import { AudioManager } from "../utils/audioManager";
+import { formatModelSize } from "../utils/format";
 import { withInlineCode } from "../utils/inlineCode";
+import { SoundButton } from "./SoundButton";
 import {
+  ALL_SERVICE_TYPES,
   AppPaths,
   Diagnosis,
   DiagnosisMatch,
@@ -27,13 +31,6 @@ import {
   ServiceState,
   ServiceType,
 } from "../types/services";
-
-const DOCTOR_SERVICES = [
-  ServiceType.Caddy,
-  ServiceType.PhpFpm,
-  ServiceType.MySQL,
-  ServiceType.PostgreSQL,
-] as const;
 
 interface LogDoctorModalProps {
   initialService: ServiceType;
@@ -91,16 +88,25 @@ export function LogDoctorModal({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  // Only the newest request may report: a slow answer for the previous tab must
+  // not appear under the current one.
+  const latestRequest = useRef(0);
+
   const runDiagnosis = useCallback(async (target: ServiceType) => {
+    latestRequest.current += 1;
+    const request = latestRequest.current;
     setLoading(true);
     setError(null);
     try {
-      setDiagnosis(await invoke<Diagnosis>("diagnose_service", { service: target }));
+      const result = await invoke<Diagnosis>("diagnose_service", { service: target });
+      if (request === latestRequest.current) setDiagnosis(result);
     } catch (diagnoseError) {
-      setDiagnosis(null);
-      setError(String(diagnoseError));
+      if (request === latestRequest.current) {
+        setDiagnosis(null);
+        setError(String(diagnoseError));
+      }
     } finally {
-      setLoading(false);
+      if (request === latestRequest.current) setLoading(false);
     }
   }, []);
 
@@ -108,16 +114,7 @@ export function LogDoctorModal({
     runDiagnosis(service);
   }, [runDiagnosis, service]);
 
-  useEffect(() => {
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.code === "Escape") {
-        event.stopPropagation();
-        onClose();
-      }
-    };
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [onClose]);
+  useEscape(onClose);
 
   const openFolder = async (path?: string) => {
     if (!path) return;
@@ -192,23 +189,19 @@ export function LogDoctorModal({
 
         <div className="modal-body log-doctor-body">
           <div className="log-doctor-tabs" role="tablist">
-            {DOCTOR_SERVICES.map((item) => (
-              <button
+            {ALL_SERVICE_TYPES.map((item) => (
+              <SoundButton
                 key={item}
-                type="button"
                 role="tab"
                 aria-selected={item === service}
                 className={`log-doctor-tab ${item === service ? "selected" : ""}`}
-                onClick={() => {
-                  AudioManager.playClick();
-                  setService(item);
-                }}
+                onClick={() => setService(item)}
               >
                 {services[item]?.state === ServiceState.Error && (
                   <span className="log-doctor-tab-dot" aria-hidden="true" />
                 )}
                 {SERVICE_DISPLAY_NAMES[item]}
-              </button>
+              </SoundButton>
             ))}
           </div>
 
@@ -312,17 +305,13 @@ export function LogDoctorModal({
             >
               <FolderOpen size={15} /> {t.openLogsFolder}
             </button>
-            <button
-              type="button"
+            <SoundButton
               className="btn-secondary"
-              onClick={() => {
-                AudioManager.playClick();
-                runDiagnosis(service);
-              }}
+              onClick={() => runDiagnosis(service)}
               disabled={loading}
             >
               <RefreshCw size={15} /> {t.logDoctorRecheck}
-            </button>
+            </SoundButton>
           </footer>
         </div>
       </section>

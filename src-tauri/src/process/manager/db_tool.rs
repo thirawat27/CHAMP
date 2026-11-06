@@ -1,8 +1,8 @@
 //! Database admin tool provisioning (phpMyAdmin/Adminer) helpers.
-//!
-//! Moved verbatim from the former monolithic `manager.rs` (code-health M-01).
 
-use super::*;
+use crate::runtime::locator::RuntimePaths;
+use std::fs;
+use std::path::{Path, PathBuf};
 
 pub(super) fn ensure_database_tool(
     paths: &RuntimePaths,
@@ -12,7 +12,7 @@ pub(super) fn ensure_database_tool(
     database_tool_id: &str,
     postgresql: bool,
 ) -> Result<(), String> {
-    let is_adminer = database_tool_id.starts_with("adminer");
+    let is_adminer = crate::runtime::packages::is_adminer_id(database_tool_id);
     // The generated login wrapper depends on the engine and its port, so it is
     // rewritten on every start, like the phpMyAdmin config.
     let write_tool_config = || -> Result<(), String> {
@@ -78,12 +78,12 @@ pub(super) fn ensure_database_tool(
         return Ok(());
     }
 
-    let tool_name = if database_tool_id.starts_with("adminer") {
+    let tool_name = if crate::runtime::packages::is_adminer_id(database_tool_id) {
         "Adminer"
     } else {
         "phpMyAdmin"
     };
-    let tool_path = if database_tool_id.starts_with("adminer") {
+    let tool_path = if crate::runtime::packages::is_adminer_id(database_tool_id) {
         "/adminer"
     } else {
         "/phpmyadmin"
@@ -155,7 +155,7 @@ pub(super) fn find_database_tool_source(
             continue;
         }
 
-        let direct_candidates = if database_tool_id.starts_with("adminer") {
+        let direct_candidates = if crate::runtime::packages::is_adminer_id(database_tool_id) {
             vec![
                 root.join("adminer").join("index.php"),
                 root.join("adminer.php"),
@@ -179,7 +179,7 @@ pub(super) fn find_database_tool_source(
                     .unwrap_or_default()
                     .to_ascii_lowercase();
 
-                if database_tool_id.starts_with("adminer")
+                if crate::runtime::packages::is_adminer_id(database_tool_id)
                     && path.is_file()
                     && name.starts_with("adminer")
                     && name.ends_with(".php")
@@ -187,7 +187,7 @@ pub(super) fn find_database_tool_source(
                     return Some(path);
                 }
 
-                if database_tool_id.starts_with("phpmyadmin")
+                if crate::runtime::packages::is_phpmyadmin_id(database_tool_id)
                     && path.is_dir()
                     && name.starts_with("phpmyadmin")
                     && path.join("index.php").exists()
@@ -241,42 +241,29 @@ pub(super) fn copy_dir_contents(source: &PathBuf, target: &PathBuf) -> Result<()
 /// Length of the phpMyAdmin blowfish secret. phpMyAdmin expects a 32-byte key.
 pub(super) const BLOWFISH_SECRET_LEN: usize = 32;
 
-/// Generate `len` random characters drawn from [A-Za-z0-9].
+/// Generate `len` cryptographically random characters drawn from [A-Za-z0-9].
 ///
-/// This does not use a dedicated RNG crate (none is a direct dependency of this
-/// crate). Instead it derives entropy from the current high-resolution time,
-/// the process id, and the address of a stack local, then expands that seed
-/// with a small xorshift PRNG. This is not cryptographically strong, but it is
-/// unique per install/run and — crucially — never a shared compile-time
-/// constant. The charset excludes the single quote so the value is always safe
-/// to embed in a PHP single-quoted string literal.
-pub(super) fn random_alphanumeric(len: usize) -> String {
+/// The charset excludes the single quote so the value is always safe to embed
+/// in a PHP single-quoted string literal.
+pub(super) fn random_alphanumeric(len: usize) -> Result<String, String> {
     const CHARSET: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
-
-    let stack_marker = 0u8;
-    let stack_addr = (&stack_marker as *const u8) as u64;
-    let nanos = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_nanos() as u64)
-        .unwrap_or(0);
-
-    // Seed the PRNG from time + pid + stack address. Force a non-zero seed so
-    // the xorshift below cannot get stuck at zero.
-    let mut state = nanos ^ ((std::process::id() as u64) << 32) ^ stack_addr;
-    if state == 0 {
-        state = 0x9E37_79B9_7F4A_7C15;
-    }
+    // Bytes at or above the largest multiple of the charset size are rejected,
+    // so every character stays equally likely.
+    const REJECT_FROM: u8 = (256 / CHARSET.len() * CHARSET.len()) as u8;
 
     let mut out = String::with_capacity(len);
-    for _ in 0..len {
-        // xorshift64
-        state ^= state << 13;
-        state ^= state >> 7;
-        state ^= state << 17;
-        let idx = (state % CHARSET.len() as u64) as usize;
-        out.push(CHARSET[idx] as char);
+    let mut bytes = [0_u8; 64];
+    while out.len() < len {
+        getrandom::fill(&mut bytes).map_err(|e| format!("Failed to generate secret: {}", e))?;
+        out.extend(
+            bytes
+                .iter()
+                .filter(|byte| **byte < REJECT_FROM)
+                .map(|byte| CHARSET[*byte as usize % CHARSET.len()] as char)
+                .take(len - out.len()),
+        );
     }
-    out
+    Ok(out)
 }
 
 /// Return the per-install phpMyAdmin blowfish secret, generating and persisting
@@ -285,10 +272,9 @@ pub(super) fn random_alphanumeric(len: usize) -> String {
 /// The secret is stored in the CHAMP config directory at
 /// `phpmyadmin-blowfish.secret`. If that file already holds exactly
 /// `BLOWFISH_SECRET_LEN` characters (after trimming) it is reused; otherwise a
-/// fresh random secret is generated and written back. On any IO error we fall
-/// back to a freshly generated in-memory secret — never to the old shared
-/// constant. (S-04)
-pub(super) fn champ_blowfish_secret() -> String {
+/// fresh random secret is generated and written back. If the file cannot be
+/// written, the secret still works for this run. (S-04)
+pub(super) fn champ_blowfish_secret() -> Result<String, String> {
     let config_dir = match crate::runtime::locator::get_app_data_paths() {
         Ok(paths) => paths.config_dir,
         Err(_) => return random_alphanumeric(BLOWFISH_SECRET_LEN),
@@ -299,18 +285,18 @@ pub(super) fn champ_blowfish_secret() -> String {
     if let Ok(existing) = fs::read_to_string(&secret_path) {
         let trimmed = existing.trim();
         if trimmed.len() == BLOWFISH_SECRET_LEN {
-            return trimmed.to_string();
+            return Ok(trimmed.to_string());
         }
     }
 
-    let secret = random_alphanumeric(BLOWFISH_SECRET_LEN);
+    let secret = random_alphanumeric(BLOWFISH_SECRET_LEN)?;
 
     // Best-effort persistence. If we can't write it, still return the freshly
     // generated secret so phpMyAdmin gets a non-constant key this run.
     let _ = fs::create_dir_all(&config_dir);
-    let _ = fs::write(&secret_path, &secret);
+    let _ = crate::fs_util::write_private(&secret_path, &secret);
 
-    secret
+    Ok(secret)
 }
 
 pub(super) fn write_phpmyadmin_config(
@@ -321,7 +307,7 @@ pub(super) fn write_phpmyadmin_config(
     // S-04: Use a per-install random secret instead of a shared hardcoded
     // constant. The charset is restricted to [A-Za-z0-9] so the value can never
     // contain a single quote that would break the PHP string literal below.
-    let blowfish_secret = champ_blowfish_secret();
+    let blowfish_secret = champ_blowfish_secret()?;
     let config = format!(
         r#"<?php
 $cfg['blowfish_secret'] = '{}';

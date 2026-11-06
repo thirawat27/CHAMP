@@ -1,8 +1,9 @@
 import { AlertTriangle, BookOpen, Lightbulb, Search, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { GUIDE_SECTIONS, GuideBlock, GuideSection, Localized } from "../manual/content";
+import { useEscape } from "../hooks/useEscape";
 import { Language } from "../i18n/translations";
-import { useTranslation } from "../stores/languageStore";
+import { useTranslation } from "../stores/preferencesStore";
 import { withInlineCode } from "../utils/inlineCode";
 
 interface GuideModalProps {
@@ -136,13 +137,7 @@ export function GuideModal({ onClose, initialSection }: GuideModalProps) {
     return GUIDE_SECTIONS.filter((section) => sectionText(section, language).includes(needle));
   }, [language, query]);
 
-  useEffect(() => {
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.code === "Escape") onClose();
-    };
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [onClose]);
+  useEscape(onClose);
 
   useEffect(() => {
     if (!initialSection) return;

@@ -5,7 +5,6 @@
 use crate::process::{ServiceMap, ServiceState, ServiceType};
 use crate::runtime::locator::locate_runtime_binaries;
 use serde_json::{json, Value};
-use std::path::{Path, PathBuf};
 use std::process::Command;
 
 const MYSQL_SYSTEM_DATABASES: [&str; 4] =
@@ -44,14 +43,6 @@ pub(super) fn validate_database_name(name: &str) -> Result<(), String> {
     }
 }
 
-fn engine_key(engine: ServiceType) -> &'static str {
-    if engine == ServiceType::PostgreSQL {
-        "postgresql"
-    } else {
-        "mysql"
-    }
-}
-
 /// Connection details for one database, including a Laravel-style `.env` block.
 pub(super) fn connection_info(engine: ServiceType, port: u16, database: Option<&str>) -> Value {
     let postgresql = engine == ServiceType::PostgreSQL;
@@ -59,7 +50,7 @@ pub(super) fn connection_info(engine: ServiceType, port: u16, database: Option<&
     let scheme = if postgresql { "postgresql" } else { "mysql" };
     let name = database.unwrap_or("<database>");
     json!({
-        "engine": engine_key(engine),
+        "engine": engine.key(),
         "host": "127.0.0.1",
         "port": port,
         "user": user,
@@ -71,18 +62,6 @@ pub(super) fn connection_info(engine: ServiceType, port: u16, database: Option<&
             if postgresql { "pgsql" } else { "mysql" }
         ),
     })
-}
-
-fn sibling_binary(server_binary: &Path, name: &str) -> PathBuf {
-    let file = if cfg!(target_os = "windows") {
-        format!("{name}.exe")
-    } else {
-        name.to_string()
-    };
-    server_binary
-        .parent()
-        .map(|dir| dir.join(&file))
-        .unwrap_or_else(|| PathBuf::from(file))
 }
 
 fn client_args(engine: ServiceType, port: u16, sql: &str) -> Vec<String> {
@@ -125,9 +104,9 @@ fn client_args(engine: ServiceType, port: u16, sql: &str) -> Vec<String> {
 fn run_sql(engine: ServiceType, port: u16, sql: &str) -> Result<String, String> {
     let binaries = locate_runtime_binaries()?;
     let client = if engine == ServiceType::PostgreSQL {
-        sibling_binary(&binaries.postgresql, "psql")
+        crate::runtime::locator::sibling_binary(&binaries.postgresql, "psql")
     } else {
-        sibling_binary(&binaries.mysql, "mysql")
+        crate::runtime::locator::sibling_binary(&binaries.mysql, "mysql")
     };
     if !client.exists() {
         return Err(format!(
@@ -141,11 +120,7 @@ fn run_sql(engine: ServiceType, port: u16, sql: &str) -> Result<String, String> 
     command
         .args(client_args(engine, port, sql))
         .env("PGCONNECT_TIMEOUT", "3");
-    #[cfg(target_os = "windows")]
-    {
-        use std::os::windows::process::CommandExt;
-        command.creation_flags(0x08000000);
-    }
+    crate::process::command::hide_console(&mut command);
     let output = command
         .output()
         .map_err(|e| format!("Failed to run {}: {}", client.display(), e))?;
@@ -162,7 +137,7 @@ fn run_sql(engine: ServiceType, port: u16, sql: &str) -> Result<String, String> 
 }
 
 /// User databases from client output (one name per line), system ones removed.
-pub(super) fn parse_database_list(engine: ServiceType, output: &str) -> Vec<String> {
+fn parse_database_list(engine: ServiceType, output: &str) -> Vec<String> {
     let system: &[&str] = if engine == ServiceType::PostgreSQL {
         &POSTGRESQL_SYSTEM_DATABASES
     } else {
@@ -189,7 +164,7 @@ pub(super) fn running_port(statuses: &ServiceMap, engine: ServiceType) -> Result
         Err(format!(
             "{name} is not running. Call start_service with service \"{key}\" first (or ask the user to start it in CHAMP).",
             name = engine.display_name(),
-            key = engine_key(engine)
+            key = engine.key()
         ))
     }
 }
@@ -205,7 +180,7 @@ fn list(engine: ServiceType, port: u16) -> Result<Vec<String>, String> {
 
 pub(super) fn list_databases(engine: ServiceType, port: u16) -> Result<Value, String> {
     Ok(json!({
-        "engine": engine_key(engine),
+        "engine": engine.key(),
         "databases": list(engine, port)?,
         "connection": connection_info(engine, port, None),
     }))
@@ -223,7 +198,7 @@ pub(super) fn create_database(engine: ServiceType, port: u16, name: &str) -> Res
         run_sql(engine, port, &sql)?;
     }
     Ok(json!({
-        "engine": engine_key(engine),
+        "engine": engine.key(),
         "database": name,
         "created": !existed,
         "message": if existed { "Database already existed; nothing changed." } else { "Database created." },

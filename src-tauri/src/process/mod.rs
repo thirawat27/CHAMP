@@ -1,5 +1,10 @@
+use crate::config::DEFAULT_PORTS;
+
+pub mod command;
 pub mod job;
 pub mod manager;
+pub mod runner;
+pub mod terminal;
 
 use serde::{Deserialize, Serialize};
 
@@ -17,10 +22,20 @@ pub enum ServiceType {
 impl ServiceType {
     pub fn default_port(&self) -> u16 {
         match self {
-            ServiceType::Caddy => 8080,
-            ServiceType::PhpFpm => 9000,
-            ServiceType::MySQL => 3306,
-            ServiceType::PostgreSQL => 5432,
+            ServiceType::Caddy => DEFAULT_PORTS.web,
+            ServiceType::PhpFpm => DEFAULT_PORTS.php,
+            ServiceType::MySQL => DEFAULT_PORTS.mysql,
+            ServiceType::PostgreSQL => DEFAULT_PORTS.postgresql,
+        }
+    }
+
+    /// The stable lowercase id: matches the serde name and the knowledge base.
+    pub fn key(&self) -> &'static str {
+        match self {
+            ServiceType::Caddy => "caddy",
+            ServiceType::PhpFpm => "php-fpm",
+            ServiceType::MySQL => "mysql",
+            ServiceType::PostgreSQL => "postgresql",
         }
     }
 
@@ -30,24 +45,6 @@ impl ServiceType {
             ServiceType::PhpFpm => "PHP-FPM",
             ServiceType::MySQL => "MySQL",
             ServiceType::PostgreSQL => "PostgreSQL",
-        }
-    }
-
-    pub fn description(&self) -> &'static str {
-        match self {
-            ServiceType::Caddy => "Web Server",
-            ServiceType::PhpFpm => "PHP Runtime",
-            ServiceType::MySQL => "Database Server",
-            ServiceType::PostgreSQL => "PostgreSQL Server",
-        }
-    }
-
-    pub fn binary_name(&self) -> &'static str {
-        match self {
-            ServiceType::Caddy => "caddy",
-            ServiceType::PhpFpm => "php-cgi",
-            ServiceType::MySQL => "mysqld",
-            ServiceType::PostgreSQL => "postgres",
         }
     }
 }
@@ -65,10 +62,6 @@ pub enum ServiceState {
 impl ServiceState {
     pub fn is_running(&self) -> bool {
         matches!(self, ServiceState::Running)
-    }
-
-    pub fn is_transitioning(&self) -> bool {
-        matches!(self, ServiceState::Starting | ServiceState::Stopping)
     }
 }
 
@@ -115,14 +108,6 @@ mod tests {
     }
 
     #[test]
-    fn test_service_type_binary_names() {
-        assert_eq!(ServiceType::Caddy.binary_name(), "caddy");
-        assert_eq!(ServiceType::PhpFpm.binary_name(), "php-cgi");
-        assert_eq!(ServiceType::MySQL.binary_name(), "mysqld");
-        assert_eq!(ServiceType::PostgreSQL.binary_name(), "postgres");
-    }
-
-    #[test]
     fn test_service_type_serialization() {
         let php_fpm = ServiceType::PhpFpm;
         let serialized = serde_json::to_string(&php_fpm).unwrap();
@@ -143,15 +128,6 @@ mod tests {
         assert!(ServiceState::Running.is_running());
         assert!(!ServiceState::Stopping.is_running());
         assert!(!ServiceState::Error.is_running());
-    }
-
-    #[test]
-    fn test_service_state_is_transitioning() {
-        assert!(!ServiceState::Stopped.is_transitioning());
-        assert!(ServiceState::Starting.is_transitioning());
-        assert!(!ServiceState::Running.is_transitioning());
-        assert!(ServiceState::Stopping.is_transitioning());
-        assert!(!ServiceState::Error.is_transitioning());
     }
 
     #[test]

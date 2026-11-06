@@ -1,14 +1,14 @@
 import { invoke } from "@tauri-apps/api/core";
 import { Activity, ArrowDown, ArrowUp, Cpu, HardDrive, MemoryStick, Network } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
-import { useTranslation } from "../stores/languageStore";
-import { PackageSelection, ServiceMap, getStackServiceTypes } from "../types/services";
+import { HTMLAttributes, useEffect, useRef, useState } from "react";
+import { METRICS_REFRESH_INTERVAL_MS } from "../constants";
+import { useTranslation } from "../stores/preferencesStore";
+import { formatBytes } from "../utils/format";
 
-interface StatusBarProps {
-  services: Partial<ServiceMap>;
+interface StatusBarProps extends HTMLAttributes<HTMLElement> {
+  runningCount: number;
+  totalCount: number;
   appPaths?: { base_dir: string; portable?: boolean };
-  packageSelection?: Pick<PackageSelection, "phpmyadmin"> | null;
-  [key: string]: unknown;
 }
 
 interface SystemMetrics {
@@ -18,8 +18,6 @@ interface SystemMetrics {
   network_rx_bps: number;
   network_tx_bps: number;
 }
-
-const METRICS_REFRESH_INTERVAL_MS = 2500;
 
 function isSystemMetrics(value: unknown): value is SystemMetrics {
   if (!value || typeof value !== "object") return false;
@@ -34,24 +32,8 @@ function isSystemMetrics(value: unknown): value is SystemMetrics {
   );
 }
 
-function formatBytes(bytes: number): string {
-  if (!Number.isFinite(bytes) || bytes <= 0) return "0 B";
-
-  const units = ["B", "KB", "MB", "GB", "TB"];
-  const exponent = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1);
-  const value = bytes / 1024 ** exponent;
-  const precision = exponent === 0 ? 0 : 1;
-
-  return `${value.toFixed(precision)} ${units[exponent]}`;
-}
-
-export function StatusBar({ services, appPaths, packageSelection, ...props }: StatusBarProps) {
+export function StatusBar({ runningCount, totalCount, appPaths, ...props }: StatusBarProps) {
   const { t } = useTranslation();
-  const stackServiceTypes = getStackServiceTypes(packageSelection);
-  const runningCount = stackServiceTypes.filter(
-    (serviceType) => services[serviceType]?.state === "running"
-  ).length;
-  const totalCount = stackServiceTypes.length;
   const [metrics, setMetrics] = useState<SystemMetrics | null>(null);
   const metricsInFlight = useRef(false);
 
@@ -89,7 +71,8 @@ export function StatusBar({ services, appPaths, packageSelection, ...props }: St
       </span>
       {appPaths?.base_dir && (
         <span className="status-path" title={appPaths.base_dir}>
-          <HardDrive size={13} /> {appPaths.portable ? "Portable" : "Local"}: {appPaths.base_dir}
+          <HardDrive size={13} /> {appPaths.portable ? t.dataLocationPortable : t.dataLocationLocal}
+          : {appPaths.base_dir}
         </span>
       )}
       <span className="status-metrics">

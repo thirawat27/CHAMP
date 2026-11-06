@@ -17,7 +17,7 @@ export enum ServiceState {
   Error = "error",
 }
 
-export interface ServiceInfo {
+interface ServiceInfo {
   service_type: ServiceType;
   state: ServiceState;
   port: number;
@@ -34,6 +34,11 @@ export interface AppSettings {
   auto_start_services?: boolean;
   auto_check_updates?: boolean;
   package_selection?: PackageSelection;
+  language?: string;
+  sound_enabled?: boolean;
+  agent_connector_enabled?: boolean;
+  agent_connector_read_only?: boolean;
+  agent_connector_port?: number;
 }
 
 export interface AgentConnectorStatus {
@@ -62,7 +67,7 @@ export interface AgentActivity {
 }
 
 export interface DownloadProgress {
-  step: "downloading" | "extracting" | "installing" | "complete" | "error";
+  step: "downloading" | "extracting" | "complete";
   percent: number;
   currentComponent: string;
   componentDisplay: string;
@@ -103,7 +108,7 @@ export interface MySQLPackage {
   recommended: boolean;
 }
 
-export interface PhpMyAdminPackage {
+interface PhpMyAdminPackage {
   id: string;
   version: string;
   display_name: string;
@@ -188,7 +193,7 @@ export const getDatabaseEngine = (selection?: DatabaseSelection | null): Databas
 };
 
 /** Package id of a web database manager in the catalog. */
-export const databaseToolId = (
+const databaseToolId = (
   tool: DatabaseTool,
   tools: readonly Pick<PhpMyAdminPackage, "id">[]
 ): string | undefined => tools.find((pkg) => pkg.id.startsWith(tool))?.id;
@@ -221,21 +226,29 @@ export const selectionWithTool = (
   return { ...selection, phpmyadmin: id, database_engine: engine };
 };
 
-export const getActiveDatabaseService = (selection?: DatabaseSelection | null): ServiceType =>
-  getDatabaseEngine(selection) === "postgresql" ? ServiceType.PostgreSQL : ServiceType.MySQL;
+const getActiveDatabaseService = (selection?: DatabaseSelection | null): ServiceType =>
+  DATABASE_ENGINE_SERVICES[getDatabaseEngine(selection)];
 
-export const getStackServiceTypes = (selection?: DatabaseSelection | null): ServiceType[] => [ServiceType.Caddy, ServiceType.PhpFpm, getActiveDatabaseService(selection)];
+export const getStackServiceTypes = (selection?: DatabaseSelection | null): ServiceType[] => [
+  ServiceType.Caddy,
+  ServiceType.PhpFpm,
+  getActiveDatabaseService(selection),
+];
 
-export type RuntimePlatformKey =
-  "windowsX64" | "windowsArm64" | "linuxX64" | "linuxArm64" | "macOSX64" | "macOSArm64";
+/** Every service CHAMP manages, in display order. */
+export const ALL_SERVICE_TYPES = [
+  ServiceType.Caddy,
+  ServiceType.PhpFpm,
+  ServiceType.MySQL,
+  ServiceType.PostgreSQL,
+] as const;
 
-export const getPackageUrlForPlatform = (
-  pkg: Pick<
-    PhpPackage,
-    "windowsX64" | "windowsArm64" | "linuxX64" | "linuxArm64" | "macOSX64" | "macOSArm64"
-  >,
-  platformKey: string
-): string => {
+type PlatformUrls = Pick<
+  PhpPackage,
+  "windowsX64" | "windowsArm64" | "linuxX64" | "linuxArm64" | "macOSX64" | "macOSArm64"
+>;
+
+const getPackageUrlForPlatform = (pkg: PlatformUrls, platformKey: string): string => {
   switch (platformKey) {
     case "windowsX64":
       return pkg.windowsX64;
@@ -254,13 +267,33 @@ export const getPackageUrlForPlatform = (
   }
 };
 
-export const hasPackageUrlForPlatform = (
-  pkg: Pick<
-    PhpPackage,
-    "windowsX64" | "windowsArm64" | "linuxX64" | "linuxArm64" | "macOSX64" | "macOSArm64"
-  >,
+export const hasPackageUrlForPlatform = (pkg: PlatformUrls, platformKey: string): boolean =>
+  getPackageUrlForPlatform(pkg, platformKey).trim().length > 0;
+
+/** Packages of a catalog list that have a download for this platform. */
+export const packagesForPlatform = <T extends PlatformUrls>(
+  packages: readonly T[],
   platformKey: string
-): boolean => getPackageUrlForPlatform(pkg, platformKey).trim().length > 0;
+): T[] => packages.filter((pkg) => hasPackageUrlForPlatform(pkg, platformKey));
+
+const availableOrFirst = (id: string, packages: readonly { id: string }[]): string =>
+  packages.some((pkg) => pkg.id === id) || !packages[0] ? id : packages[0].id;
+
+/** The selection with every id that this platform's catalog lacks moved to its first entry. */
+export const normalizeSelection = (
+  selection: PackageSelection,
+  packages: PackagesConfig,
+  platformKey: string
+): PackageSelection => ({
+  ...selection,
+  php: availableOrFirst(selection.php, packagesForPlatform(packages.php, platformKey)),
+  mysql: availableOrFirst(selection.mysql, packagesForPlatform(packages.mysql, platformKey)),
+  postgresql: availableOrFirst(
+    selection.postgresql,
+    packagesForPlatform(packages.postgresql, platformKey)
+  ),
+  phpmyadmin: availableOrFirst(selection.phpmyadmin, packages.phpmyadmin),
+});
 
 export interface InstalledPhpVersion {
   id: string;
@@ -320,20 +353,20 @@ export const SERVICE_DISPLAY_NAMES = {
   [ServiceType.PostgreSQL]: "PostgreSQL",
 } as const;
 
-export const SERVICE_DESCRIPTIONS = {
-  [ServiceType.Caddy]: "Web Server",
-  [ServiceType.PhpFpm]: "PHP Runtime",
-  [ServiceType.MySQL]: "Database Server",
-  [ServiceType.PostgreSQL]: "PostgreSQL Server",
+export const SERVICE_DESCRIPTION_KEYS = {
+  [ServiceType.Caddy]: "serviceDescriptionCaddy",
+  [ServiceType.PhpFpm]: "serviceDescriptionPhp",
+  [ServiceType.MySQL]: "serviceDescriptionMysql",
+  [ServiceType.PostgreSQL]: "serviceDescriptionPostgresql",
 } as const;
 
 // System dependency types
-export interface InstallCommand {
+interface InstallCommand {
   distribution: string;
   command: string;
 }
 
-export interface Dependency {
+interface Dependency {
   name: string;
   installed: boolean;
   description: string;
@@ -347,12 +380,12 @@ export interface DependencyCheckResult {
 }
 
 // Log Doctor
-export interface LocalizedText {
+interface LocalizedText {
   en: string;
   th: string;
 }
 
-export interface LocalizedSteps {
+interface LocalizedSteps {
   en: string[];
   th: string[];
 }

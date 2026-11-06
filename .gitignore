@@ -28,3 +28,9 @@ dist-ssr
 .agents/
 skills-lock.json
 link.md
+
+# Secrets
+.env
+.env.*
+*.pem
+*.key

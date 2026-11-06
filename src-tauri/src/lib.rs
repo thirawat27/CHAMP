@@ -4,18 +4,19 @@ mod commands;
 mod config;
 mod constants;
 mod doctor;
-mod error;
+mod fs_util;
+mod logs;
+mod metrics;
 mod process;
 mod runtime;
 mod tunnel;
 
 // Re-exports
-pub use error::{ChampError, Result};
-
-// Re-exports
+pub use config::AppSettings;
 pub use process::manager::ProcessManager;
 pub use process::{ServiceInfo, ServiceMap, ServiceState, ServiceType};
 
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
 use tauri::image::Image;
 use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
@@ -51,56 +52,7 @@ pub fn run() {
         .on_menu_event(handle_menu_event)
         .setup(|app| {
             #[cfg(debug_assertions)]
-            {
-                use tauri::menu::{Menu, MenuItem, Submenu};
-
-                // Create debug menu items with IDs
-                let open_download_folder = MenuItem::with_id(
-                    app,
-                    "open-download-folder",
-                    "View Download Folder (ZIP files)",
-                    true,
-                    None::<&str>,
-                )?;
-                let open_runtime_folder = MenuItem::with_id(
-                    app,
-                    "open-runtime-folder",
-                    "Open Runtime Folder",
-                    true,
-                    None::<&str>,
-                )?;
-                let separator = tauri::menu::PredefinedMenuItem::separator(app)?;
-                let reset_installation = MenuItem::with_id(
-                    app,
-                    "reset-installation",
-                    "Reset Installation",
-                    true,
-                    None::<&str>,
-                )?;
-                let show_wizard = MenuItem::with_id(
-                    app,
-                    "show-wizard",
-                    "Show First-Run Wizard",
-                    true,
-                    None::<&str>,
-                )?;
-
-                // Create submenu with items
-                let debug_menu = Submenu::with_items(
-                    app,
-                    "Debug",
-                    true,
-                    &[
-                        &open_download_folder,
-                        &open_runtime_folder,
-                        &separator,
-                        &reset_installation,
-                        &show_wizard,
-                    ],
-                )?;
-                let menu = Menu::with_items(app, &[&debug_menu])?;
-                app.set_menu(menu)?;
-            }
+            build_debug_menu(app)?;
 
             // Setup system tray
             setup_system_tray(app)?;
@@ -118,12 +70,15 @@ pub fn run() {
             }
 
             doctor::spawn_default_model_download(app.handle().clone());
+            tunnel::spawn_stale_agent_cleanup();
 
             if crate::config::AppSettings::load().auto_start_services {
                 let app_handle = app.handle().clone();
                 tauri::async_runtime::spawn(async move {
-                    let _ = commands::run_with_manager(&app_handle, |manager| manager.start_all())
-                        .await;
+                    let _ = process::runner::run_with_manager(&app_handle, |manager| {
+                        manager.start_all()
+                    })
+                    .await;
                 });
             }
 
@@ -138,51 +93,51 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             // Service management commands
-            commands::start_service,
-            commands::stop_service,
-            commands::restart_service,
-            commands::start_all_services,
-            commands::stop_all_services,
-            commands::restart_all_services,
-            commands::get_all_statuses,
-            commands::start_https_tunnel,
-            commands::stop_https_tunnel,
-            commands::get_https_tunnel_status,
-            commands::set_ngrok_authtoken,
+            commands::services::start_service,
+            commands::services::stop_service,
+            commands::services::restart_service,
+            commands::services::start_all_services,
+            commands::services::stop_all_services,
+            commands::services::restart_all_services,
+            commands::services::get_all_statuses,
+            commands::services::start_https_tunnel,
+            commands::services::stop_https_tunnel,
+            commands::services::get_https_tunnel_status,
+            commands::services::set_ngrok_authtoken,
             // Settings commands
-            commands::get_settings,
-            commands::save_settings,
-            commands::get_language_settings,
-            commands::save_language_setting,
-            commands::save_sound_setting,
-            commands::validate_settings,
-            commands::check_ports,
+            commands::settings::get_settings,
+            commands::settings::save_settings,
+            commands::settings::get_language_settings,
+            commands::settings::save_language_setting,
+            commands::settings::save_sound_setting,
+            commands::settings::validate_settings,
+            commands::settings::check_ports,
             // Runtime download commands
-            commands::check_runtime_installed,
-            commands::check_system_dependencies,
-            commands::download_runtime_with_packages,
-            commands::download_runtime_with_skip,
-            commands::switch_database_engine,
-            commands::switch_database_tool,
-            commands::get_available_packages_cmd,
-            commands::refresh_runtime_catalog,
-            commands::refresh_php_catalog,
-            commands::get_runtime_platform,
-            commands::update_package_selection,
-            commands::get_installed_php_versions,
-            commands::switch_php_version,
-            commands::download_php_version,
-            commands::get_selected_package_ids,
-            commands::get_installed_versions,
-            commands::check_existing_components,
-            commands::get_runtime_dir,
-            commands::get_app_paths,
-            commands::get_system_metrics,
-            commands::get_download_dir,
-            commands::open_folder,
-            commands::open_project_terminal,
-            commands::reset_installation,
-            commands::prepare_for_update,
+            commands::runtime::check_runtime_installed,
+            commands::runtime::check_system_dependencies,
+            commands::runtime::download_runtime_with_packages,
+            commands::runtime::download_runtime_with_skip,
+            commands::database::switch_database_engine,
+            commands::database::switch_database_tool,
+            commands::runtime::get_available_packages_cmd,
+            commands::runtime::refresh_runtime_catalog,
+            commands::runtime::refresh_php_catalog,
+            commands::runtime::get_runtime_platform,
+            commands::runtime::update_package_selection,
+            commands::php::get_installed_php_versions,
+            commands::php::switch_php_version,
+            commands::php::download_php_version,
+            commands::runtime::get_selected_package_ids,
+            commands::runtime::get_installed_versions,
+            commands::runtime::check_existing_components,
+            commands::folders::get_runtime_dir,
+            commands::folders::get_app_paths,
+            commands::services::get_system_metrics,
+            commands::folders::get_download_dir,
+            commands::folders::open_folder,
+            commands::folders::open_project_terminal,
+            commands::runtime::reset_installation,
+            commands::services::prepare_for_update,
             // AI agent connector (MCP)
             agent::get_agent_connector_status,
             agent::configure_agent_connector,
@@ -198,28 +153,81 @@ pub fn run() {
         .expect("error while running tauri application");
 }
 
+#[cfg(debug_assertions)]
+fn build_debug_menu(app: &tauri::App) -> tauri::Result<()> {
+    use tauri::menu::{Menu, MenuItem, Submenu};
+
+    // Create debug menu items with IDs
+    let open_download_folder = MenuItem::with_id(
+        app,
+        "open-download-folder",
+        "View Download Folder (ZIP files)",
+        true,
+        None::<&str>,
+    )?;
+    let open_runtime_folder = MenuItem::with_id(
+        app,
+        "open-runtime-folder",
+        "Open Runtime Folder",
+        true,
+        None::<&str>,
+    )?;
+    let separator = tauri::menu::PredefinedMenuItem::separator(app)?;
+    let reset_installation = MenuItem::with_id(
+        app,
+        "reset-installation",
+        "Reset Installation",
+        true,
+        None::<&str>,
+    )?;
+    let show_wizard = MenuItem::with_id(
+        app,
+        "show-wizard",
+        "Show First-Run Wizard",
+        true,
+        None::<&str>,
+    )?;
+
+    // Create submenu with items
+    let debug_menu = Submenu::with_items(
+        app,
+        "Debug",
+        true,
+        &[
+            &open_download_folder,
+            &open_runtime_folder,
+            &separator,
+            &reset_installation,
+            &show_wizard,
+        ],
+    )?;
+    let menu = Menu::with_items(app, &[&debug_menu])?;
+    app.set_menu(menu)?;
+    Ok(())
+}
+
 fn handle_menu_event(app: &AppHandle, event: MenuEvent) {
     match event.id.as_ref() {
         // Debug menu items
         "open-download-folder" => {
             tauri::async_runtime::spawn(async move {
-                if let Ok(download_dir) = commands::get_download_dir().await {
-                    let _ = commands::open_folder(download_dir).await;
+                if let Ok(download_dir) = commands::folders::get_download_dir().await {
+                    let _ = commands::folders::open_folder(download_dir).await;
                 }
             });
         }
         "open-runtime-folder" => {
             tauri::async_runtime::spawn(async move {
-                if let Ok(runtime_dir) = commands::get_runtime_dir().await {
-                    let _ = commands::open_folder(runtime_dir).await;
+                if let Ok(runtime_dir) = commands::folders::get_runtime_dir().await {
+                    let _ = commands::folders::open_folder(runtime_dir).await;
                 }
             });
         }
         "reset-installation" => {
             let app = app.clone();
             tauri::async_runtime::spawn(async move {
-                let _ = commands::run_with_manager(&app, |manager| manager.stop_all()).await;
-                if commands::reset_runtime_dir().await.is_ok() {
+                let _ = commands::services::stop_tunnel_and_services(&app).await;
+                if commands::runtime::reset_runtime_dir().await.is_ok() {
                     let _ = app.emit("show-wizard", ());
                 }
             });
@@ -240,18 +248,33 @@ fn handle_menu_event(app: &AppHandle, event: MenuEvent) {
             }
         }
         "tray-quit" => {
-            // Cleanup services before quitting
-            if let Some(state) = app.try_state::<AppState>() {
-                let mut manager = state
-                    .process_manager
-                    .lock()
-                    .unwrap_or_else(std::sync::PoisonError::into_inner);
-                let _ = manager.stop_all();
-            }
-            std::process::exit(0);
+            quit_app(app);
         }
         _ => {}
     }
+}
+
+/// Shut everything down off the main thread, then exit.
+///
+/// The manager lock can be held for minutes during a database initialization,
+/// so waiting for it inside the menu callback would freeze the UI. The public
+/// tunnel goes first: on macOS and Linux nothing else would stop it.
+fn quit_app(app: &AppHandle) {
+    static QUITTING: AtomicBool = AtomicBool::new(false);
+    if QUITTING.swap(true, Ordering::SeqCst) {
+        return;
+    }
+
+    if let Some(window) = app.get_webview_window("main") {
+        let _ = window.hide();
+    }
+    let app = app.clone();
+    tauri::async_runtime::spawn(async move {
+        agent::stop();
+        let _ = tunnel::stop_https_tunnel();
+        let _ = process::runner::run_with_manager(&app, |manager| manager.stop_all()).await;
+        app.exit(0);
+    });
 }
 
 fn setup_system_tray(app: &tauri::App) -> std::result::Result<(), Box<dyn std::error::Error>> {
