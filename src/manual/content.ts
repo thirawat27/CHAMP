@@ -459,8 +459,8 @@ export const GUIDE_SECTIONS: GuideSection[] = [
       {
         kind: "p",
         text: l(
-          "โมเดล AI (potion-base-8M ประมาณ 8 ล้านพารามิเตอร์ 30 MB) เป็นตัวเลือกเสริม เปิดได้จากหน้า Log Doctor หรือ Settings ทำงานออฟไลน์ทั้งหมด ไม่มีข้อมูลออกจากเครื่อง ไม่เปิดก็ยังตรวจ error ที่รู้จักได้ตามปกติ",
-          "The AI model (potion-base-8M, about 8 million parameters, 30 MB) is optional. Turn it on from Log Doctor or Settings. It runs fully offline and nothing leaves your computer; without it, known errors are still recognised."
+          "โมเดล AI (potion-base-8M ประมาณ 8 ล้านพารามิเตอร์ 30 MB) ดาวน์โหลดอัตโนมัติเมื่อเปิด CHAMP ครั้งแรก ทำงานออฟไลน์ทั้งหมด ไม่มีข้อมูลออกจากเครื่อง ถ้าไม่ต้องการ ลบได้ใน Settings แล้วระบบจะไม่ดาวน์โหลดกลับมาเอง (เปิดใช้อีกครั้งได้จากหน้า Log Doctor หรือ Settings) ไม่มีโมเดลก็ยังตรวจ error ที่รู้จักได้ตามปกติ",
+          "The AI model (potion-base-8M, about 8 million parameters, 30 MB) downloads automatically the first time CHAMP opens. It runs fully offline and nothing leaves your computer. Remove it in Settings if you do not want it and CHAMP will not download it again (turn it back on from Log Doctor or Settings); without it, known errors are still recognised."
         ),
       },
     ],

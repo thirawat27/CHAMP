@@ -1,4 +1,5 @@
 use super::model::cosine;
+use super::rank::{is_warning_line, names_no_cause};
 use super::*;
 
 fn lines(items: &[&str]) -> Vec<String> {
@@ -227,4 +228,38 @@ fn real_model_semantic_matching() {
                 .collect::<Vec<_>>()
         );
     }
+}
+
+#[test]
+fn bare_exit_lines_name_no_cause() {
+    // CHAMP's own start-failure line: an exit code without any cause must not
+    // be matched to an issue by meaning (it scored as "VC++ runtime missing").
+    assert!(names_no_cause(&semantic_text(
+        "MySQL exited during start (exit code 1)"
+    )));
+    assert!(names_no_cause(&semantic_text(
+        "PHP-FPM process exited unexpectedly (exit code 255)"
+    )));
+    assert!(!names_no_cause(&semantic_text(
+        "Failed to initialize DD Storage Engine"
+    )));
+    assert!(!names_no_cause(&semantic_text(
+        "The code execution cannot proceed because a DLL was not found"
+    )));
+}
+
+#[test]
+fn service_warnings_are_not_treated_as_failures() {
+    assert!(is_warning_line(
+        "2026-11-07T03:11:07Z 5 [Warning] [MY-010453] [Server] root@localhost is created with an empty password"
+    ));
+    assert!(is_warning_line(
+        r#"{"level":"warn","msg":"Caddyfile input is not formatted"}"#
+    ));
+    assert!(!is_warning_line(
+        "2026-11-07T03:16:58Z 1 [ERROR] [MY-010334] [Server] Failed to initialize DD Storage Engine"
+    ));
+    assert!(!is_warning_line(
+        r#"{"level":"error","msg":"adapting config using caddyfile"}"#
+    ));
 }

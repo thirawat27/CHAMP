@@ -137,6 +137,38 @@ pub(super) fn semantic_text(text: &str) -> String {
     .join(" ")
 }
 
+/// Words of a bare "process exited" line. Such a line says that a service
+/// stopped, not why, so it has no meaning to match on.
+const EXIT_ONLY_WORDS: [&str; 9] = [
+    "exited",
+    "during",
+    "start",
+    "unexpectedly",
+    "process",
+    "exit",
+    "code",
+    "status",
+    "with",
+];
+
+/// True for lines the service itself marks as a warning. Healthy services log
+/// these all the time (MySQL's empty-password note on first start, Caddy's
+/// "Caddyfile input is not formatted"), so a similar-sounding issue must not be
+/// proposed from them. Known problems are still caught by exact signatures.
+pub(super) fn is_warning_line(line: &str) -> bool {
+    let lower = line.to_lowercase();
+    ["[warning]", "\"level\":\"warn\"", "php warning:", "[warn]"]
+        .iter()
+        .any(|marker| lower.contains(marker))
+}
+
+/// True when text prepared by [`semantic_text`] only reports that a process exited.
+pub(super) fn names_no_cause(semantic: &str) -> bool {
+    semantic
+        .split_whitespace()
+        .all(|word| EXIT_ONLY_WORDS.contains(&word))
+}
+
 pub(super) fn signature_confidence(signature: &str) -> f32 {
     // Longer signatures are more specific, so they win ties against short,
     // generic ones (e.g. "listen tcp :80: bind: permission denied" beats
@@ -191,7 +223,14 @@ pub(super) fn rank_issues(
         // single most similar issue is proposed; signatures can add more.
         let mut top: Option<(f32, usize, &String)> = None;
         for line in lines.iter().rev() {
-            let Some(vector) = loaded.model.embed(&semantic_text(line)) else {
+            if is_warning_line(line) {
+                continue;
+            }
+            let text = semantic_text(line);
+            if names_no_cause(&text) {
+                continue;
+            }
+            let Some(vector) = loaded.model.embed(&text) else {
                 continue;
             };
             for (index, example) in &loaded.examples {

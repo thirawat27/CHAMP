@@ -11,7 +11,8 @@ import { check, Update } from "@tauri-apps/plugin-updater";
 import { create } from "zustand";
 import { isTauriRuntime } from "../utils/tauri";
 
-type UpdatePhase = "idle" | "checking" | "available" | "current" | "installing" | "error";
+type UpdatePhase =
+  "idle" | "checking" | "available" | "current" | "unpublished" | "installing" | "error";
 
 const LAST_CHECK_KEY = "champ:last-update-check";
 const AUTO_CHECK_INTERVAL_MS = 24 * 60 * 60 * 1000;
@@ -39,6 +40,9 @@ const readLastCheck = (): number | null => {
   }
 };
 
+/** The updater's error when the newest GitHub release has no `latest.json`. */
+const isNoUpdateManifest = (error: unknown) => /valid release JSON/i.test(String(error));
+
 export const useUpdateStore = create<UpdateState>((set, get) => ({
   phase: "idle",
   update: null,
@@ -59,6 +63,10 @@ export const useUpdateStore = create<UpdateState>((set, get) => ({
       }
       set({ update, phase: update ? "available" : "current", checkedAt: now });
     } catch (error) {
+      if (isNoUpdateManifest(error)) {
+        set({ phase: "unpublished", checkedAt: Date.now() });
+        return;
+      }
       set(silent ? { phase: "idle" } : { phase: "error", error: String(error) });
     }
   },

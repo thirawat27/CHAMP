@@ -76,6 +76,7 @@ export interface Translations {
   updateCheck: string;
   updateChecking: string;
   updateCurrent: string;
+  updateNotPublished: string;
   updateLastChecked: string;
   updateNeverChecked: string;
   updateReleaseNotes: string;
@@ -302,6 +303,8 @@ export interface Translations {
   wizardInstallAll: string;
   wizardDownloadVerb: string;
   wizardExtractVerb: string;
+  wizardAllComponents: string;
+  wizardComponentCount: string;
   wizardInstalling: string;
   wizardPreparing: string;
   wizardRuntimeInstalled: string;
@@ -395,6 +398,7 @@ const th: Translations = {
   updateCheck: "ตรวจหาอัปเดต",
   updateChecking: "กำลังตรวจ...",
   updateCurrent: "คุณใช้เวอร์ชันล่าสุดแล้ว",
+  updateNotPublished: "ยังไม่มีรุ่นที่เปิดให้อัปเดตอัตโนมัติบน GitHub",
   updateLastChecked: "ตรวจล่าสุด {time}",
   updateNeverChecked: "ยังไม่เคยตรวจหาอัปเดต",
   updateReleaseNotes: "มีอะไรใหม่",
@@ -632,6 +636,8 @@ const th: Translations = {
   wizardInstallAll: "ติดตั้งทั้งหมด",
   wizardDownloadVerb: "ดาวน์โหลด",
   wizardExtractVerb: "แตกไฟล์",
+  wizardAllComponents: "ทุกส่วนประกอบ",
+  wizardComponentCount: "ทั้งหมด {count} รายการ",
   wizardInstalling: "กำลังติดตั้ง...",
   wizardPreparing: "กำลังเตรียม...",
   wizardRuntimeInstalled: "ติดตั้งรันไทม์แล้ว",
@@ -727,6 +733,7 @@ const en: Translations = {
   updateCheck: "Check for updates",
   updateChecking: "Checking...",
   updateCurrent: "You have the latest version.",
+  updateNotPublished: "No automatic update has been published on GitHub yet.",
   updateLastChecked: "Last checked {time}",
   updateNeverChecked: "Not checked yet.",
   updateReleaseNotes: "What's new",
@@ -968,6 +975,8 @@ const en: Translations = {
   wizardInstallAll: "Install All",
   wizardDownloadVerb: "Download",
   wizardExtractVerb: "Extract",
+  wizardAllComponents: "all components",
+  wizardComponentCount: "{count} in total",
   wizardInstalling: "Installing...",
   wizardPreparing: "Preparing...",
   wizardRuntimeInstalled: "Runtime installed",

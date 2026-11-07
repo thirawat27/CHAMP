@@ -25,6 +25,7 @@ import { PortField, PortsSection } from "./settings/PortsSection";
 import { PreferencesSection } from "./settings/PreferencesSection";
 import { UpdatesSection } from "./settings/UpdatesSection";
 import { SoundButton } from "./SoundButton";
+import { componentLabel } from "../utils/downloadProgress";
 
 interface SettingsPanelProps {
   onClose: () => void;
@@ -265,7 +266,7 @@ export function SettingsPanel({ onClose, onSettingsChanged }: SettingsPanelProps
             disabled={saving || loading || loadFailed}
           >
             {saving && saveProgress?.step === "downloading"
-              ? `${t.downloading} ${saveProgress.componentDisplay || t.databaseTool}`
+              ? `${t.downloading} ${componentLabel(saveProgress, t) || t.databaseTool}`
               : saving
                 ? `${t.save}...`
                 : t.save}

@@ -37,9 +37,11 @@ export function UpdatesSection({ autoCheck, onAutoCheckChange }: UpdatesSectionP
               ? t.updateAvailableTitle.replace("{version}", update.version)
               : phase === "current"
                 ? t.updateCurrent
-                : lastChecked
-                  ? t.updateLastChecked.replace("{time}", lastChecked)
-                  : t.updateNeverChecked}
+                : phase === "unpublished"
+                  ? t.updateNotPublished
+                  : lastChecked
+                    ? t.updateLastChecked.replace("{time}", lastChecked)
+                    : t.updateNeverChecked}
           </p>
         </div>
         {phase === "available" || installing ? (

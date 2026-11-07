@@ -1,5 +1,6 @@
 import { useTranslation } from "../../stores/preferencesStore";
 import { DownloadProgress } from "../../types/services";
+import { componentLabel, isBatchProgress } from "../../utils/downloadProgress";
 import { formatBytes } from "../../utils/format";
 import { DismissibleError } from "../DismissibleError";
 
@@ -16,16 +17,17 @@ export function DownloadStep({ progress, error, onDismissError }: DownloadStepPr
     (progress.step === "downloading" && (shownPercent === 0 || progress.totalBytes === 0)) ||
     progress.step === "extracting";
 
+  const component = componentLabel(progress, t);
+  const detail = isBatchProgress(progress)
+    ? t.wizardComponentCount.replace("{count}", String(progress.totalComponents))
+    : progress.currentComponent || progress.componentDisplay;
+
   const stepLabel = () => {
     switch (progress.step) {
       case "downloading":
-        return progress.componentDisplay
-          ? `${t.wizardDownloadVerb} ${progress.componentDisplay}`
-          : t.downloading;
+        return component ? `${t.wizardDownloadVerb} ${component}` : t.downloading;
       case "extracting":
-        return progress.componentDisplay
-          ? `${t.wizardExtractVerb} ${progress.componentDisplay}`
-          : t.extracting;
+        return component ? `${t.wizardExtractVerb} ${component}` : t.extracting;
       case "complete":
         return t.installationComplete;
       default:
@@ -46,7 +48,7 @@ export function DownloadStep({ progress, error, onDismissError }: DownloadStepPr
 
       {progress.componentDisplay && (
         <div className="setup-download-component">
-          <span>{progress.currentComponent || progress.componentDisplay}</span>
+          <span>{detail}</span>
           {progress.version && <span className="setup-version-badge">{progress.version}</span>}
         </div>
       )}

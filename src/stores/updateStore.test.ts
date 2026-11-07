@@ -1,11 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { invoke } from "@tauri-apps/api/core";
 import { relaunch } from "@tauri-apps/plugin-process";
-import { Update } from "@tauri-apps/plugin-updater";
+import { check, Update } from "@tauri-apps/plugin-updater";
 import { useUpdateStore } from "./updateStore";
 
 vi.mock("@tauri-apps/plugin-process", () => ({ relaunch: vi.fn() }));
 vi.mock("@tauri-apps/plugin-updater", () => ({ check: vi.fn() }));
+vi.mock("../utils/tauri", () => ({ isTauriRuntime: () => true }));
 
 const makeUpdate = (download: () => Promise<void>) =>
   ({
@@ -52,5 +53,32 @@ describe("update install", () => {
     await useUpdateStore.getState().install();
 
     expect(order).toEqual(["download", "prepare_for_update", "install", "relaunch"]);
+  });
+});
+
+describe("update check", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    useUpdateStore.setState({ phase: "idle", update: null, error: null });
+  });
+
+  it("reports a release without an update manifest as a normal state, not a failure", async () => {
+    vi.mocked(check).mockRejectedValue(
+      new Error("Could not fetch a valid release JSON from the remote")
+    );
+
+    await useUpdateStore.getState().checkNow();
+
+    expect(useUpdateStore.getState().phase).toBe("unpublished");
+    expect(useUpdateStore.getState().error).toBeNull();
+  });
+
+  it("still reports other check failures", async () => {
+    vi.mocked(check).mockRejectedValue(new Error("network down"));
+
+    await useUpdateStore.getState().checkNow();
+
+    expect(useUpdateStore.getState().phase).toBe("error");
+    expect(useUpdateStore.getState().error).toContain("network down");
   });
 });
