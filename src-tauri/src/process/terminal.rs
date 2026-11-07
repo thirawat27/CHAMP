@@ -25,6 +25,7 @@ pub fn spawn_terminal(target_dir: &Path, path_env: &std::ffi::OsStr) -> Result<(
 
 #[cfg(target_os = "macos")]
 pub fn spawn_terminal(target_dir: &Path, path_env: &std::ffi::OsStr) -> Result<(), String> {
+    use std::fs;
     use std::os::unix::fs::PermissionsExt;
 
     // Terminal.app does not inherit our environment, so hand it a tiny script
