@@ -30,6 +30,49 @@ const paths = {
   projects_dir: "C:\\Users\\dev\\AppData\\Local\\CHAMP\\projects",
 };
 
+const addon = (kind: string, name: string, port: number, extra: Record<string, unknown>) => ({
+  kind,
+  name,
+  version: "1.0.0",
+  installed_version: null,
+  installed: false,
+  source: null,
+  downloadable: true,
+  install_hint: null,
+  update_available: false,
+  installing: false,
+  enabled: false,
+  state: "stopped",
+  port,
+  web_port: null,
+  web_url: null,
+  error: null,
+  log_path: null,
+  ...extra,
+});
+
+const addons = [
+  addon("redis", "Redis", 6379, {
+    version: "8.10.3",
+    installed_version: "8.10.3",
+    installed: true,
+    source: "champ",
+    enabled: true,
+    state: "running",
+  }),
+  addon("memcached", "Memcached", 11211, { version: "1.6.8" }),
+  addon("mailpit", "Mailpit", 1025, {
+    version: "1.34.0",
+    installed_version: "1.34.0",
+    installed: true,
+    source: "champ",
+    enabled: true,
+    state: "running",
+    web_port: 8025,
+    web_url: "http://127.0.0.1:8025/",
+  }),
+];
+
 const responses: Record<string, unknown> = {
   check_runtime_installed: true,
   get_language_settings: { language: "th", sound_enabled: false },
@@ -128,6 +171,12 @@ const responses: Record<string, unknown> = {
   stop_service: services,
   switch_database_engine: null,
   switch_database_tool: null,
+  get_addons_status: addons,
+  install_addon: addons,
+  start_addon: addons,
+  stop_addon: addons,
+  configure_addon: addons,
+  get_mailpit_message_count: 4,
 };
 
 export function installMockTauri() {

@@ -17,6 +17,8 @@ import {
 } from "../types/services";
 import { AudioManager } from "../utils/audioManager";
 import { listenIfTauri } from "../utils/tauri";
+import { AddonsController } from "../hooks/useAddons";
+import { AddonsSection } from "./settings/AddonsSection";
 import { AgentConnectorSection } from "./settings/AgentConnectorSection";
 import { DatabaseSection } from "./settings/DatabaseSection";
 import { LogDoctorSection } from "./settings/LogDoctorSection";
@@ -30,9 +32,19 @@ import { componentLabel } from "../utils/downloadProgress";
 interface SettingsPanelProps {
   onClose: () => void;
   onSettingsChanged?: () => void;
+  /** The dashboard's add-on state, so both views show the same thing. */
+  addons?: AddonsController;
+  openExternal?: (url: string) => void;
+  onOpenAddons?: () => void;
 }
 
-export function SettingsPanel({ onClose, onSettingsChanged }: SettingsPanelProps) {
+export function SettingsPanel({
+  onClose,
+  onSettingsChanged,
+  addons,
+  openExternal,
+  onOpenAddons,
+}: SettingsPanelProps) {
   const { t } = useTranslation();
   const [settings, setSettings] = useState<AppSettings>({
     web_port: DEFAULT_PORTS[ServiceType.Caddy],
@@ -234,6 +246,14 @@ export function SettingsPanel({ onClose, onSettingsChanged }: SettingsPanelProps
                   setSettings((current) => ({ ...current, package_selection: packageSelection }))
                 }
               />
+
+              {addons && (
+                <AddonsSection
+                  controller={addons}
+                  openExternal={openExternal ?? (() => undefined)}
+                  onOpenWindow={onOpenAddons}
+                />
+              )}
 
               <LogDoctorSection />
 

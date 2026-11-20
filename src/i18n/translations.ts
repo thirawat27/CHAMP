@@ -323,6 +323,38 @@ export interface Translations {
   unknownError: string;
 
   // Footer / Status
+  addonsTitle: string;
+  addonsDescription: string;
+  addonsShort: string;
+  addonRedisPurpose: string;
+  addonMemcachedPurpose: string;
+  addonMailpitPurpose: string;
+  addonInstall: string;
+  addonUpdate: string;
+  addonInstalling: string;
+  addonStartWithStack: string;
+  addonPort: string;
+  addonSmtpPort: string;
+  addonWebPort: string;
+  addonOpenInbox: string;
+  addonNotInstalled: string;
+  addonSystemInstallHint: string;
+  addonSystemSource: string;
+  addonEnvTitle: string;
+  addonEnvEmpty: string;
+  addonCopyEnv: string;
+  addonCopied: string;
+  addonMailHint: string;
+  addonMessages: string;
+  addonManage: string;
+  addonPortInvalid: string;
+  addonOpenLog: string;
+  addonsNoneEnabled: string;
+  addonPredisNote: string;
+  shortcutAddons: string;
+  shortcutMailInbox: string;
+  addonSettingsSavedAtOnce: string;
+  addonOpenWindow: string;
 }
 
 const th: Translations = {
@@ -494,7 +526,8 @@ const th: Translations = {
 
   // Settings
   settingsTitle: "การตั้งค่า",
-  settingsDescription: "พอร์ต เวอร์ชัน PHP เครื่องมือฐานข้อมูล Log Doctor และการเริ่มต้น",
+  settingsDescription:
+    "พอร์ต เวอร์ชัน PHP เครื่องมือฐานข้อมูล บริการเสริม Log Doctor และการเริ่มต้น",
   ports: "พอร์ต",
   port: "พอร์ต",
   httpPort: "HTTP",
@@ -658,6 +691,40 @@ const th: Translations = {
   unknownError: "ข้อผิดพลาดที่ไม่รู้จัก",
 
   // Footer / Status
+  addonsTitle: "บริการเสริม",
+  addonsDescription:
+    "แคช คิว และกล่องดักอีเมลสำหรับทดสอบ ทำงานเฉพาะในเครื่อง (127.0.0.1) ตัวที่เปิดใช้จะเริ่ม/หยุดพร้อมสแต็ก",
+  addonsShort: "บริการเสริม",
+  addonRedisPurpose: "แคช คิว และเซสชัน",
+  addonMemcachedPurpose: "แคชในหน่วยความจำ",
+  addonMailpitPurpose: "ดักอีเมลทดสอบ ไม่ส่งออกจริง",
+  addonInstall: "ติดตั้ง",
+  addonUpdate: "อัปเดตเป็น",
+  addonInstalling: "กำลังติดตั้ง",
+  addonStartWithStack: "เริ่มพร้อมสแต็ก",
+  addonPort: "พอร์ต",
+  addonSmtpPort: "พอร์ต SMTP",
+  addonWebPort: "พอร์ตหน้าเว็บ",
+  addonOpenInbox: "เปิดกล่องจดหมาย",
+  addonNotInstalled: "ยังไม่ได้ติดตั้ง",
+  addonSystemInstallHint: "CHAMP ดาวน์โหลดตัวนี้ให้ระบบนี้ไม่ได้ ติดตั้งด้วยคำสั่ง:",
+  addonSystemSource: "ใช้ตัวที่ติดตั้งในระบบ",
+  addonEnvTitle: "ค่า .env สำหรับโปรเจกต์ (Laravel)",
+  addonEnvEmpty: "เปิดใช้บริการเสริมอย่างน้อยหนึ่งตัวเพื่อดูค่า .env",
+  addonCopyEnv: "คัดลอก",
+  addonCopied: "คัดลอกแล้ว",
+  addonMailHint: "เมื่อเปิด Mailpit ฟังก์ชัน mail() ของ PHP จะส่งเข้า Mailpit อัตโนมัติ",
+  addonMessages: "ฉบับ",
+  addonManage: "จัดการ",
+  addonPortInvalid: "ใช้พอร์ต 1024 ถึง 65535",
+  addonOpenLog: "เปิดโฟลเดอร์ log",
+  addonsNoneEnabled: "Redis · Memcached · Mailpit ยังไม่ได้เปิดใช้",
+  addonPredisNote:
+    "Laravel ต้องติดตั้งแพ็กเกจ predis/predis (composer require predis/predis) หรือส่วนขยาย phpredis",
+  shortcutAddons: "บริการเสริม (Redis, Memcached, Mailpit)",
+  shortcutMailInbox: "เปิดกล่องจดหมาย Mailpit",
+  addonSettingsSavedAtOnce: "การเปลี่ยนแปลงในส่วนนี้บันทึกทันที ไม่ต้องกด บันทึก",
+  addonOpenWindow: "เปิดหน้าต่างบริการเสริม (ค่า .env)",
 };
 
 const en: Translations = {
@@ -831,7 +898,8 @@ const en: Translations = {
 
   // Settings
   settingsTitle: "Settings",
-  settingsDescription: "Ports, PHP versions, database tool, Log Doctor, and startup",
+  settingsDescription:
+    "Ports, PHP versions, database tool, add-on services, Log Doctor, and startup",
   ports: "Ports",
   port: "Port",
   httpPort: "HTTP",
@@ -997,6 +1065,40 @@ const en: Translations = {
   unknownError: "Unknown error",
 
   // Footer / Status
+  addonsTitle: "Add-on services",
+  addonsDescription:
+    "Cache, queue, and a mail catcher for testing. Local only (127.0.0.1). Enabled add-ons start and stop with the stack.",
+  addonsShort: "Add-ons",
+  addonRedisPurpose: "Cache, queues, and sessions",
+  addonMemcachedPurpose: "In-memory cache",
+  addonMailpitPurpose: "Catches test mail; nothing is really sent",
+  addonInstall: "Install",
+  addonUpdate: "Update to",
+  addonInstalling: "Installing",
+  addonStartWithStack: "Start with the stack",
+  addonPort: "Port",
+  addonSmtpPort: "SMTP port",
+  addonWebPort: "Web port",
+  addonOpenInbox: "Open inbox",
+  addonNotInstalled: "Not installed",
+  addonSystemInstallHint: "CHAMP cannot download this one for your system. Install it with:",
+  addonSystemSource: "Using the system install",
+  addonEnvTitle: "Project .env lines (Laravel)",
+  addonEnvEmpty: "Enable an add-on to see its .env lines",
+  addonCopyEnv: "Copy",
+  addonCopied: "Copied",
+  addonMailHint: "With Mailpit on, PHP's mail() is delivered to Mailpit automatically",
+  addonMessages: "messages",
+  addonManage: "Manage",
+  addonPortInvalid: "Use a port from 1024 to 65535",
+  addonOpenLog: "Open logs folder",
+  addonsNoneEnabled: "Redis · Memcached · Mailpit are off",
+  addonPredisNote:
+    "Laravel needs the predis/predis package (composer require predis/predis) or the phpredis extension",
+  shortcutAddons: "Add-on services (Redis, Memcached, Mailpit)",
+  shortcutMailInbox: "Open the Mailpit inbox",
+  addonSettingsSavedAtOnce: "Changes here are saved at once; Save is not needed.",
+  addonOpenWindow: "Open Add-on services (.env lines)",
 };
 
 export const translations: Record<Language, Translations> = { th, en };

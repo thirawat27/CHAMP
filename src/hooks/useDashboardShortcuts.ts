@@ -26,6 +26,9 @@ interface DashboardShortcutOptions {
   openGuide: () => void;
   openHelp: () => void;
   toggleSettings: () => void;
+  openAddons: () => void;
+  /** Mailpit's inbox, when it is running. */
+  mailInboxUrl: string | null;
 }
 
 const SHORTCUT_IDS = Object.keys(SHORTCUTS) as ShortcutId[];
@@ -47,6 +50,8 @@ export function useDashboardShortcuts({
   openGuide,
   openHelp,
   toggleSettings,
+  openAddons,
+  mailInboxUrl,
 }: DashboardShortcutOptions) {
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -111,6 +116,12 @@ export function useDashboardShortcuts({
         case "database":
           if (isCaddyRunning) openExternal(databaseToolUrl);
           break;
+        case "addons":
+          openAddons();
+          break;
+        case "mailInbox":
+          if (mailInboxUrl) openExternal(mailInboxUrl);
+          break;
       }
     };
 
@@ -132,5 +143,7 @@ export function useDashboardShortcuts({
     openGuide,
     openHelp,
     toggleSettings,
+    openAddons,
+    mailInboxUrl,
   ]);
 }

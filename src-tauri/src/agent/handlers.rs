@@ -151,6 +151,7 @@ pub(super) async fn environment_json(app: &AppHandle) -> Result<Value, String> {
             "runtime": paths.runtime_dir,
         },
         "installed_versions": versions,
+        "addons": crate::addons::environment_json(),
     }))
 }
 
@@ -237,6 +238,10 @@ pub(super) async fn run_write_tool(
         _ => None,
     };
     let action = name.to_string();
+    // The stack tools cover the enabled add-ons too, like the dashboard buttons.
+    if matches!(name, "stop_stack" | "restart_stack") {
+        crate::addons::stop_all().await;
+    }
     let result = run_with_manager(app, move |manager| {
         let result = match (action.as_str(), service) {
             ("start_stack", _) => manager.start_all(),
@@ -255,6 +260,9 @@ pub(super) async fn run_write_tool(
     })
     .await?;
 
+    if matches!(name, "start_stack" | "restart_stack") {
+        crate::addons::start_enabled(app).await;
+    }
     let (outcome, statuses) = result;
     emit_activity(app, name, service, None, &outcome);
     outcome?;

@@ -12,6 +12,7 @@ import {
   getDatabaseTool,
 } from "../types/services";
 import { SERVICE_COMMAND_COPY, ServiceCommand, StackCommand } from "../hooks/commandCopy";
+import { useAddons } from "../hooks/useAddons";
 import { useAppMetadata } from "../hooks/useAppMetadata";
 import { useAgentActivityNotices, useUpdateChecks } from "../hooks/useDashboardEvents";
 import { useDashboardShortcuts } from "../hooks/useDashboardShortcuts";
@@ -23,6 +24,8 @@ import { usePhpUpdate } from "../hooks/usePhpUpdate";
 import { useServices } from "../hooks/useServices";
 import { useStatusPolling } from "../hooks/useStatusPolling";
 import { useToast } from "../hooks/useToast";
+import { AddonsModal } from "./AddonsModal";
+import { AddonsCard } from "./dashboard/AddonsCard";
 import { HttpsPreviewCard } from "./dashboard/HttpsPreviewCard";
 import { NoticeToast } from "./dashboard/NoticeToast";
 import { RailShortcuts } from "./dashboard/RailShortcuts";
@@ -42,6 +45,7 @@ export function Dashboard() {
   const [showSettings, setShowSettings] = useState(false);
   const [showHelp, setShowHelp] = useState(false);
   const [showGuide, setShowGuide] = useState(false);
+  const [showAddons, setShowAddons] = useState(false);
   const [doctorService, setDoctorService] = useState<ServiceType | null>(null);
 
   const { notice, notify, dismiss } = useToast();
@@ -63,6 +67,8 @@ export function Dashboard() {
   const tunnel = useHttpsTunnel({ notify, refreshStatuses, refreshMetadata });
   const { tunnelBusy, refreshTunnelStatus, resetTunnel } = tunnel;
   const { openExternal, openFolder, openTerminal } = useDesktopActions(notify);
+  const addons = useAddons();
+  const { refresh: refreshAddons } = addons;
 
   const refreshAll = useCallback(
     () => Promise.all([refreshStatuses(), refreshTunnelStatus()]),
@@ -96,8 +102,10 @@ export function Dashboard() {
     async (command: StackCommand) => {
       const succeeded = await startStackCommand(command);
       if (succeeded && command === "stop_all_services") resetTunnel();
+      // Stack commands start and stop the enabled add-ons too.
+      void refreshAddons();
     },
-    [startStackCommand, resetTunnel]
+    [startStackCommand, resetTunnel, refreshAddons]
   );
 
   // Long operations share one lock: starting PHP while an update replaces its
@@ -118,10 +126,13 @@ export function Dashboard() {
   const openGuide = useCallback(() => setShowGuide(true), []);
   const openHelp = useCallback(() => setShowHelp(true), []);
   const toggleSettings = useCallback(() => setShowSettings((prev) => !prev), []);
+  const openAddons = useCallback(() => setShowAddons(true), []);
+  const mailInboxUrl =
+    addons.addons.find((addon) => addon.kind === "mailpit" && addon.web_url)?.web_url ?? null;
 
   useDashboardShortcuts({
     operationBusy,
-    anyModalOpen: showSettings || showHelp || showGuide || doctorService !== null,
+    anyModalOpen: showSettings || showHelp || showGuide || showAddons || doctorService !== null,
     allRunning,
     runningCount,
     isCaddyRunning,
@@ -135,6 +146,8 @@ export function Dashboard() {
     openGuide,
     openHelp,
     toggleSettings,
+    openAddons,
+    mailInboxUrl,
   });
 
   /** Open Log Doctor on the first failed service, or on the web server. */
@@ -240,12 +253,14 @@ export function Dashboard() {
 
           <aside className="side-rail">
             <HttpsPreviewCard tunnel={tunnel} openExternal={openExternal} />
+            <AddonsCard controller={addons} onManage={openAddons} openExternal={openExternal} />
             <RailShortcuts
               appPaths={appPaths}
               openFolder={openFolder}
               openTerminal={openTerminal}
               onOpenDoctor={openLogDoctor}
               onOpenGuide={openGuide}
+              onOpenAddons={openAddons}
             />
             <VersionsCard
               installedVersions={installedVersions}
@@ -274,6 +289,12 @@ export function Dashboard() {
             refreshAfterChange();
             checkPhpUpdate();
           }}
+          addons={addons}
+          openExternal={openExternal}
+          onOpenAddons={() => {
+            setShowSettings(false);
+            openAddons();
+          }}
         />
       )}
 
@@ -288,6 +309,16 @@ export function Dashboard() {
       )}
 
       {showGuide && <GuideModal onClose={() => setShowGuide(false)} />}
+
+      {showAddons && (
+        <AddonsModal
+          controller={addons}
+          logsDir={appPaths?.logs_dir}
+          onClose={() => setShowAddons(false)}
+          openExternal={openExternal}
+          openFolder={openFolder}
+        />
+      )}
 
       {doctorService && (
         <LogDoctorModal

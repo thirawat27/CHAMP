@@ -1,5 +1,6 @@
 import {
   BookOpen,
+  Boxes,
   Folder,
   FolderCog,
   HardDrive,
@@ -28,6 +29,7 @@ interface RailShortcutsProps {
   openTerminal: (path?: string) => void;
   onOpenDoctor: () => void;
   onOpenGuide: () => void;
+  onOpenAddons: () => void;
 }
 
 export function RailShortcuts({
@@ -36,6 +38,7 @@ export function RailShortcuts({
   openTerminal,
   onOpenDoctor,
   onOpenGuide,
+  onOpenAddons,
 }: RailShortcutsProps) {
   const { t } = useTranslation();
 
@@ -53,6 +56,13 @@ export function RailShortcuts({
       label: t.terminal,
       shortcut: shortcutKeys("terminal"),
       onSelect: () => openTerminal(appPaths?.projects_dir),
+    },
+    {
+      id: "addons",
+      icon: <Boxes size={16} />,
+      label: t.addonsShort,
+      shortcut: shortcutKeys("addons"),
+      onSelect: onOpenAddons,
     },
     {
       id: "doctor",

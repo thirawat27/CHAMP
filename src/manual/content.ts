@@ -8,6 +8,7 @@
 import {
   ArrowUpCircle,
   Bot,
+  Boxes,
   Database,
   FileCode2,
   Folder,
@@ -421,6 +422,87 @@ export const GUIDE_SECTIONS: GuideSection[] = [
     ],
   },
   {
+    id: "addons",
+    icon: Boxes,
+    title: l(
+      "บริการเสริม: Redis, Memcached, Mailpit",
+      "Add-on services: Redis, Memcached, Mailpit"
+    ),
+    summary: l(
+      "แคช คิว และกล่องดักอีเมลสำหรับทดสอบ",
+      "Cache, queues, and a mail catcher for testing"
+    ),
+    blocks: [
+      {
+        kind: "p",
+        text: l(
+          "บริการเสริมเป็นตัวเลือก ไม่ติดตั้งมาให้ตั้งแต่แรก จัดการได้จาก Settings → บริการเสริม หรือหน้าต่างบริการเสริม (บริการเสริม ในแถบทางลัด หรือกด `Ctrl E`) การเปลี่ยนแปลงบันทึกทันทีโดยไม่ต้องกด บันทึก ทุกตัวรับการเชื่อมต่อจากเครื่องนี้ (127.0.0.1) เท่านั้น",
+          "Add-ons are optional and not installed up front. Manage them in Settings → Add-on services or in the Add-on services window (Add-ons in the shortcuts rail, or `Ctrl E`). Changes are saved at once, without Save. Every add-on accepts connections from this computer (127.0.0.1) only."
+        ),
+      },
+      {
+        kind: "table",
+        head: [
+          l("บริการ", "Service"),
+          l("ใช้ทำอะไร", "Use it for"),
+          l("พอร์ตเริ่มต้น", "Default port"),
+        ],
+        rows: [
+          ["Redis", l("แคช คิว (queue) และเซสชัน", "Cache, queues, and sessions"), "6379"],
+          ["Memcached", l("แคชในหน่วยความจำ", "In-memory cache"), "11211"],
+          [
+            "Mailpit",
+            l(
+              "ดักอีเมลที่แอปส่ง ดูได้ในกล่องจดหมายบนเว็บ ไม่ส่งออกจริง",
+              "Catches mail your app sends and shows it in a web inbox; nothing is really sent"
+            ),
+            l("SMTP 1025, เว็บ 8025", "SMTP 1025, web 8025"),
+          ],
+        ],
+      },
+      {
+        kind: "steps",
+        items: [
+          l(
+            "กด ติดตั้ง ที่บริการที่ต้องการ CHAMP ดาวน์โหลดเวอร์ชันที่ตรึงไว้และตรวจ SHA-256 ก่อนติดตั้ง",
+            "Press Install on the add-on you want. CHAMP downloads a pinned version and checks its SHA-256 before installing it."
+          ),
+          l(
+            "ติ๊ก เริ่มพร้อมสแต็ก ตัวที่ติ๊กไว้จะเริ่มและหยุดพร้อมปุ่ม เริ่มทั้งหมด / หยุดทั้งหมด หรือกด เริ่ม เพื่อเปิดตัวเดียว",
+            "Tick Start with the stack. Ticked add-ons start and stop with Start all / Stop all, or press Start to run one on its own."
+          ),
+          l(
+            "คัดลอกค่า .env ด้านล่างไปใส่ในโปรเจกต์",
+            "Copy the .env lines at the bottom into your project."
+          ),
+          l(
+            "สำหรับ Mailpit กด เปิดกล่องจดหมาย (หรือ `Ctrl M`) เพื่อดูอีเมลที่จับได้",
+            "For Mailpit, press Open inbox (or `Ctrl M`) to see the caught messages."
+          ),
+        ],
+      },
+      {
+        kind: "code",
+        label: l("ตัวอย่าง .env ของ Laravel", "Example Laravel .env"),
+        code: "REDIS_CLIENT=predis\nREDIS_HOST=127.0.0.1\nREDIS_PORT=6379\nCACHE_STORE=redis\nQUEUE_CONNECTION=redis\nMAIL_MAILER=smtp\nMAIL_HOST=127.0.0.1\nMAIL_PORT=1025",
+      },
+      {
+        kind: "tip",
+        text: l(
+          "เมื่อเปิด Mailpit ฟังก์ชัน `mail()` ของ PHP จะส่งเข้า Mailpit อัตโนมัติ (CHAMP ตั้งค่า php.ini และรีสตาร์ท PHP ให้) Laravel ต้องติดตั้ง `predis/predis` หรือส่วนขยาย phpredis จึงจะใช้ Redis ได้",
+          "With Mailpit on, PHP's `mail()` goes to Mailpit automatically (CHAMP sets php.ini and restarts PHP for you). Laravel needs `predis/predis` or the phpredis extension to use Redis."
+        ),
+      },
+      {
+        kind: "warning",
+        text: l(
+          "บน macOS และ Linux CHAMP ดาวน์โหลด Redis และ Memcached ให้ไม่ได้ ให้ติดตั้งด้วย `brew install redis memcached` หรือตัวจัดการแพ็กเกจของระบบ แล้ว CHAMP จะใช้ตัวนั้นเอง ถ้าพอร์ตถูกโปรแกรมอื่นใช้อยู่ CHAMP จะแจ้งแทนการย้ายพอร์ตเอง เพราะ .env ของโปรเจกต์ระบุพอร์ตไว้",
+          "On macOS and Linux CHAMP cannot download Redis and Memcached; install them with `brew install redis memcached` or your package manager and CHAMP uses them. When a port is taken by another program, CHAMP reports it instead of moving to another port, because your project's .env names the port."
+        ),
+      },
+    ],
+  },
+  {
     id: "doctor",
     icon: Stethoscope,
     title: l("Log Doctor", "Log Doctor"),
@@ -613,6 +695,10 @@ export const GUIDE_SECTIONS: GuideSection[] = [
             "PHP versions and database tool: see the PHP and Databases topics."
           ),
           l(
+            "บริการเสริม: ติดตั้ง เปิดใช้ และตั้งพอร์ตของ Redis, Memcached และ Mailpit บันทึกทันทีโดยไม่ต้องกด บันทึก ดูหัวข้อ บริการเสริม",
+            "Add-on services: install, enable, and set ports for Redis, Memcached, and Mailpit. Saved at once, without Save; see the Add-on services topic."
+          ),
+          l(
             "Log Doctor AI, AI Agent Connector และ อัปเดต: ดูหัวข้อของแต่ละส่วน",
             "Log Doctor AI, AI agent connector, and Updates: see their topics."
           ),
@@ -661,6 +747,14 @@ export const GUIDE_SECTIONS: GuideSection[] = [
           {
             keys: `Ctrl ${SHORTCUTS.settings.key}`,
             text: l("เปิด/ปิด Settings", "Toggle Settings"),
+          },
+          {
+            keys: `Ctrl ${SHORTCUTS.addons.key}`,
+            text: l("เปิดบริการเสริม", "Open Add-on services"),
+          },
+          {
+            keys: `Ctrl ${SHORTCUTS.mailInbox.key}`,
+            text: l("เปิดกล่องจดหมาย Mailpit", "Open the Mailpit inbox"),
           },
           { keys: "F1", text: l("เปิดคู่มือนี้", "Open this guide") },
           { keys: "?", text: l("แสดงคีย์ลัด", "Show shortcuts") },

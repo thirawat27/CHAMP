@@ -36,6 +36,7 @@ export function HelpModal({ onClose, onOpenGuide }: HelpModalProps) {
         [shortcutKeys("projects"), t.shortcutProjects],
         [shortcutKeys("logs"), t.shortcutLogs],
         [shortcutKeys("terminal"), t.terminal],
+        [shortcutKeys("mailInbox"), t.shortcutMailInbox],
       ],
     },
     {
@@ -43,6 +44,7 @@ export function HelpModal({ onClose, onOpenGuide }: HelpModalProps) {
       title: t.shortcutGroupWindows,
       items: [
         [shortcutKeys("settings"), t.shortcutSettings],
+        [shortcutKeys("addons"), t.shortcutAddons],
         ["F1", t.manual],
         ["?", t.shortcutHelp],
         ["Esc", t.close],

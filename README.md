@@ -38,6 +38,7 @@ CHAMP is a desktop app that runs a complete PHP development stack **without admi
 | PHP | Install, switch, and update PHP branches; the dashboard offers patch updates for the active PHP |
 | Projects | Every folder in `projects/` is served at `http://localhost:8080/<folder>/`; common `.htaccess` rules are translated to Caddy |
 | HTTPS Preview | Public `https://*.ngrok-free.app` link via ngrok (free ngrok authtoken required) |
+| Add-on services | Optional Redis (cache/queue), Memcached, and Mailpit (catches outgoing mail, never delivers it); pinned, SHA-256-verified downloads, start with the stack, ready-made `.env` lines (`Ctrl/Cmd + E`) |
 | Log Doctor | 28 known failure patterns (ports, VC++ runtime, corrupted data, locks, permissions, …) with fixes and one-click actions |
 | AI agents | Local MCP server (127.0.0.1 + bearer token) with status, environment, logs, diagnosis, database, HTTPS Preview, and service-control tools |
 | Updates | Daily update check, one-click install and restart, minisign-verified packages |
@@ -56,8 +57,11 @@ CHAMP is a desktop app that runs a complete PHP development stack **without admi
 | PostgreSQL | 127.0.0.1:5432 — user `postgres`, local trust |
 | PHP-FPM | 127.0.0.1:9000 (internal) |
 | AI agent connector | http://127.0.0.1:47823/mcp (off by default) |
+| Redis (add-on) | 127.0.0.1:6379 |
+| Memcached (add-on) | 127.0.0.1:11211 |
+| Mailpit (add-on) | SMTP 127.0.0.1:1025, inbox http://127.0.0.1:8025 |
 
-All ports can be changed in Settings. If a port is busy, CHAMP picks the next free one and tells you.
+All ports can be changed in Settings (add-on ports in Add-on services). If a stack port is busy, CHAMP picks the next free one and tells you. Add-ons never move: your project's `.env` names their port, so a busy add-on port is reported instead.
 
 ---
 
@@ -91,6 +95,8 @@ On first launch the setup wizard checks system libraries, lets you pick PHP / da
 | `Ctrl/Cmd + O` / `L` | Open the projects / logs folder |
 | `Ctrl/Cmd + T` | Terminal with PHP, MySQL, and PostgreSQL on `PATH` |
 | `Ctrl/Cmd + ,` | Settings |
+| `Ctrl/Cmd + E` | Add-on services (Redis, Memcached, Mailpit) |
+| `Ctrl/Cmd + M` | Mailpit inbox (when running) |
 | `F1` | Guide |
 | `?` | Shortcut help |
 | `Esc` | Close a dialog or notification |
@@ -128,13 +134,14 @@ Security: localhost-only, 256-bit bearer token compared in constant time, browse
 
 ```text
 %LOCALAPPDATA%\CHAMP\          (Windows; the system user-data folder elsewhere)
+├── addons/        Redis and Mailpit data (add-ons)
 ├── config/        settings.json, agent token, generated configs
 ├── logs/          service logs
 ├── models/        Log Doctor AI model (auto-downloaded)
 ├── mysql/data/    MySQL data
 ├── postgresql/data/
 ├── projects/      your websites
-└── runtime/       Caddy, PHP, databases, phpMyAdmin / Adminer
+└── runtime/       Caddy, PHP, databases, phpMyAdmin / Adminer, addons/
 ```
 
 - **Portable mode**: place a file named `champ-portable` next to the app, or set `CHAMP_DATA_DIR`.

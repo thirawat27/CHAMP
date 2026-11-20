@@ -42,23 +42,33 @@ pub async fn restart_service(service: ServiceType, app: AppHandle) -> Result<Ser
     run_service_command(&app, move |m| m.restart(service)).await
 }
 
+/// Start the stack, then the enabled add-ons. Add-ons start even when the
+/// stack failed: they do not depend on it, and their own errors stay in the
+/// add-on status instead of failing the stack command.
 #[tauri::command]
 pub async fn start_all_services(app: AppHandle) -> Result<ServiceMap, String> {
-    run_service_command(&app, |m| m.start_all()).await
+    let result = run_service_command(&app, |m| m.start_all()).await;
+    crate::addons::start_enabled(&app).await;
+    result
 }
 
 #[tauri::command]
 pub async fn stop_all_services(app: AppHandle) -> Result<ServiceMap, String> {
-    run_service_command(&app, |m| {
+    let result = run_service_command(&app, |m| {
         let _ = crate::tunnel::stop_https_tunnel();
         m.stop_stack()
     })
-    .await
+    .await;
+    crate::addons::stop_all().await;
+    result
 }
 
 #[tauri::command]
 pub async fn restart_all_services(app: AppHandle) -> Result<ServiceMap, String> {
-    run_service_command(&app, |m| m.restart_all()).await
+    crate::addons::stop_all().await;
+    let result = run_service_command(&app, |m| m.restart_all()).await;
+    crate::addons::start_enabled(&app).await;
+    result
 }
 
 /// Get the status of all services
@@ -122,11 +132,13 @@ pub async fn set_ngrok_authtoken(
 pub(crate) async fn stop_tunnel_and_services(
     app: &AppHandle,
 ) -> Result<Result<(), String>, String> {
-    run_with_manager(app, |manager| {
+    let result = run_with_manager(app, |manager| {
         let _ = crate::tunnel::stop_https_tunnel();
         manager.stop_all()
     })
-    .await
+    .await;
+    crate::addons::stop_all().await;
+    result
 }
 
 /// Stop the tunnel and every service so the installer can replace the app

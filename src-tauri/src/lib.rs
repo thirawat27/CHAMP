@@ -1,4 +1,5 @@
 // Modules
+mod addons;
 mod agent;
 mod commands;
 mod config;
@@ -79,6 +80,7 @@ pub fn run() {
                         manager.start_all()
                     })
                     .await;
+                    addons::start_enabled(&app_handle).await;
                 });
             }
 
@@ -143,6 +145,13 @@ pub fn run() {
             agent::configure_agent_connector,
             agent::regenerate_agent_token,
             agent::test_agent_connector,
+            // Add-on services (Redis, Memcached, Mailpit)
+            addons::get_addons_status,
+            addons::install_addon,
+            addons::start_addon,
+            addons::stop_addon,
+            addons::configure_addon,
+            addons::get_mailpit_message_count,
             // Log Doctor
             doctor::diagnose_service,
             doctor::get_log_doctor_status,
@@ -273,6 +282,7 @@ fn quit_app(app: &AppHandle) {
         agent::stop();
         let _ = tunnel::stop_https_tunnel();
         let _ = process::runner::run_with_manager(&app, |manager| manager.stop_all()).await;
+        addons::stop_all().await;
         app.exit(0);
     });
 }

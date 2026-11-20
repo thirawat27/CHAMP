@@ -3,7 +3,9 @@ use super::database::{prepare_init_staging_dir, promote_init_staging_dir};
 use super::htaccess::discover_htaccess_rules;
 use super::logs::{format_exit_status, format_process_exit_error, read_log_tail};
 use super::mysql::{mysql_server_args, remove_stale_mysql_init_files};
-use super::php_config::{apply_php_database_env, rotate_php_error_log};
+use super::php_config::{
+    apply_php_database_env, php_env_pairs_block, php_mail_lines, rotate_php_error_log,
+};
 use super::platform::{find_process_ids_by_executable, lsof_lists_executable, mysql_socket_path};
 use super::ports::{find_available_port_excluding, first_fallback_port};
 use super::{
@@ -882,4 +884,40 @@ fn test_all_services_are_keyed_by_their_own_type() {
     for (service_type, process) in &manager.services {
         assert_eq!(process.name, *service_type);
     }
+}
+
+#[test]
+fn php_mail_lines_route_mail_to_mailpit_only_when_enabled() {
+    assert!(php_mail_lines(None).is_empty());
+
+    let windows = crate::addons::PhpMailRoute {
+        smtp_port: 1026,
+        sendmail_path: None,
+    };
+    let lines = php_mail_lines(Some(&windows));
+    assert!(lines.contains("SMTP = 127.0.0.1\n"));
+    assert!(lines.contains("smtp_port = 1026\n"));
+    assert!(!lines.contains("sendmail_path"));
+
+    let unix = crate::addons::PhpMailRoute {
+        smtp_port: 1025,
+        sendmail_path: Some("'/opt/champ/mailpit' sendmail -t -i -S 127.0.0.1:1025".into()),
+    };
+    assert!(php_mail_lines(Some(&unix))
+        .contains("sendmail_path = \"'/opt/champ/mailpit' sendmail -t -i -S 127.0.0.1:1025\"\n"));
+}
+
+#[test]
+fn php_env_block_escapes_values_for_php_strings() {
+    assert!(php_env_pairs_block(&[]).is_empty());
+    let block = php_env_pairs_block(&[("CHAMP_X", r"a'b\c".to_string())]);
+    assert_eq!(
+        block,
+        concat!(
+            r"putenv('CHAMP_X=a\'b\\c');",
+            "\n",
+            r"$_SERVER['CHAMP_X'] = 'a\'b\\c';",
+            "\n"
+        )
+    );
 }

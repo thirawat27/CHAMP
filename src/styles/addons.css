@@ -1,0 +1,336 @@
+/* ---------- Add-on services (Redis, Memcached, Mailpit) ---------- */
+
+.addons-modal {
+  width: min(680px, 100%);
+}
+
+.addons-subtitle {
+  margin-top: 4px;
+  color: var(--text-secondary);
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+
+.addons-body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.addons-body > .error-box {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+  white-space: pre-wrap;
+}
+
+.addon-row {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius);
+  background: var(--bg-card-secondary);
+}
+
+.addon-row.running {
+  border-color: color-mix(in srgb, var(--color-success) 38%, var(--border-color));
+}
+
+.addon-row.error {
+  border-color: color-mix(in srgb, var(--color-error) 38%, var(--border-color));
+}
+
+.addon-row-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.addon-icon {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--color-primary) 14%, transparent);
+  color: var(--color-primary);
+}
+
+.addon-title {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  flex-direction: column;
+}
+
+.addon-title strong {
+  font-family: var(--font-display);
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.addon-title small {
+  overflow: hidden;
+  color: var(--text-secondary);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.addon-state {
+  flex: none;
+  padding: 3px 9px;
+  border-radius: 999px;
+  background: var(--status-stopped-bg);
+  color: var(--status-stopped-text);
+  font-size: 11.5px;
+  font-weight: 600;
+}
+
+.addon-state.running {
+  background: var(--status-running-bg);
+  color: var(--status-running-text);
+}
+
+.addon-state.starting,
+.addon-state.stopping {
+  background: var(--status-starting-bg);
+  color: var(--status-starting-text);
+}
+
+.addon-state.error {
+  background: var(--status-error-bg);
+  color: var(--status-error-text);
+}
+
+.addon-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 10px 18px;
+}
+
+.addon-toggle {
+  min-height: 32px;
+  margin-right: auto;
+}
+
+.addon-port {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  color: var(--text-secondary);
+  font-size: 11.5px;
+}
+
+.addon-port input {
+  width: 92px;
+  padding: 6px 8px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  background: var(--bg-card);
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  font-size: 13px;
+}
+
+.addon-port input:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 1px;
+}
+
+.addon-port input[aria-invalid="true"] {
+  border-color: var(--color-error);
+}
+
+.addon-port-error {
+  color: var(--color-error);
+}
+
+.addon-hint {
+  color: var(--text-secondary);
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+
+.addon-hint code,
+.addons-card-list code {
+  font-family: var(--font-mono);
+  font-size: 12px;
+}
+
+.addon-hint code {
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: var(--bg-sunken);
+  color: var(--text-primary);
+  user-select: all;
+}
+
+.addon-error {
+  padding: 8px 10px;
+  border-radius: var(--radius-sm);
+  background: var(--status-error-bg);
+  color: var(--status-error-text);
+  font-size: 12.5px;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.addon-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.addon-actions:empty {
+  display: none;
+}
+
+.addon-count {
+  min-width: 20px;
+  margin-left: 4px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: color-mix(in srgb, currentColor 18%, transparent);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 18px;
+  text-align: center;
+}
+
+.addons-env {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-top: 4px;
+}
+
+.addons-env-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.addons-env-head h3 {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.addons-env-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.addons-env-lines {
+  overflow-x: auto;
+  margin: 0;
+  padding: 10px 12px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  background: var(--bg-sunken);
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1.6;
+  user-select: text;
+}
+
+/* ---------- Settings section ---------- */
+
+.addons-settings .settings-muted + .settings-muted {
+  margin-top: 4px;
+}
+
+.addons-settings-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 12px 0;
+}
+
+.addons-settings > .error-box {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 10px;
+  white-space: pre-wrap;
+}
+
+/* ---------- Rail card ---------- */
+
+.addons-card .rail-card-head h2 {
+  flex: 1;
+}
+
+.addons-card-manage {
+  width: 26px;
+  height: 26px;
+}
+
+.addons-card-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.addons-card-list li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+}
+
+.addons-card-name {
+  flex: 1;
+}
+
+.addons-card-list code {
+  color: var(--text-secondary);
+}
+
+.addon-dot {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--text-secondary);
+  opacity: 0.6;
+}
+
+.addon-dot.running {
+  background: var(--color-success);
+  opacity: 1;
+}
+
+.addon-dot.starting,
+.addon-dot.stopping {
+  background: var(--color-warning);
+  opacity: 1;
+}
+
+.addon-dot.error,
+.addon-dot.missing {
+  background: var(--color-error);
+  opacity: 1;
+}
+
+.addons-card-inbox {
+  justify-content: center;
+}
+
+@media (max-width: 640px) {
+  .addon-toggle {
+    width: 100%;
+  }
+}

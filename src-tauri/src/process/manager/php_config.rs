@@ -49,6 +49,7 @@ pub(super) fn generate_php_ini(
 
     let extension_lines = php_ini_extension_lines(&ext_dir);
     let env_file = generate_php_env_file(paths, web_port, mysql_port, postgresql_port)?;
+    let mail_lines = php_mail_lines(crate::addons::php_mail_route().as_ref());
     let env_file_path = env_file.to_string_lossy().replace('\\', "/");
 
     let php_ini_content = format!(
@@ -90,6 +91,7 @@ mysqli.default_port = {}
 pgsql.default_host = 127.0.0.1
 pgsql.default_port = {}
 {}
+{}
 ; Session settings - use absolute path for Windows compatibility
 session.save_path = "{}"
 session.cookie_httponly = 1
@@ -124,6 +126,7 @@ realpath_cache_ttl=300
         mysql_port,
         postgresql_port,
         php_mysql_socket_lines(paths),
+        mail_lines,
         session_path,
         session_path
     );
@@ -133,6 +136,36 @@ realpath_cache_ttl=300
         .map_err(|e| format!("Failed to write php.ini: {}", e))?;
 
     Ok(())
+}
+
+/// `putenv` and `$_SERVER` lines for the enabled add-ons. Values are ports,
+/// hosts, and URLs CHAMP builds itself; they are still escaped for PHP.
+pub(super) fn php_env_pairs_block(pairs: &[(&str, String)]) -> String {
+    let mut block = String::new();
+    for (key, value) in pairs {
+        let value = value.replace('\\', "\\\\").replace('\'', "\\'");
+        block.push_str(&format!(
+            "putenv('{key}={value}');\n$_SERVER['{key}'] = '{value}';\n"
+        ));
+    }
+    block
+}
+
+/// php.ini lines that hand `mail()` to Mailpit, so no message leaves the
+/// machine. Windows PHP talks SMTP itself; elsewhere PHP pipes the message to
+/// a sendmail program, which Mailpit provides as `mailpit sendmail`.
+pub(super) fn php_mail_lines(route: Option<&crate::addons::PhpMailRoute>) -> String {
+    let Some(route) = route else {
+        return String::new();
+    };
+    let mut lines = format!(
+        "; Mail is caught by Mailpit (CHAMP add-on) and never delivered.\nSMTP = 127.0.0.1\nsmtp_port = {}\nsendmail_from = \"champ@localhost\"\n",
+        route.smtp_port
+    );
+    if let Some(sendmail) = route.sendmail_path.as_deref() {
+        lines.push_str(&format!("sendmail_path = \"{}\"\n", sendmail));
+    }
+    lines
 }
 
 pub(super) fn generate_php_env_file(
@@ -185,8 +218,13 @@ defined('CHAMP_POSTGRES_PORT') || define('CHAMP_POSTGRES_PORT', (int) $champPost
 defined('CHAMP_POSTGRES_USER') || define('CHAMP_POSTGRES_USER', 'postgres');
 defined('CHAMP_POSTGRES_PASSWORD') || define('CHAMP_POSTGRES_PASSWORD', '');
 defined('CHAMP_WEB_PORT') || define('CHAMP_WEB_PORT', (int) $champWebPort);
-"#,
-        mysql_port, postgresql_port, web_port
+{}"#,
+        mysql_port,
+        postgresql_port,
+        web_port,
+        php_env_pairs_block(&crate::addons::env_pairs(
+            &crate::config::AppSettings::load().addons
+        ))
     );
 
     fs::write(&env_file, content).map_err(|e| {

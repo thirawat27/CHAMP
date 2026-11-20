@@ -53,6 +53,63 @@ pub struct AppSettings {
     pub agent_connector_read_only: bool,
     #[serde(default = "default_agent_connector_port")]
     pub agent_connector_port: u16,
+    /// Optional Redis / Memcached / Mailpit services (see `addons`). Written by
+    /// `configure_addon`; `save_settings` keeps what is on disk.
+    #[serde(default)]
+    pub addons: AddonSettings,
+}
+
+pub const DEFAULT_REDIS_PORT: u16 = 6379;
+pub const DEFAULT_MEMCACHED_PORT: u16 = 11211;
+pub const DEFAULT_MAILPIT_SMTP_PORT: u16 = 1025;
+pub const DEFAULT_MAILPIT_WEB_PORT: u16 = 8025;
+
+/// Which optional services start with the stack, and their ports.
+///
+/// Add-ons never move to a fallback port: an app's `.env` names the port, so a
+/// busy port is reported instead of silently picking another one.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct AddonSettings {
+    pub redis_enabled: bool,
+    pub redis_port: u16,
+    pub memcached_enabled: bool,
+    pub memcached_port: u16,
+    pub mailpit_enabled: bool,
+    pub mailpit_smtp_port: u16,
+    pub mailpit_web_port: u16,
+}
+
+impl Default for AddonSettings {
+    fn default() -> Self {
+        Self {
+            redis_enabled: false,
+            redis_port: DEFAULT_REDIS_PORT,
+            memcached_enabled: false,
+            memcached_port: DEFAULT_MEMCACHED_PORT,
+            mailpit_enabled: false,
+            mailpit_smtp_port: DEFAULT_MAILPIT_SMTP_PORT,
+            mailpit_web_port: DEFAULT_MAILPIT_WEB_PORT,
+        }
+    }
+}
+
+impl AddonSettings {
+    /// Ports of the enabled add-ons, labeled for validation messages.
+    pub fn enabled_ports(&self) -> Vec<(&'static str, u16)> {
+        let mut ports = Vec::new();
+        if self.redis_enabled {
+            ports.push(("Redis", self.redis_port));
+        }
+        if self.memcached_enabled {
+            ports.push(("Memcached", self.memcached_port));
+        }
+        if self.mailpit_enabled {
+            ports.push(("Mailpit SMTP", self.mailpit_smtp_port));
+            ports.push(("Mailpit web", self.mailpit_web_port));
+        }
+        ports
+    }
 }
 
 impl Default for AppSettings {
@@ -71,6 +128,7 @@ impl Default for AppSettings {
             agent_connector_enabled: false,
             agent_connector_read_only: false,
             agent_connector_port: default_agent_connector_port(),
+            addons: AddonSettings::default(),
         }
     }
 }
@@ -192,13 +250,21 @@ impl AppSettings {
 
         // Check for duplicate ports across services. Zero ports are handled by the
         // ">0" check above, so ignore them here to avoid duplicate/confusing errors.
-        let labeled_ports = [
+        let mut labeled_ports = vec![
             ("HTTP/Web", self.web_port),
             ("PHP-FPM", self.php_port),
             ("MySQL", self.mysql_port),
             ("PostgreSQL", self.postgresql_port),
             ("HTTPS", self.https_port),
         ];
+        if self.agent_connector_enabled {
+            labeled_ports.push(("AI agent connector", self.agent_connector_port));
+        }
+        let addon_ports = self.addons.enabled_ports();
+        if addon_ports.iter().any(|(_, port)| *port == 0) {
+            errors.push("Add-on port numbers must be greater than 0".to_string());
+        }
+        labeled_ports.extend(addon_ports);
         // Compare each unique pair once, in a stable, deterministic order.
         for i in 0..labeled_ports.len() {
             for j in (i + 1)..labeled_ports.len() {
@@ -261,6 +327,42 @@ mod tests {
             }),
             "expected an error mentioning both services and the port, got: {:?}",
             errors
+        );
+    }
+
+    #[test]
+    fn validate_checks_the_agent_connector_port_only_when_enabled() {
+        let mut settings = AppSettings::default();
+        settings.agent_connector_port = settings.mysql_port;
+        assert!(
+            settings.validate().is_ok(),
+            "a disabled connector must not block saving"
+        );
+
+        settings.agent_connector_enabled = true;
+        let errors = settings.validate().unwrap_err();
+        assert!(
+            errors
+                .iter()
+                .any(|e| e.contains("AI agent connector") && e.contains("MySQL")),
+            "{errors:?}"
+        );
+    }
+
+    #[test]
+    fn validate_rejects_a_zero_port_for_an_enabled_addon() {
+        let mut settings = AppSettings::default();
+        settings.addons.redis_port = 0;
+        assert!(
+            settings.validate().is_ok(),
+            "disabled add-ons are not checked"
+        );
+
+        settings.addons.redis_enabled = true;
+        let errors = settings.validate().unwrap_err();
+        assert!(
+            errors.iter().any(|e| e.contains("Add-on port")),
+            "{errors:?}"
         );
     }
 

@@ -20,6 +20,7 @@ Built-in features:
 - AI agent connector: local MCP server for coding agents (off by default)
 - Self-updater: signed updates from GitHub Releases via `tauri-plugin-updater`
 - In-app bilingual guide (F1)
+- Add-on services (optional, off by default): Redis, Memcached, Mailpit. Managed in their own window (`Ctrl+E`), not in Settings; a compact rail card appears only while one is in use
 
 Optional Node.js / Python / Go / Ruby runtimes and project templates were removed in 1.4.0. Do not reintroduce them.
 
@@ -61,7 +62,8 @@ cargo clippy --all-targets -- -D warnings
 
 - Entry point: `src/main.tsx` (font imports, dev-only IPC mock)
 - Main app: `src/App.tsx`
-- Dashboard: `src/components/Dashboard.tsx` + `src/components/dashboard/*` (request path, HTTPS Preview, side rail, update banner); logic in `src/hooks/useDashboardShortcuts.ts`, `useDatabaseSwitch.ts`, `usePhpUpdate.ts`, `useStatusPolling.ts`
+- Dashboard: `src/components/Dashboard.tsx` + `src/components/dashboard/*` (request path, HTTPS Preview, add-ons card, side rail, update banner)
+- Add-on services window: `src/components/AddonsModal.tsx`, `src/hooks/useAddons.ts`, `src/types/addons.ts`; logic in `src/hooks/useDashboardShortcuts.ts`, `useDatabaseSwitch.ts`, `usePhpUpdate.ts`, `useStatusPolling.ts`
 - Service cards: `src/components/ServiceCard.tsx`
 - First-run setup: `src/components/FirstRunWizard.tsx` + `src/components/wizard/*`, `src/components/PackageSelector.tsx`, `src/hooks/useRuntimeInstall.ts`
 - Settings drawer: `src/components/SettingsPanel.tsx` + `src/components/settings/*`
@@ -86,6 +88,8 @@ src-tauri/src/
   metrics.rs          status bar system metrics
   commands/           IPC handlers: services, settings, runtime, php, database, folders
   tunnel/             HTTPS Preview: mod.rs (ngrok process), install.rs (find/download ngrok)
+  addons/             Redis / Memcached / Mailpit: mod.rs (IPC, PHP and .env integration),
+                      catalog.rs (pinned URLs + SHA-256), install.rs, runtime.rs (processes)
   doctor/             Log Doctor: knowledge, rank, download, model (doctor-knowledge.json)
   agent/              MCP server (hyper, 127.0.0.1, bearer token): http, token, tools, handlers, database
   process/
@@ -117,6 +121,7 @@ src-tauri/src/
 - PHP: `get_installed_php_versions`, `switch_php_version`, `download_php_version` (installs/updates to the newest patch, does not switch)
 - Folders/terminal: `open_folder`, `open_project_terminal` (restricted to the CHAMP data folder)
 - HTTPS Preview: `start_https_tunnel`, `stop_https_tunnel`, `get_https_tunnel_status`
+- Add-ons: `get_addons_status`, `install_addon`, `start_addon`, `stop_addon`, `configure_addon` (enable/ports; restarts PHP when the mail route or env changes), `get_mailpit_message_count`
 - Log Doctor: `diagnose_service`, `get_log_doctor_status`, `download_log_doctor_model`, `remove_log_doctor_model`
 - Updates: `prepare_for_update` (the update itself uses the updater plugin from the frontend)
 - Agent connector: `get_agent_connector_status`, `configure_agent_connector`, `regenerate_agent_token`, `test_agent_connector` (self-test over HTTP like a real client)
@@ -139,14 +144,23 @@ PHP entries are rebuilt from official feeds (`php.net/releases/states.php`, `win
 
 ```text
 CHAMP/
+  addons/        add-on data (redis/, mailpit/mailpit.db)
   config/        settings.json, agent-token, runtime-config.json override
   logs/
   models/        Log Doctor model (auto-downloaded)
   mysql/data/
   postgresql/data/
   projects/
-  runtime/
+  runtime/       (add-on binaries in runtime/addons/<name>/)
 ```
+
+## Add-on Services
+
+- Downloads are pinned in `src-tauri/src/addons/catalog.rs` with the SHA-256 of the GitHub release asset; update version, URL, and checksum together. Never install an add-on unverified.
+- Redis and Memcached have no official Windows builds: CHAMP uses `redis-windows/redis-windows` (msys2) and `jefyt/memcached-windows`. On macOS/Linux it uses a system install (`brew`/`apt`) and never kills a system copy.
+- Add-ons bind `127.0.0.1` only and never move to a fallback port; a busy port is an error the user fixes.
+- With Mailpit enabled, `php.ini` routes `mail()` to it (`SMTP`/`smtp_port` on Windows, `sendmail_path = mailpit sendmail` elsewhere).
+- Add-on failures never fail a stack command; they are reported through the add-on status and the `addon-errors` event.
 
 Portable mode can be controlled with `CHAMP_DATA_DIR`, `CHAMP_PORTABLE_DIR`, `CHAMP_PORTABLE`, or portable marker files.
 
@@ -171,6 +185,8 @@ Portable mode can be controlled with `CHAMP_DATA_DIR`, `CHAMP_PORTABLE_DIR`, `CH
 - `Ctrl/Cmd + L`: open the logs folder.
 - `Ctrl/Cmd + T`: open a terminal with CHAMP runtimes on `PATH`.
 - `Ctrl/Cmd + ,`: toggle Settings.
+- `Ctrl/Cmd + E`: open Add-on services.
+- `Ctrl/Cmd + M`: open the Mailpit inbox (when running).
 - `F1`: open the guide.
 - `?`: show shortcut help.
 - `Esc`: dismiss a toast or close the active modal.

@@ -15,6 +15,8 @@ export const SHORTCUTS = {
   logs: { code: "KeyL", key: "L" },
   terminal: { code: "KeyT", key: "T" },
   settings: { code: "Comma", key: "," },
+  addons: { code: "KeyE", key: "E" },
+  mailInbox: { code: "KeyM", key: "M" },
 } as const;
 
 export type ShortcutId = keyof typeof SHORTCUTS;
