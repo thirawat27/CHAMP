@@ -70,6 +70,8 @@ drive the whole app.
 - macOS builds: a missing import in the terminal launcher stopped CHAMP 2.0.0 from
   compiling on macOS, so 2.0.0 shipped no macOS installers. 2.1.0 builds again for
   Apple Silicon and Intel.
+- Release builds: the Linux release build no longer reuses a build cache made on a
+  newer Ubuntu, which failed to link (`__isoc23_sscanf`).
 
 ### Security
 

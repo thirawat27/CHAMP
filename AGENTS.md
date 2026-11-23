@@ -149,6 +149,8 @@ Runtime metadata is defined in `src-tauri/runtime-config.json` and can be overri
 
 PHP entries are rebuilt from official feeds (`php.net/releases/states.php`, `windows.php.net/.../releases.json` with SHA-256, the static-php-cli listing). Never guess PHP download URLs; Windows builds can carry rebuild suffixes such as `8.5.12-1`.
 
+Release builds (`.github/workflows/release.yml`): Windows x64, macOS Apple Silicon/Intel, and Linux x64 (Ubuntu 22.04 runner for an older glibc). No Windows ARM64 or Linux ARM64 builds: third-party software CHAMP connects to does not support ARM there. The release job keeps its own Rust cache (`prefix-key: v1-rust-release`); sharing the ubuntu-latest cache from push.yml breaks linking. Release notes come from the version section of `CHANGELOG.md`.
+
 ## App Data Layout
 
 ```text

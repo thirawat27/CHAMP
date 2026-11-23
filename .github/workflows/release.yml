@@ -104,6 +104,11 @@ jobs:
         with:
           workspaces: src-tauri -> target
           cache-on-failure: true
+          # Never share a cache with push.yml or pull_request.yml: their Linux
+          # job runs on ubuntu-latest, whose newer glibc headers leak C symbols
+          # (__isoc23_sscanf) that ubuntu-22.04 cannot link (the v2.1.0 failure).
+          prefix-key: v1-rust-release
+          key: ${{ matrix.name }}
 
       - name: Install frontend dependencies
         run: pnpm install --frozen-lockfile
