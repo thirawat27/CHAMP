@@ -163,7 +163,9 @@ Open questions: none identified.
 
 ## Implementation status (2026-11-23)
 
-All steps are implemented in the working tree, not yet committed. Built in a different order than
+All steps are implemented and merged into `main`. Follow-up work in the same change: the
+Add-ons window became tabs with a card grid, Settings got a category menu, and MCP gained
+control tools (`agent/control.rs`) so agents can do everything the Settings window does. Built in a different order than
 listed below: the `AddonSpec` refactor (step 3) came first so later steps would not need rework.
 New built-ins: Centrifugo 6.10.3 and RustFS 1.0.4 (S3), with archive checksums verified against
 GitHub release digests. Their launch flags come from upstream docs; the binaries were not run here.

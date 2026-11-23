@@ -64,10 +64,10 @@ cargo clippy --all-targets -- -D warnings
 - Entry point: `src/main.tsx` (font imports, dev-only IPC mock)
 - Main app: `src/App.tsx`
 - Dashboard: `src/components/Dashboard.tsx` + `src/components/dashboard/*` (request path, HTTPS Preview, add-ons card, side rail, update banner)
-- Add-on services window: `src/components/AddonsModal.tsx`, `src/hooks/useAddons.ts`, `src/types/addons.ts`; logic in `src/hooks/useDashboardShortcuts.ts`, `useDatabaseSwitch.ts`, `usePhpUpdate.ts`, `useStatusPolling.ts`
+- Add-on services window: `src/components/AddonsModal.tsx` (tabs: services card grid, project configuration, background tasks; remembers the last tab) + `src/components/addons/*`, `src/hooks/useAddons.ts`, `src/types/addons.ts`; logic in `src/hooks/useDashboardShortcuts.ts`, `useDatabaseSwitch.ts`, `usePhpUpdate.ts`, `useStatusPolling.ts`
 - Service cards: `src/components/ServiceCard.tsx`
 - First-run setup: `src/components/FirstRunWizard.tsx` + `src/components/wizard/*`, `src/components/PackageSelector.tsx`, `src/hooks/useRuntimeInstall.ts`
-- Settings drawer: `src/components/SettingsPanel.tsx` + `src/components/settings/*`
+- Settings drawer: `src/components/SettingsPanel.tsx` (category menu: general, ports, PHP, database, add-ons, AI; one category at a time, remembered; `initialSection` opens one, e.g. Ports from Log Doctor) + `src/components/settings/*`
 - Log Doctor: `src/components/LogDoctorModal.tsx`, `src/hooks/useLogDoctorModel.ts`
 - Guide: `src/components/GuideModal.tsx`, content in `src/manual/content.ts`
 - Stores: `src/stores/updateStore.ts`, `src/stores/preferencesStore.ts` (language and sound)
@@ -153,7 +153,7 @@ PHP entries are rebuilt from official feeds (`php.net/releases/states.php`, `win
 
 ```text
 CHAMP/
-  addons/        add-on data (redis/, mailpit/mailpit.db)
+  addons/        add-on data (redis/, mailpit/mailpit.db, meilisearch/, centrifugo/config.json, rustfs/data/, custom/<id>/)
   config/        settings.json, agent-token, runtime-config.json override
   logs/
   models/        Log Doctor model (auto-downloaded)
