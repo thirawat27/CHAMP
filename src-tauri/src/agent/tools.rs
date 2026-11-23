@@ -221,7 +221,7 @@ pub(super) fn tool_definitions(read_only: bool) -> Vec<Value> {
             tool(
                 "update_settings",
                 "Change settings",
-                "Change core ports (web, PHP-FPM, MySQL, PostgreSQL, HTTPS) and startup options, validated like the Settings window (ports 1024-65535, no duplicates). A running stack restarts on the new ports.",
+                "Change core ports (web, PHP-FPM, MySQL, PostgreSQL, HTTPS), startup options, and project domains, validated like the Settings window (ports 1024-65535, no duplicates). A running stack restarts on the new ports.",
                 json!({
                     "web_port": { "type": "integer", "minimum": 1024, "maximum": 65535 },
                     "php_port": { "type": "integer", "minimum": 1024, "maximum": 65535 },
@@ -230,6 +230,7 @@ pub(super) fn tool_definitions(read_only: bool) -> Vec<Value> {
                     "https_port": { "type": "integer", "minimum": 1024, "maximum": 65535 },
                     "auto_start_services": { "type": "boolean", "description": "Start the stack when CHAMP opens" },
                     "auto_check_updates": { "type": "boolean", "description": "Check GitHub Releases daily" },
+                    "project_domains": { "type": "boolean", "description": "Also serve each project at http://<folder>.localhost:<web port>/" },
                 }),
                 &[],
                 false,

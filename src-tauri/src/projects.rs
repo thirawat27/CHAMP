@@ -42,6 +42,20 @@ pub fn domain_url(folder: &str, web_port: u16) -> Option<String> {
     domain_label(folder).map(|label| format!("http://{label}.localhost:{web_port}/"))
 }
 
+/// The project's domain URL when project domains are on (Settings →
+/// General) and the folder name allows one; `None` otherwise.
+pub fn enabled_domain_url(folder: &str, web_port: u16, domains_enabled: bool) -> Option<String> {
+    domains_enabled
+        .then(|| domain_url(folder, web_port))
+        .flatten()
+}
+
+/// Where a project opens: its domain when available, else the path URL.
+pub fn site_url(folder: &str, web_port: u16, domains_enabled: bool) -> String {
+    enabled_domain_url(folder, web_port, domains_enabled)
+        .unwrap_or_else(|| format!("http://localhost:{web_port}/{folder}/"))
+}
+
 /// composer.json files larger than this are not parsed.
 const MAX_COMPOSER_JSON: u64 = 1024 * 1024;
 

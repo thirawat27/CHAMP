@@ -387,6 +387,10 @@ export interface Translations {
   settingsGroupPorts: string;
   settingsGroupDatabase: string;
   settingsGroupAi: string;
+  projectDomainsTitle: string;
+  projectDomainsToggle: string;
+  projectDomainsOnHint: string;
+  projectDomainsOffHint: string;
   workersHelp: string;
   workerAdd: string;
   workerEmpty: string;
@@ -802,6 +806,12 @@ const th: Translations = {
   settingsGroupPorts: "พอร์ต",
   settingsGroupDatabase: "ฐานข้อมูล",
   settingsGroupAi: "AI และ Log Doctor",
+  projectDomainsTitle: "โดเมนโปรเจกต์",
+  projectDomainsToggle: "เปิดแต่ละโปรเจกต์ที่ <ชื่อโฟลเดอร์>.localhost",
+  projectDomainsOnHint:
+    "ทุกโฟลเดอร์เปิดได้ทั้ง http://localhost:{port}/<ชื่อโฟลเดอร์>/ และ http://<ชื่อโฟลเดอร์>.localhost:{port}/ (ใช้ public/ เป็นรากเว็บถ้ามี) ปิดได้ถ้าแอปของคุณทำงานผิดเมื่ออยู่ที่รากโดเมน",
+  projectDomainsOffHint:
+    "ปิดอยู่: โปรเจกต์เปิดได้ที่ http://localhost:{port}/<ชื่อโฟลเดอร์>/ เท่านั้น กด บันทึก แล้ว CHAMP จะรีสตาร์ตเว็บเซิร์ฟเวอร์ให้",
   workersHelp:
     "คำสั่ง PHP ที่ทำงานค้างไว้ เช่น queue worker รันด้วย PHP ของ CHAMP ในโฟลเดอร์โปรเจกต์ และหยุดพร้อมสแต็ก",
   workerAdd: "เพิ่มงาน",
@@ -1225,6 +1235,12 @@ const en: Translations = {
   settingsGroupPorts: "Ports",
   settingsGroupDatabase: "Database",
   settingsGroupAi: "AI and Log Doctor",
+  projectDomainsTitle: "Project domains",
+  projectDomainsToggle: "Open each project at <folder>.localhost",
+  projectDomainsOnHint:
+    "Every folder opens at both http://localhost:{port}/<folder>/ and http://<folder>.localhost:{port}/ (from public/ when it has one). Turn this off if your app misbehaves at the root of its own domain.",
+  projectDomainsOffHint:
+    "Off: projects open only at http://localhost:{port}/<folder>/. Press Save and CHAMP restarts the web server.",
   workersHelp:
     "Long-running PHP commands such as queue workers. They run with CHAMP's PHP in the project folder and stop with the stack.",
   workerAdd: "Add task",

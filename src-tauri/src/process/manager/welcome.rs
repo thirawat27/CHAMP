@@ -128,8 +128,8 @@ pub(super) fn list_sites(projects_dir: &Path) -> Vec<String> {
 /// Where a listed site opens: its own `<folder>.localhost` origin when the
 /// name allows one, else the path under `localhost` (inside `public/` for a
 /// folder that only has an index there).
-fn site_link(projects_dir: &Path, name: &str, web_port: u16) -> (String, String) {
-    if let Some(url) = crate::projects::domain_url(name, web_port) {
+fn site_link(projects_dir: &Path, name: &str, web_port: u16, domains: bool) -> (String, String) {
+    if let Some(url) = crate::projects::enabled_domain_url(name, web_port, domains) {
         let shown = url
             .trim_start_matches("http://")
             .trim_end_matches('/')
@@ -145,7 +145,13 @@ fn site_link(projects_dir: &Path, name: &str, web_port: u16) -> (String, String)
     (href, format!("/{}/{}", name, public))
 }
 
-fn render(projects_dir: &Path, sites: &[String], database_tool_id: &str, web_port: u16) -> String {
+fn render(
+    projects_dir: &Path,
+    sites: &[String],
+    database_tool_id: &str,
+    web_port: u16,
+    domains: bool,
+) -> String {
     let (tool_name, tool_path) = if crate::runtime::packages::is_adminer_id(database_tool_id) {
         ("Adminer", "/adminer/")
     } else {
@@ -168,7 +174,7 @@ fn render(projects_dir: &Path, sites: &[String], database_tool_id: &str, web_por
         let links: String = sites
             .iter()
             .map(|name| {
-                let (href, shown) = site_link(projects_dir, name, web_port);
+                let (href, shown) = site_link(projects_dir, name, web_port, domains);
                 format!(
                     "\n        <a href=\"{href}\">{label}<span>{shown}</span></a>",
                     href = escape_html(&href),
@@ -183,11 +189,10 @@ fn render(projects_dir: &Path, sites: &[String], database_tool_id: &str, web_por
       <div class="sites">{links}
       </div>
       <code class="path">{path}</code>
-      <p class="hint en">Every folder also opens at <code>http://&lt;folder&gt;.localhost:{port}</code>, served from <code>public/</code> when it has one. A new folder works there at once; restart the web server in CHAMP to list it here.</p>
-      <p class="hint th">ทุกโฟลเดอร์เปิดได้ที่ <code>http://&lt;ชื่อโฟลเดอร์&gt;.localhost:{port}</code> ด้วย (ใช้ <code>public/</code> เป็นรากเว็บถ้ามี) โฟลเดอร์ใหม่ใช้ได้ทันที แต่ต้องกด Restart ใน CHAMP จึงจะแสดงในรายการนี้</p>
+      {hint}
     </section>"#,
             links = links,
-            port = web_port,
+            hint = list_hint(web_port, domains),
             path = escape_html(&projects_dir.to_string_lossy())
         )
     };
@@ -233,19 +238,51 @@ fn render(projects_dir: &Path, sites: &[String], database_tool_id: &str, web_por
     )
 }
 
-/// Write the landing page and return the folder Caddy should serve it from.
+/// The note under the project list.
+fn list_hint(web_port: u16, domains: bool) -> String {
+    if domains {
+        format!(
+            r#"<p class="hint en">Every folder also opens at <code>http://&lt;folder&gt;.localhost:{port}</code>, served from <code>public/</code> when it has one. New folders appear here within a few seconds while CHAMP is open.</p>
+      <p class="hint th">ทุกโฟลเดอร์เปิดได้ที่ <code>http://&lt;ชื่อโฟลเดอร์&gt;.localhost:{port}</code> ด้วย (ใช้ <code>public/</code> เป็นรากเว็บถ้ามี) โฟลเดอร์ใหม่จะแสดงในรายการนี้ภายในไม่กี่วินาทีขณะเปิด CHAMP</p>"#,
+            port = web_port
+        )
+    } else {
+        r#"<p class="hint en">New folders appear here within a few seconds while CHAMP is open. Turn on Project domains in CHAMP Settings → General to also open each folder at its own <code>&lt;folder&gt;.localhost</code> address.</p>
+      <p class="hint th">โฟลเดอร์ใหม่จะแสดงในรายการนี้ภายในไม่กี่วินาทีขณะเปิด CHAMP เปิด โดเมนโปรเจกต์ ใน Settings → ทั่วไป ถ้าต้องการเปิดแต่ละโฟลเดอร์ที่ <code>&lt;ชื่อโฟลเดอร์&gt;.localhost</code></p>"#
+            .to_string()
+    }
+}
+
+/// Write the landing page when its content changed, and return the folder
+/// Caddy serves it from.
+///
+/// It is a snapshot of the projects folder, so it is written when Caddy
+/// starts and again by `ProcessManager::refresh_welcome_page` on every status
+/// poll; before 2.1.1 only the start wrote it, and a folder added or made
+/// reachable later (after an update, a moved project, a link to another
+/// drive) stayed missing until the next restart.
 pub(super) fn write_welcome_page(
     paths: &RuntimePaths,
     database_tool_id: &str,
     web_port: u16,
+    domains: bool,
 ) -> Result<PathBuf, String> {
     let dir = paths.config_dir.join("welcome");
     fs::create_dir_all(&dir).map_err(|e| format!("Failed to create welcome directory: {}", e))?;
 
     let sites = list_sites(&paths.projects_dir);
-    let html = render(&paths.projects_dir, &sites, database_tool_id, web_port);
-    fs::write(dir.join("index.html"), html)
-        .map_err(|e| format!("Failed to write welcome page: {}", e))?;
+    let html = render(
+        &paths.projects_dir,
+        &sites,
+        database_tool_id,
+        web_port,
+        domains,
+    );
+    let file = dir.join("index.html");
+    if fs::read_to_string(&file).ok().as_deref() != Some(html.as_str()) {
+        crate::fs_util::atomic_write(&file, html)
+            .map_err(|e| format!("Failed to write welcome page: {}", e))?;
+    }
 
     Ok(dir)
 }
@@ -253,6 +290,67 @@ pub(super) fn write_welcome_page(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn runtime_paths(temp: &Path) -> RuntimePaths {
+        RuntimePaths {
+            caddy: temp.join("caddy"),
+            php_cgi: temp.join("php-cgi"),
+            php_ini: temp.join("php.ini"),
+            mysql: temp.join("mysqld"),
+            postgresql: temp.join("postgres"),
+            adminer: temp.join("adminer"),
+            mysql_data_dir: temp.join("mysql"),
+            postgresql_data_dir: temp.join("postgresql"),
+            logs_dir: temp.join("logs"),
+            config_dir: temp.join("config"),
+            projects_dir: temp.join("projects"),
+        }
+    }
+
+    /// The 2.1.0 bug: the page was written once at Caddy start, so a folder
+    /// added (or reachable) later never appeared until a restart.
+    #[test]
+    fn a_rewrite_picks_up_new_folders_and_skips_unchanged_pages() {
+        let temp = tempfile::tempdir().expect("temp dir");
+        let paths = runtime_paths(temp.path());
+        fs::create_dir_all(&paths.projects_dir).unwrap();
+        let page = |paths: &RuntimePaths| {
+            let dir = write_welcome_page(paths, "phpmyadmin-5.2", 8080, true).unwrap();
+            fs::read_to_string(dir.join("index.html")).unwrap()
+        };
+        assert!(!page(&paths).contains("E-Commerce"));
+
+        let shop = paths.projects_dir.join("E-Commerce");
+        fs::create_dir_all(&shop).unwrap();
+        fs::write(shop.join("index.php"), "<?php").unwrap();
+        let html = page(&paths);
+        assert!(html.contains("e-commerce.localhost:8080"), "{html}");
+
+        // Unchanged content is not rewritten (it is checked on every poll).
+        let file = paths.config_dir.join("welcome").join("index.html");
+        let before = fs::metadata(&file).unwrap().modified().unwrap();
+        std::thread::sleep(std::time::Duration::from_millis(20));
+        page(&paths);
+        assert_eq!(fs::metadata(&file).unwrap().modified().unwrap(), before);
+    }
+
+    #[test]
+    fn with_domains_off_sites_link_to_their_path() {
+        let temp = tempfile::tempdir().expect("temp dir");
+        let projects = temp.path();
+        fs::create_dir_all(projects.join("shop")).unwrap();
+        fs::write(projects.join("shop").join("index.php"), "x").unwrap();
+        let html = render(
+            projects,
+            &["shop".to_string()],
+            "phpmyadmin-5.2",
+            8080,
+            false,
+        );
+        assert!(html.contains("href=\"/shop/\""), "{html}");
+        assert!(!html.contains("shop.localhost"));
+        assert!(html.contains("Project domains"));
+    }
 
     #[test]
     fn lists_only_folders_that_serve_a_page() {
@@ -287,7 +385,7 @@ mod tests {
         let projects = temp.path();
         fs::create_dir_all(projects.join("my_api").join("public")).unwrap();
         let sites = vec!["shop".to_string(), "my_api".to_string()];
-        let html = render(projects, &sites, "adminer-5.4", 8080);
+        let html = render(projects, &sites, "adminer-5.4", 8080, true);
 
         assert!(html.contains("href=\"http://shop.localhost:8080/\""));
         assert!(html.contains("<span>shop.localhost:8080</span>"));
@@ -299,7 +397,7 @@ mod tests {
     #[test]
     fn empty_folder_explains_what_to_do() {
         let temp = tempfile::tempdir().expect("temp dir");
-        let html = render(temp.path(), &[], "phpmyadmin-5.2", 8080);
+        let html = render(temp.path(), &[], "phpmyadmin-5.2", 8080, true);
 
         assert!(html.contains("index.php"));
         assert!(html.contains("/phpmyadmin/"));
@@ -314,7 +412,7 @@ mod tests {
         for name in &sites {
             fs::create_dir_all(temp.path().join(name)).unwrap_or(()); // "a<b" is invalid on Windows
         }
-        let html = render(temp.path(), &sites, "adminer-5.4", 8080);
+        let html = render(temp.path(), &sites, "adminer-5.4", 8080, true);
 
         // Names that are not DNS labels keep the path link.
         assert!(html.contains("href=\"/my%20shop/"));
@@ -344,7 +442,7 @@ mod tests {
         };
         fs::create_dir_all(&paths.projects_dir).unwrap();
 
-        let dir = write_welcome_page(&paths, "phpmyadmin-5.2", 8080).expect("welcome page");
+        let dir = write_welcome_page(&paths, "phpmyadmin-5.2", 8080, true).expect("welcome page");
 
         assert_eq!(dir, paths.config_dir.join("welcome"));
         let html = fs::read_to_string(dir.join("index.html")).unwrap();
@@ -386,13 +484,14 @@ mod tests {
         fs::create_dir_all(&shop).unwrap();
         fs::write(shop.join("index.html"), "<h1>SHOP SITE</h1>").unwrap();
 
-        let welcome = write_welcome_page(&paths, "phpmyadmin-5.2", 18092).unwrap();
+        let welcome = write_welcome_page(&paths, "phpmyadmin-5.2", 18092, true).unwrap();
         super::super::caddyfile::generate_caddyfile(
             &paths.config_dir.join("Caddyfile"),
             &paths,
             18092,
             19092,
             &welcome,
+            true,
         )
         .unwrap();
     }

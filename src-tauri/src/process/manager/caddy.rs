@@ -24,6 +24,7 @@ pub(super) fn start_caddy(
     mysql_port: u16,
     postgresql_port: u16,
     selection: &crate::runtime::packages::PackageSelection,
+    project_domains: bool,
 ) -> Result<(), String> {
     let database_tool_id = selection.phpmyadmin.as_str();
     // ตรวจสอบและหยุด Caddy processes ที่ซ้ำซ้อนอัตโนมัติ (เหมือน MySQL)
@@ -56,13 +57,19 @@ pub(super) fn start_caddy(
 
     // Always regenerate Caddyfile with current port settings
     let caddyfile_path = paths.config_dir.join("Caddyfile");
-    let welcome_dir = write_welcome_page(paths, database_tool_id, service_process.port)?;
+    let welcome_dir = write_welcome_page(
+        paths,
+        database_tool_id,
+        service_process.port,
+        project_domains,
+    )?;
     generate_caddyfile(
         &caddyfile_path,
         paths,
         service_process.port,
         php_port,
         &welcome_dir,
+        project_domains,
     )?;
 
     // Open log file with retry logic for Windows file locking

@@ -201,8 +201,8 @@ export const GUIDE_SECTIONS: GuideSection[] = [
       {
         kind: "p",
         text: l(
-          "ทุกโฟลเดอร์ยังมีโดเมนของตัวเองที่ `http://<ชื่อโฟลเดอร์>.localhost:8080/` เว็บจึงอยู่ที่รากของโดเมน ไม่ต้องต่อท้ายด้วย path ถ้าโฟลเดอร์มี `public/index.php` (เช่น Laravel, Symfony) CHAMP ใช้ `public/` เป็นรากเว็บให้เอง เบราว์เซอร์รู้จัก `.localhost` อยู่แล้ว จึงไม่ต้องแก้ไฟล์ hosts และไม่ต้องใช้สิทธิ์แอดมิน โฟลเดอร์ที่สร้างใหม่ใช้ได้ทันทีโดยไม่ต้องรีสตาร์ต",
-          "Every folder also gets its own domain at `http://<folder>.localhost:8080/`, so the site sits at the root of its origin instead of under a path. When the folder has `public/index.php` (Laravel, Symfony), CHAMP serves `public/` as the web root. Browsers already resolve `.localhost`, so there is no hosts file to edit and no administrator rights to grant, and a new folder works at once without a restart."
+          "ทุกโฟลเดอร์ยังมีโดเมนของตัวเองที่ `http://<ชื่อโฟลเดอร์>.localhost:8080/` เว็บจึงอยู่ที่รากของโดเมน ไม่ต้องต่อท้ายด้วย path ถ้าโฟลเดอร์มี `public/index.php` (เช่น Laravel, Symfony) CHAMP ใช้ `public/` เป็นรากเว็บให้เอง เบราว์เซอร์รู้จัก `.localhost` อยู่แล้ว จึงไม่ต้องแก้ไฟล์ hosts และไม่ต้องใช้สิทธิ์แอดมิน โฟลเดอร์ที่สร้างใหม่ใช้ได้ทันทีโดยไม่ต้องรีสตาร์ต และหน้า localhost:8080 จะแสดงโฟลเดอร์ใหม่ภายในไม่กี่วินาที ปิดฟีเจอร์นี้ได้ที่ Settings → ทั่วไป → โดเมนโปรเจกต์ ถ้าแอปทำงานผิดเมื่ออยู่ที่รากโดเมน เมื่อปิด โปรเจกต์จะเปิดได้ที่ `localhost:8080/<ชื่อโฟลเดอร์>/` อย่างเดียว",
+          "Every folder also gets its own domain at `http://<folder>.localhost:8080/`, so the site sits at the root of its origin instead of under a path. When the folder has `public/index.php` (Laravel, Symfony), CHAMP serves `public/` as the web root. Browsers already resolve `.localhost`, so there is no hosts file to edit and no administrator rights to grant, and a new folder works at once without a restart; the localhost:8080 page lists it within a few seconds. Turn this off in Settings → General → Project domains if an app misbehaves at the root of its own domain; projects then open only at `localhost:8080/<folder>/`."
         ),
       },
       {

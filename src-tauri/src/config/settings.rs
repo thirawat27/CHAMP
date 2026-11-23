@@ -37,6 +37,10 @@ pub struct AppSettings {
     pub https_port: u16,
     #[serde(default)]
     pub auto_start_services: bool,
+    /// Serve every project folder at `http://<folder>.localhost:<port>/` too.
+    /// Off: projects open only at `http://localhost:<port>/<folder>/`.
+    #[serde(default = "default_true")]
+    pub project_domains: bool,
     #[serde(default)]
     pub package_selection: PackageSelection,
     #[serde(default = "default_language")]
@@ -248,6 +252,7 @@ impl Default for AppSettings {
             postgresql_port: DEFAULT_PORTS.postgresql,
             https_port: default_https_port(),
             auto_start_services: false,
+            project_domains: true,
             package_selection: PackageSelection::default(),
             language: default_language(),
             sound_enabled: true,

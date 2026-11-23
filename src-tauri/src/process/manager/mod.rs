@@ -297,6 +297,7 @@ impl ProcessManager {
                 mysql_port,
                 postgresql_port,
                 &self.settings.package_selection,
+                self.settings.project_domains,
             ),
             ServiceType::PhpFpm => start_php_fpm(
                 service_process,
@@ -540,6 +541,27 @@ impl ProcessManager {
                 )
             })
             .collect()
+    }
+
+    /// Rewrite the landing page at `http://localhost:<port>/` when the project
+    /// folders changed. It is a file snapshot, so without this a folder added
+    /// after Caddy started never showed up until the next restart. Called on
+    /// every status poll: one directory listing, and a write only on change.
+    pub fn refresh_welcome_page(&self) {
+        if !self.status(ServiceType::Caddy).is_running() {
+            return;
+        }
+        let Some(paths) = self.runtime_paths.as_ref() else {
+            return;
+        };
+        if let Err(error) = welcome::write_welcome_page(
+            paths,
+            &self.settings.package_selection.phpmyadmin,
+            self.port_of(ServiceType::Caddy),
+            self.settings.project_domains,
+        ) {
+            eprintln!("Could not refresh the welcome page: {error}");
+        }
     }
 
     /// Update process health (check if processes are still running)

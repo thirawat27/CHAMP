@@ -257,7 +257,7 @@ pub(super) async fn get_project(args: &Value) -> Result<Value, String> {
     }
     Ok(json!({
         "project": info,
-        "url": crate::projects::domain_url(&name, web_port).unwrap_or_else(|| format!("http://localhost:{web_port}/{name}/")),
+        "url": crate::projects::site_url(&name, web_port, AppSettings::load().project_domains),
         "php": { "running": php_version, "required": info.php_requirement, "satisfied": php_ok },
         "suggested_database": crate::envprofile::database_name_for(&name),
         "recommended_profile": recommended,

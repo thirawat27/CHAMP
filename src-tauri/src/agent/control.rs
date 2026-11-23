@@ -57,6 +57,7 @@ pub(super) fn settings_json() -> Value {
         },
         "auto_start_services": settings.auto_start_services,
         "auto_check_updates": settings.auto_check_updates,
+        "project_domains": settings.project_domains,
         "packages": settings.package_selection,
         "language": settings.language,
         "xdebug": settings.xdebug,
@@ -151,6 +152,9 @@ pub(super) async fn update_settings(app: &AppHandle, args: &Value) -> Result<Val
     }
     if let Some(value) = bool_arg(args, "auto_check_updates")? {
         settings.auto_check_updates = value;
+    }
+    if let Some(value) = bool_arg(args, "project_domains")? {
+        settings.project_domains = value;
     }
     let changed = serde_json::to_value(&settings).ok() != serde_json::to_value(&before).ok();
     if !changed {

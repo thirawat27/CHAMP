@@ -35,6 +35,7 @@ import { LogDoctorSection } from "./settings/LogDoctorSection";
 import { PhpSection } from "./settings/PhpSection";
 import { PortField, PortsSection } from "./settings/PortsSection";
 import { PreferencesSection } from "./settings/PreferencesSection";
+import { ProjectDomainsSection } from "./settings/ProjectDomainsSection";
 import { UpdatesSection } from "./settings/UpdatesSection";
 import { SoundButton } from "./SoundButton";
 import { componentLabel } from "../utils/downloadProgress";
@@ -303,6 +304,13 @@ export function SettingsPanel({
                       autoStart={settings.auto_start_services ?? false}
                       onAutoStartChange={(enabled) =>
                         setSettings((current) => ({ ...current, auto_start_services: enabled }))
+                      }
+                    />
+                    <ProjectDomainsSection
+                      enabled={settings.project_domains ?? true}
+                      webPort={settings.web_port}
+                      onChange={(enabled) =>
+                        setSettings((current) => ({ ...current, project_domains: enabled }))
                       }
                     />
                     <UpdatesSection

@@ -367,6 +367,7 @@ fn test_generate_caddyfile_includes_htaccess_compatibility_rules() {
         8080,
         9000,
         &config.join("welcome"),
+        true,
     )
     .expect("failed to generate Caddyfile");
     let content = std::fs::read_to_string(caddyfile).expect("failed to read Caddyfile");
@@ -413,6 +414,7 @@ fn generated_caddyfile(paths: &RuntimePaths) -> String {
         8080,
         9000,
         &paths.config_dir.join("welcome"),
+        true,
     )
     .expect("failed to generate Caddyfile");
     std::fs::read_to_string(caddyfile).expect("failed to read Caddyfile")
@@ -493,6 +495,70 @@ fn project_domains_site_maps_names_to_folders_safely() {
     ] {
         assert!(!host(bad), "{bad}");
     }
+}
+
+/// The v2.1.0 redirect loop: a project served from its folder root whose
+/// `index.php` sends `Location: view/index`. `/view/index` must reach
+/// `view/index.php`, and an unknown path must not fall back to the root
+/// `index.php` (which would redirect to `view/view/index`, and so on).
+#[test]
+fn domain_site_maps_extensionless_php_and_has_no_blind_fallback_at_the_folder_root() {
+    let temp = tempfile::tempdir().expect("failed to create temp dir");
+    let paths = caddy_fixture(temp.path());
+    let site_content = generated_caddyfile(&paths);
+    let site = &site_content[site_content.find("http://*.localhost:8080 {").unwrap()..];
+
+    let public = &site[site.find("handle @publicRoot {").unwrap()..];
+    let public = &public[..public.find("file_server").unwrap()];
+    assert!(public.contains("{path} {path}.php index.php\n"), "{public}");
+
+    let root = &site[site.find("        handle {\n").unwrap()..];
+    let root = &root[..root.find("file_server").unwrap()];
+    assert!(root.contains("{path} {path}.php\n"), "{root}");
+    assert!(!root.contains(" index.php\n"), "no blind fallback: {root}");
+}
+
+#[test]
+fn domain_site_keeps_htaccess_front_controllers_per_project() {
+    let temp = tempfile::tempdir().expect("failed to create temp dir");
+    let paths = caddy_fixture(temp.path());
+    let blog = paths.projects_dir.join("blog");
+    std::fs::create_dir_all(&blog).unwrap();
+    std::fs::write(blog.join("index.php"), "<?php").unwrap();
+    std::fs::write(
+        blog.join(".htaccess"),
+        "RewriteEngine On\nRewriteCond %{REQUEST_FILENAME} !-f\nRewriteCond %{REQUEST_FILENAME} !-d\nRewriteRule . index.php [L]\n",
+    )
+    .unwrap();
+    let content = generated_caddyfile(&paths);
+    let site = &content[content.find("http://*.localhost:8080 {").unwrap()..];
+
+    let front = site
+        .find("host blog.localhost\n        not path */ *.php")
+        .expect("front controller for blog's domain");
+    assert!(front < site.find("handle @project").unwrap());
+    let rule = &site[front..];
+    assert!(rule.contains("rewrite * /index.php"), "{rule}");
+    assert!(rule.contains("/projects/blog\""), "{rule}");
+}
+
+#[test]
+fn project_domains_can_be_turned_off() {
+    let temp = tempfile::tempdir().expect("failed to create temp dir");
+    let paths = caddy_fixture(temp.path());
+    let caddyfile = paths.config_dir.join("Caddyfile");
+    generate_caddyfile(
+        &caddyfile,
+        &paths,
+        8080,
+        9000,
+        &paths.config_dir.join("welcome"),
+        false,
+    )
+    .unwrap();
+    let content = std::fs::read_to_string(caddyfile).unwrap();
+    assert!(!content.contains("*.localhost:8080"));
+    assert!(content.contains(":8080 {"), "the path site stays");
 }
 
 /// Mirrors `PROJECT_HOST_REGEXP` (Go regexp syntax) without a regex crate.

@@ -50,6 +50,26 @@ describe("SettingsPanel", () => {
     );
   });
 
+  it("turns project domains off and saves it with the other settings", async () => {
+    render(<SettingsPanel onClose={vi.fn()} initialSection="general" />);
+    const section = await screen.findByTestId("project-domains-section");
+    expect(section).toHaveTextContent("http://<folder>.localhost:8080/");
+    const toggle = section.querySelector("input") as HTMLInputElement;
+    expect(toggle.checked).toBe(true);
+
+    fireEvent.click(toggle);
+    expect(section).toHaveTextContent("only at http://localhost:8080/<folder>/");
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    await vi.waitFor(() =>
+      expect(invoke).toHaveBeenCalledWith(
+        "save_settings",
+        expect.objectContaining({
+          settings: expect.objectContaining({ project_domains: false }),
+        })
+      )
+    );
+  });
+
   it("opens on the requested category", async () => {
     window.localStorage.setItem("champ.settings.section", "ai");
     render(<SettingsPanel onClose={vi.fn()} initialSection="ports" />);

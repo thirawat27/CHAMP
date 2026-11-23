@@ -2,7 +2,7 @@
 
 use super::htaccess::{
     append_htaccess_deny_rules, append_htaccess_error_rules, append_htaccess_no_browse_rules,
-    append_htaccess_route_rules, caddy_matcher_name, caddy_path_matcher_line,
+    append_htaccess_route_rules, caddy_matcher_name, caddy_path_matcher_line, caddy_token,
     discover_htaccess_rules, HtaccessCompatibilityRule,
 };
 use crate::runtime::locator::RuntimePaths;
@@ -101,20 +101,120 @@ fn append_domain_deny_rules(content: &mut String, rules: &[HtaccessCompatibility
     }
 }
 
-/// PHP for a domain site. Directory indexes are tried before the directory
-/// itself: php_fastcgi's default order sends `/` straight to PHP, which fails
-/// with "No input file specified" for a site that only has `index.html`.
-/// Unknown paths fall back to `index.php`, the front controller Laravel,
-/// WordPress, and most PHP apps rewrite to; without one they reach
-/// `file_server` and get a plain 404.
-fn append_domain_php(content: &mut String, php_port: u16) {
+/// `.htaccess` front controllers (`RewriteRule ^ index.php`), rewritten for
+/// each project's domain: WordPress permalinks and routers in a sub-folder
+/// keep working there without a blind `index.php` fallback. The domain
+/// serves `public/` when it has an index, so rules are made relative to that
+/// web root, and rules outside it are skipped (they are unreachable there).
+fn append_domain_route_rules(
+    content: &mut String,
+    rules: &[HtaccessCompatibilityRule],
+    projects: &str,
+    projects_dir: &Path,
+    php_port: u16,
+) {
+    for (index, rule) in rules.iter().enumerate() {
+        let Some(front_controller) = &rule.front_controller else {
+            continue;
+        };
+        let folder = rule.project_prefix.trim_matches('/');
+        // Projects-root rules have no single domain.
+        if folder.is_empty() || folder.contains('/') {
+            continue;
+        }
+        let Some(label) = crate::projects::domain_label(folder) else {
+            continue;
+        };
+        let project_prefix = rule.project_prefix.trim_end_matches('/');
+        let Some(relative) = rule.request_prefix.strip_prefix(project_prefix) else {
+            continue;
+        };
+        let Some(target) = front_controller.strip_prefix(project_prefix) else {
+            continue;
+        };
+        let serves_public = super::welcome::has_index_file(
+            &projects_dir.join(folder).join(crate::projects::PUBLIC_DIR),
+        );
+        let public = format!("/{}", crate::projects::PUBLIC_DIR);
+        let (relative, target, web_root) = if serves_public {
+            let inside = |path: &str| {
+                path.strip_prefix(&public)
+                    .filter(|rest| rest.is_empty() || rest.starts_with('/'))
+                    .map(|rest| if rest.is_empty() { "/" } else { rest }.to_string())
+            };
+            match (inside(relative), inside(target)) {
+                (Some(relative), Some(target)) => (
+                    relative,
+                    target,
+                    format!("{projects}/{folder}/{}", crate::projects::PUBLIC_DIR),
+                ),
+                _ => continue,
+            }
+        } else {
+            (
+                if relative.is_empty() {
+                    "/".to_string()
+                } else {
+                    relative.to_string()
+                },
+                target.to_string(),
+                format!("{projects}/{folder}"),
+            )
+        };
+        let matcher = caddy_matcher_name(&rule.request_prefix, index, "DomainFront");
+        content.push_str(&format!("    @{} {{\n", matcher));
+        content.push_str(&format!("        host {label}.localhost\n"));
+        if let Some(path_line) = caddy_path_matcher_line(&relative) {
+            content.push_str(&path_line);
+        }
+        content.push_str("        not path */ *.php\n");
+        content.push_str("        not file {\n");
+        content.push_str(&format!("            root \"{web_root}\"\n"));
+        content.push_str("            try_files {path} {path}/ {path}.php\n");
+        content.push_str("        }\n");
+        content.push_str("    }\n");
+        content.push_str(&format!("    handle @{} {{\n", matcher));
+        content.push_str(&format!("        root * \"{web_root}\"\n"));
+        content.push_str(&format!("        rewrite * {}\n", caddy_token(&target)));
+        content.push_str(&format!("        php_fastcgi 127.0.0.1:{}\n", php_port));
+        content.push_str("    }\n\n");
+    }
+}
+
+/// The `try_files` order for a domain site.
+///
+/// Directory indexes come before the directory itself: php_fastcgi's default
+/// order sends `/` straight to PHP, which fails with "No input file
+/// specified" for a site that only has `index.html`. `{path}.php` maps
+/// extensionless URLs (`/view/index` → `/view/index.php`), as the path site
+/// does.
+pub(super) const DOMAIN_TRY_FILES: &str =
+    "{path}/index.php {path}/index.html {path}/index.htm {path} {path}.php";
+
+/// PHP for a domain site; see [`DOMAIN_TRY_FILES`].
+///
+/// `front_controller_fallback` sends unknown paths to `index.php`. Only a
+/// `public/` web root gets it: that layout is the front-controller convention
+/// (Laravel, Symfony, Slim). A project served from its folder root behaves
+/// like Apache instead: unknown paths are a 404 unless its `.htaccess` names a
+/// front controller (see `append_domain_route_rules`). Before 2.1.1 every
+/// project fell back blindly, so an app whose root page redirects to a
+/// relative path (`Location: view/index`) looped forever
+/// (`/view/view/view/...`, ERR_TOO_MANY_REDIRECTS).
+fn append_domain_php(content: &mut String, php_port: u16, front_controller_fallback: bool) {
     content.push_str(&format!(
         "            php_fastcgi 127.0.0.1:{} {{\n",
         php_port
     ));
-    content.push_str(
-        "                try_files {path}/index.php {path}/index.html {path}/index.htm {path} index.php\n",
-    );
+    content.push_str(&format!(
+        "                try_files {}{}\n",
+        DOMAIN_TRY_FILES,
+        if front_controller_fallback {
+            " index.php"
+        } else {
+            ""
+        }
+    ));
     content.push_str("            }\n");
 }
 
@@ -126,6 +226,7 @@ fn append_domain_php(content: &mut String, php_port: u16) {
 fn append_project_domains_site(
     content: &mut String,
     projects: &str,
+    projects_dir: &Path,
     port: u16,
     php_port: u16,
     log_file: &str,
@@ -147,6 +248,7 @@ fn append_project_domains_site(
     content.push_str("        respond 404\n");
     content.push_str("    }\n\n");
     append_domain_deny_rules(content, htaccess_rules);
+    append_domain_route_rules(content, htaccess_rules, projects, projects_dir, php_port);
     content.push_str(&format!(
         "    @project vars_regexp project {{host}} \"{}\"\n",
         PROJECT_HOST_REGEXP
@@ -164,7 +266,7 @@ fn append_project_domains_site(
         "            root * \"{}/{{re.project.1}}/{}\"\n",
         projects, public
     ));
-    append_domain_php(content, php_port);
+    append_domain_php(content, php_port, true);
     content.push_str("            file_server\n");
     content.push_str("        }\n");
     content.push_str("        handle {\n");
@@ -172,7 +274,7 @@ fn append_project_domains_site(
         "            root * \"{}/{{re.project.1}}\"\n",
         projects
     ));
-    append_domain_php(content, php_port);
+    append_domain_php(content, php_port, false);
     content.push_str("            file_server\n");
     content.push_str("        }\n");
     content.push_str("    }\n\n");
@@ -200,6 +302,7 @@ pub(super) fn generate_caddyfile(
     port: u16,
     php_port: u16,
     welcome_dir: &Path,
+    project_domains: bool,
 ) -> Result<(), String> {
     let welcome = welcome_dir
         .to_str()
@@ -298,6 +401,9 @@ pub(super) fn generate_caddyfile(
     content.push_str("    }\n");
     content.push_str("    handle @champWelcome {\n");
     content.push_str(&format!("        root * \"{}\"\n", welcome));
+    // The page is rewritten whenever the project folders change; never let
+    // the browser show an old copy.
+    content.push_str("        header Cache-Control \"no-store\"\n");
     content.push_str("        rewrite * /index.html\n");
     content.push_str("        file_server\n");
     content.push_str("    }\n");
@@ -328,14 +434,18 @@ pub(super) fn generate_caddyfile(
     content.push_str("    }\n");
     content.push_str("}\n");
 
-    append_project_domains_site(
-        &mut content,
-        &projects,
-        port,
-        php_port,
-        &log_file,
-        &htaccess_rules,
-    );
+    // Settings → General → Project domains.
+    if project_domains {
+        append_project_domains_site(
+            &mut content,
+            &projects,
+            &paths.projects_dir,
+            port,
+            php_port,
+            &log_file,
+            &htaccess_rules,
+        );
+    }
 
     let mut file = File::create(path).map_err(|e| format!("Failed to create Caddyfile: {}", e))?;
     file.write_all(content.as_bytes())

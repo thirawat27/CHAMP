@@ -3,6 +3,38 @@
 All notable changes to CHAMP. Versions follow [Semantic Versioning](https://semver.org/);
 the format follows [Keep a Changelog](https://keepachangelog.com/).
 
+## [2.1.1] - 2026-11-23
+
+Fixes for project domains (`http://<folder>.localhost`) and the start page at
+`http://localhost:8080/`.
+
+### Fixed
+
+- **Redirect loop on project domains** (`ERR_TOO_MANY_REDIRECTS`). A project served
+  from its folder root whose `index.php` redirects to a relative address (for example
+  `Location: view/index`) looped forever (`/view/view/view/...`). The cause: the domain
+  site did not map extensionless URLs to `.php`, and it sent every unknown path to the
+  root `index.php`.
+  - Extensionless URLs (`/view/index` → `view/index.php`) now work on domains, as
+    they already did at `localhost:8080/<folder>/`.
+  - Unknown paths now return 404, as on Apache. The exception is projects served
+    from `public/` (Laravel, Symfony), whose convention is to send unknown paths to
+    `public/index.php`.
+  - `.htaccess` front controllers (`RewriteRule . index.php`) now apply on each
+    project's domain too, so WordPress permalinks and similar routers keep working.
+- **Start page missed project folders.** The project list at `http://localhost:8080/`
+  was written only when the web server started. A folder added or made reachable
+  later (after an update, or a link to another drive) stayed missing until CHAMP
+  restarted. The list now updates within a few seconds while CHAMP is open, and the
+  browser no longer shows an old copy.
+
+### Added
+
+- **Project domains switch** in Settings → General (and `update_settings` for
+  agents). It is on by default. When off, CHAMP stops serving
+  `http://<folder>.localhost` and projects open only at `http://localhost:8080/<folder>/`.
+  The start page, agent tools, and project configuration lines then use that address.
+
 ## [2.1.0] - 2026-11-23
 
 Add-on services, support for any PHP framework, and an AI agent connector that can
@@ -146,5 +178,6 @@ self-updates.
 
 - 2.0.0 has no macOS installers (the macOS build failed). Fixed in 2.1.0.
 
+[2.1.1]: https://github.com/thirawat27/CHAMP/compare/v2.1.0...v2.1.1
 [2.1.0]: https://github.com/thirawat27/CHAMP/compare/v2.0.0...v2.1.0
 [2.0.0]: https://github.com/thirawat27/CHAMP/compare/v1.3.0...v2.0.0

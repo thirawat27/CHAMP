@@ -76,6 +76,7 @@ pub async fn restart_all_services(app: AppHandle) -> Result<ServiceMap, String> 
 pub async fn get_all_statuses(app: AppHandle) -> Result<ServiceMap, String> {
     run_with_manager(&app, |m| {
         m.update_health();
+        m.refresh_welcome_page();
         m.get_all_statuses()
     })
     .await

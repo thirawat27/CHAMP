@@ -32,6 +32,8 @@ export interface AppSettings {
   postgresql_port: number;
   php_port: number;
   auto_start_services?: boolean;
+  /** Serve each project folder at http://<folder>.localhost too (default on). */
+  project_domains?: boolean;
   auto_check_updates?: boolean;
   package_selection?: PackageSelection;
   language?: string;

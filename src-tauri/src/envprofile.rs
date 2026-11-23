@@ -533,8 +533,7 @@ pub fn profiles_for_project(project: Option<&str>) -> Result<EnvProfilesReply, S
     let (web_url, database, framework) = match project {
         Some(name) => {
             let info = crate::projects::detect(name)?;
-            let url = crate::projects::domain_url(name, web_port)
-                .unwrap_or_else(|| format!("http://localhost:{web_port}/{name}/"));
+            let url = crate::projects::site_url(name, web_port, settings.project_domains);
             (
                 url,
                 Some(database_name_for(name)),

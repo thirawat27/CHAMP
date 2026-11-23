@@ -18,7 +18,7 @@ pub(super) const SUPPORTED_PROTOCOL_VERSIONS: [&str; 4] =
     ["2025-11-25", "2025-06-18", "2025-03-26", "2024-11-05"];
 
 pub(super) const SERVER_INSTRUCTIONS: &str = "CHAMP runs a local PHP stack for any framework: Caddy (web server) -> PHP-FPM -> MySQL or PostgreSQL, with phpMyAdmin or Adminer, plus optional add-ons (Redis, Mailpit, Meilisearch, user-registered custom services) and per-project background PHP tasks. \
-Each project folder is served at the root of its own origin, http://<folder>.localhost:<web port>/ (from public/ when it has one); use that URL as the app URL. \
+Each project folder is served at http://localhost:<web port>/<folder>/ and, while project domains are on (the default; see get_environment), also at the root of its own origin, http://<folder>.localhost:<web port>/ (from public/ when it has one). Use the url that get_project returns as the app URL. \
 Before configuring a project call get_project: it detects the framework (Laravel, Symfony, WordPress, CodeIgniter, CakePHP, Slim, Yii, Laminas, Drupal, plain PHP) and returns ready configuration lines in that framework's convention; get_env_profiles gives every convention. PHP already receives CHAMP_* environment variables, so plain PHP needs no .env. \
 Use create_database, list_tables, and describe_table instead of asking the user to open phpMyAdmin. Mailpit catches all mail: list_mail / read_mail verify emails and give their links. \
 When something is in the error state call diagnose_service (core) or read_addon_log (add-ons) before changing anything; for port conflicts call check_ports, then update_settings or set_addon_port. \
@@ -127,8 +127,13 @@ pub(super) async fn environment_json(app: &AppHandle) -> Result<Value, String> {
             "url": format!("http://localhost:{web_port}/"),
             "document_root": paths.projects_dir,
             "project_url_pattern": format!("http://localhost:{web_port}/<project-folder>/"),
-            "project_domain_pattern": format!("http://<project-folder>.localhost:{web_port}/"),
-            "project_domain_note": "Each folder whose name is a DNS label is also served at the root of its own origin, from public/ when the folder has public/index.php or public/index.html (Laravel, Symfony). Set APP_URL to this URL. Browsers and curl resolve *.localhost themselves; server-side code on Windows may not.",
+            "project_domains_enabled": settings.project_domains,
+            "project_domain_pattern": settings.project_domains.then(|| format!("http://<project-folder>.localhost:{web_port}/")),
+            "project_domain_note": if settings.project_domains {
+                "Each folder whose name is a DNS label is also served at the root of its own origin, from public/ when the folder has public/index.php or public/index.html (Laravel, Symfony). Set APP_URL to this URL. Browsers and curl resolve *.localhost themselves; server-side code on Windows may not."
+            } else {
+                "Project domains are off (Settings -> General), so projects open only at the path URL; set APP_URL to it. Ask the user to turn domains on if the app needs to run at the root of its own origin."
+            },
             "server": "Caddy with .htaccess rewrite compatibility",
         },
         "php": {
@@ -172,7 +177,9 @@ pub(super) async fn environment_json(app: &AppHandle) -> Result<Value, String> {
 
 pub(super) fn list_projects_json() -> Result<Value, String> {
     let paths = get_app_data_paths()?;
-    let web_port = AppSettings::load().web_port;
+    let settings = AppSettings::load();
+    let web_port = settings.web_port;
+    let domains_enabled = settings.project_domains;
     let mut projects: Vec<(String, PathBuf)> = fs::read_dir(&paths.projects_dir)
         .map(|entries| {
             entries
@@ -192,7 +199,8 @@ pub(super) fn list_projects_json() -> Result<Value, String> {
         "projects": projects
             .into_iter()
             .map(|(name, path)| {
-                let domain_url = crate::projects::domain_url(&name, web_port);
+                let domain_url =
+                    crate::projects::enabled_domain_url(&name, web_port, domains_enabled);
                 let info = crate::projects::inspect(&path);
                 json!({
                     "name": name,
