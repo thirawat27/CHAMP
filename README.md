@@ -228,6 +228,8 @@ src-tauri/src/
 
 Pushing a `v*` tag runs `.github/workflows/release.yml`, which builds every platform with `tauri-action`, signs the updater artifacts, and publishes them together with `latest.json`.
 
+Before tagging, set the version in `package.json`, `src-tauri/tauri.conf.json`, `src-tauri/Cargo.toml`, and `src-tauri/Cargo.lock`, and add a `## [x.y.z]` section to [CHANGELOG.md](CHANGELOG.md). The workflow uses that section as the release notes and the in-app update notes, and fails when it is missing.
+
 Required repository secrets:
 
 - `TAURI_SIGNING_PRIVATE_KEY` — contents of the private key whose public key is in `src-tauri/tauri.conf.json`

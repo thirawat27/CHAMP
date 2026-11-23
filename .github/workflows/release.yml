@@ -108,6 +108,31 @@ jobs:
       - name: Install frontend dependencies
         run: pnpm install --frozen-lockfile
 
+      # The release text and the in-app update notes come from this version's
+      # CHANGELOG.md section (the tag without its leading "v").
+      - name: Release notes from CHANGELOG
+        id: notes
+        shell: bash
+        run: |
+          version="${RELEASE_TAG#v}"
+          notes="$(awk -v v="$version" '
+            index($0, "## [" v "]") == 1 { found = 1; next }
+            found && /^## \[/ { exit }
+            found && /^\[[0-9.]+\]: / { next }
+            found { print }
+          ' CHANGELOG.md)"
+          if [ -z "${notes//[[:space:]]/}" ]; then
+            echo "::error::CHANGELOG.md has no section for $version"
+            exit 1
+          fi
+          {
+            echo "body<<CHAMP_NOTES_EOF"
+            echo "$notes"
+            echo
+            echo "**Full changelog**: [CHANGELOG.md](https://github.com/${GITHUB_REPOSITORY}/blob/${RELEASE_TAG}/CHANGELOG.md)"
+            echo "CHAMP_NOTES_EOF"
+          } >> "$GITHUB_OUTPUT"
+
       - name: Build, sign, and publish
         uses: tauri-apps/tauri-action@fce9c6108b31ea247710505d3aaaa893ee6768d4 # v0
         env:
@@ -119,6 +144,6 @@ jobs:
           tagName: ${{ env.RELEASE_TAG }}
           releaseName: ${{ env.RELEASE_NAME != '' && env.RELEASE_NAME || format('CHAMP {0}', env.RELEASE_TAG) }}
           releaseDraft: ${{ env.RELEASE_DRAFT == 'true' }}
-          generateReleaseNotes: true
+          releaseBody: ${{ steps.notes.outputs.body }}
           includeUpdaterJson: true
           args: ${{ matrix.args }}
