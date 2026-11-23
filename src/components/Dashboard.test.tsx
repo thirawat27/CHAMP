@@ -776,6 +776,9 @@ describe("Dashboard keyboard and command safety", () => {
     mockBackend(runningMap, { stop_all_services: stoppedMap });
     render(<Dashboard />);
     await caddyRunning();
+    // Ctrl+X works exactly when the Stop button does. Startup work (status,
+    // tunnel, PHP update checks) can keep it locked for a moment on slow CI.
+    await waitFor(() => expect(screen.getByTitle(/^Stop All Services/)).toBeEnabled());
 
     fireEvent.keyDown(document.body, { code: "KeyX", ctrlKey: true });
 
