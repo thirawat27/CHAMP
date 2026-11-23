@@ -4,9 +4,10 @@
 //! GitHub release asset digests), so an add-on is never installed unverified.
 //! To update one, change the version, URL, and checksum together.
 //!
-//! Redis and Memcached publish no official Windows builds; CHAMP uses the
-//! community builds most Windows stacks ship. On macOS and Linux CHAMP uses a
-//! `redis-server` / `memcached` already installed by the system package manager.
+//! Redis publishes no official Windows build; CHAMP uses the community build
+//! most Windows stacks ship. On macOS and Linux CHAMP uses a `redis-server`
+//! already installed by the system package manager. Mailpit and Meilisearch
+//! publish official builds for every platform.
 
 use super::AddonKind;
 
@@ -14,6 +15,8 @@ use super::AddonKind;
 pub(super) enum ArchiveFormat {
     Zip,
     TarGz,
+    /// The download is the executable itself (Meilisearch).
+    Binary,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -33,8 +36,9 @@ pub(super) struct AddonPackage {
 }
 
 const REDIS_VERSION: &str = "8.10.3";
-const MEMCACHED_VERSION: &str = "1.6.8";
 const MAILPIT_VERSION: &str = "1.34.0";
+/// 1.56.2 shipped without an Apple Silicon build, so 1.56.1 is pinned.
+const MEILISEARCH_VERSION: &str = "1.56.1";
 
 /// Windows on ARM runs these x64 builds through its built-in emulation.
 const REDIS_WINDOWS_X64: AddonDownload = AddonDownload {
@@ -42,13 +46,6 @@ const REDIS_WINDOWS_X64: AddonDownload = AddonDownload {
     sha256: "af16df340525b431e9ec8dabfd625d5e7a233f82805b5418819904ea909c447f",
     format: ArchiveFormat::Zip,
     binary: "Redis-8.10.3-Windows-x64-msys2/redis-server.exe",
-};
-
-const MEMCACHED_WINDOWS_X64: AddonDownload = AddonDownload {
-    url: "https://github.com/jefyt/memcached-windows/releases/download/1.6.8_mingw_libressl/memcached-1.6.8-win64-mingw.zip",
-    sha256: "48ec62cef718f0d73698414b783c0e4a69821013553ca00afe0eed324eb5994b",
-    format: ArchiveFormat::Zip,
-    binary: "memcached-1.6.8-win64-mingw/bin/memcached.exe",
 };
 
 fn mailpit_download(os: &str, arch: &str) -> Option<AddonDownload> {
@@ -99,6 +96,44 @@ fn mailpit_download(os: &str, arch: &str) -> Option<AddonDownload> {
     })
 }
 
+fn meilisearch_download(os: &str, arch: &str) -> Option<AddonDownload> {
+    let (url, sha256, binary) = match (os, arch) {
+        // Windows on ARM runs the x64 build through its built-in emulation.
+        ("windows", "x86_64" | "aarch64") => (
+            "https://github.com/meilisearch/meilisearch/releases/download/v1.56.1/meilisearch-windows-amd64.exe",
+            "ac6d2506cafe862c93a6add533e125a19852339ec21303413120bde84aad3a48",
+            "meilisearch.exe",
+        ),
+        ("linux", "x86_64") => (
+            "https://github.com/meilisearch/meilisearch/releases/download/v1.56.1/meilisearch-linux-amd64",
+            "b2c7a647d4cdfdd7a901466bfd6797077b849e90f5eb2c0f5b1d05869592e27e",
+            "meilisearch",
+        ),
+        ("linux", "aarch64") => (
+            "https://github.com/meilisearch/meilisearch/releases/download/v1.56.1/meilisearch-linux-aarch64",
+            "f73987f92b094fd15b79956f9bfc9e8fc7294ad6ad610ebf8a4403c170890726",
+            "meilisearch",
+        ),
+        ("macos", "x86_64") => (
+            "https://github.com/meilisearch/meilisearch/releases/download/v1.56.1/meilisearch-macos-amd64",
+            "cfd3d4214df99a0270227924cedb62f4db6a857c2ec26723a33b3086f59c3985",
+            "meilisearch",
+        ),
+        ("macos", "aarch64") => (
+            "https://github.com/meilisearch/meilisearch/releases/download/v1.56.1/meilisearch-macos-apple-silicon",
+            "293b48304c8452cf67c5ab3f5882e542bfe63d52f357bb155f576412cb6f739d",
+            "meilisearch",
+        ),
+        _ => return None,
+    };
+    Some(AddonDownload {
+        url,
+        sha256,
+        format: ArchiveFormat::Binary,
+        binary,
+    })
+}
+
 /// The package CHAMP installs for `kind` on the given OS/arch
 /// (`std::env::consts` values).
 pub(super) fn package_for(kind: AddonKind, os: &str, arch: &str) -> AddonPackage {
@@ -108,13 +143,13 @@ pub(super) fn package_for(kind: AddonKind, os: &str, arch: &str) -> AddonPackage
             version: REDIS_VERSION,
             download: windows.then_some(REDIS_WINDOWS_X64),
         },
-        AddonKind::Memcached => AddonPackage {
-            version: MEMCACHED_VERSION,
-            download: windows.then_some(MEMCACHED_WINDOWS_X64),
-        },
         AddonKind::Mailpit => AddonPackage {
             version: MAILPIT_VERSION,
             download: mailpit_download(os, arch),
+        },
+        AddonKind::Meilisearch => AddonPackage {
+            version: MEILISEARCH_VERSION,
+            download: meilisearch_download(os, arch),
         },
     }
 }
@@ -129,10 +164,6 @@ pub(super) fn system_install_hint(kind: AddonKind, os: &str) -> Option<&'static 
         (AddonKind::Redis, "macos") => Some("brew install redis"),
         (AddonKind::Redis, "linux") => {
             Some("sudo apt install redis-server  (or your distro's redis package)")
-        }
-        (AddonKind::Memcached, "macos") => Some("brew install memcached"),
-        (AddonKind::Memcached, "linux") => {
-            Some("sudo apt install memcached  (or your distro's memcached package)")
         }
         _ => None,
     }

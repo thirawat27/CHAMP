@@ -2,7 +2,8 @@
 
 use super::htaccess::{
     append_htaccess_deny_rules, append_htaccess_error_rules, append_htaccess_no_browse_rules,
-    append_htaccess_route_rules, discover_htaccess_rules, HtaccessCompatibilityRule,
+    append_htaccess_route_rules, caddy_matcher_name, caddy_path_matcher_line,
+    discover_htaccess_rules, HtaccessCompatibilityRule,
 };
 use crate::runtime::locator::RuntimePaths;
 use std::fs::File;
@@ -47,6 +48,149 @@ fn append_access_gates(content: &mut String, htaccess_rules: &[HtaccessCompatibi
     content.push_str("    }\n\n");
 
     append_htaccess_deny_rules(content, htaccess_rules);
+}
+
+/// `<folder>.localhost` names, captured as `{re.project.1}`. Only plain DNS
+/// labels match (see `crate::projects::domain_label`), so the name can never
+/// carry a path separator or `..` into the folder lookup. No `{n,m}` counts:
+/// braces in a Caddyfile token read as placeholders.
+pub(super) const PROJECT_HOST_REGEXP: &str = "(?i)^([a-z0-9]([a-z0-9-]*[a-z0-9])?)[.]localhost$";
+
+/// `.htaccess` "Deny from all" rules, rewritten for the domain site, where a
+/// project's URLs start at `/` (or at `/` inside `public/`).
+fn append_domain_deny_rules(content: &mut String, rules: &[HtaccessCompatibilityRule]) {
+    for (index, rule) in rules.iter().enumerate().filter(|(_, rule)| rule.deny_all) {
+        let host = if rule.project_prefix == "/" {
+            // A deny at the projects root covers every project.
+            None
+        } else {
+            match crate::projects::domain_label(rule.project_prefix.trim_start_matches('/')) {
+                Some(label) => Some(format!("{label}.localhost")),
+                None => continue, // no domain for this folder
+            }
+        };
+        let relative = rule
+            .request_prefix
+            .strip_prefix(rule.project_prefix.trim_end_matches('/'))
+            .unwrap_or("")
+            .to_string();
+        let mut prefixes = vec![relative.clone()];
+        if let Some(inside_public) =
+            relative.strip_prefix(&format!("/{}", crate::projects::PUBLIC_DIR))
+        {
+            if inside_public.is_empty() || inside_public.starts_with('/') {
+                prefixes.push(inside_public.to_string());
+            }
+        }
+        for (variant, prefix) in prefixes.iter().enumerate() {
+            let matcher =
+                caddy_matcher_name(&rule.request_prefix, index * 2 + variant, "DomainDeny");
+            content.push_str(&format!("    @{} {{\n", matcher));
+            if let Some(host) = &host {
+                content.push_str(&format!("        host {}\n", host));
+            }
+            match caddy_path_matcher_line(if prefix.is_empty() { "/" } else { prefix }) {
+                Some(path_line) => content.push_str(&path_line),
+                None => content.push_str("        path /*\n"),
+            }
+            content.push_str("    }\n");
+            content.push_str(&format!("    handle @{} {{\n", matcher));
+            content.push_str("        respond 403\n");
+            content.push_str("    }\n\n");
+        }
+    }
+}
+
+/// PHP for a domain site. Directory indexes are tried before the directory
+/// itself: php_fastcgi's default order sends `/` straight to PHP, which fails
+/// with "No input file specified" for a site that only has `index.html`.
+/// Unknown paths fall back to `index.php`, the front controller Laravel,
+/// WordPress, and most PHP apps rewrite to; without one they reach
+/// `file_server` and get a plain 404.
+fn append_domain_php(content: &mut String, php_port: u16) {
+    content.push_str(&format!(
+        "            php_fastcgi 127.0.0.1:{} {{\n",
+        php_port
+    ));
+    content.push_str(
+        "                try_files {path}/index.php {path}/index.html {path}/index.htm {path} index.php\n",
+    );
+    content.push_str("            }\n");
+}
+
+/// The `http://<folder>.localhost:<port>` site: every project at the root of
+/// its own origin, so frameworks that expect `/` (Laravel, WordPress) work
+/// without a sub-path. A folder with `public/index.php` (or `.html`) is served
+/// from `public/`. The folder is looked up per request, so new projects need
+/// no restart.
+fn append_project_domains_site(
+    content: &mut String,
+    projects: &str,
+    port: u16,
+    php_port: u16,
+    log_file: &str,
+    htaccess_rules: &[HtaccessCompatibilityRule],
+) {
+    let public = crate::projects::PUBLIC_DIR;
+    content.push_str(
+        "\n# Project domains: http://<folder>.localhost (browsers resolve *.localhost to\n",
+    );
+    content.push_str("# this machine, so no hosts file and no administrator rights are needed)\n");
+    content.push_str(&format!("http://*.localhost:{} {{\n", port));
+    content.push_str("    bind 127.0.0.1\n\n");
+    content.push_str("    # Never serve dotfiles (.env, .git, .htaccess, ...)\n");
+    content.push_str("    @dotfiles {\n");
+    content.push_str("        path */.*\n");
+    content.push_str("        not path */.well-known/*\n");
+    content.push_str("    }\n");
+    content.push_str("    handle @dotfiles {\n");
+    content.push_str("        respond 404\n");
+    content.push_str("    }\n\n");
+    append_domain_deny_rules(content, htaccess_rules);
+    content.push_str(&format!(
+        "    @project vars_regexp project {{host}} \"{}\"\n",
+        PROJECT_HOST_REGEXP
+    ));
+    content.push_str("    handle @project {\n");
+    content.push_str("        @publicRoot file {\n");
+    content.push_str(&format!(
+        "            root \"{}/{{re.project.1}}/{}\"\n",
+        projects, public
+    ));
+    content.push_str("            try_files /index.php /index.html\n");
+    content.push_str("        }\n");
+    content.push_str("        handle @publicRoot {\n");
+    content.push_str(&format!(
+        "            root * \"{}/{{re.project.1}}/{}\"\n",
+        projects, public
+    ));
+    append_domain_php(content, php_port);
+    content.push_str("            file_server\n");
+    content.push_str("        }\n");
+    content.push_str("        handle {\n");
+    content.push_str(&format!(
+        "            root * \"{}/{{re.project.1}}\"\n",
+        projects
+    ));
+    append_domain_php(content, php_port);
+    content.push_str("            file_server\n");
+    content.push_str("        }\n");
+    content.push_str("    }\n\n");
+    content.push_str("    handle {\n");
+    content
+        .push_str("        respond \"Use a project folder name: http://<folder>.localhost\" 404\n");
+    content.push_str("    }\n\n");
+    content.push_str("    log {\n");
+    content.push_str(&format!("        output file \"{}\"\n", log_file));
+    content.push_str("        format json\n");
+    content.push_str("    }\n");
+    content.push_str("    encode gzip\n");
+    content.push_str("    header {\n");
+    content.push_str("        X-Content-Type-Options nosniff\n");
+    content.push_str("        X-Frame-Options SAMEORIGIN\n");
+    content.push_str("        Referrer-Policy no-referrer\n");
+    content.push_str("    }\n");
+    content.push_str("}\n");
 }
 
 /// Generate a basic Caddyfile
@@ -183,6 +327,15 @@ pub(super) fn generate_caddyfile(
     content.push_str("        Referrer-Policy no-referrer\n");
     content.push_str("    }\n");
     content.push_str("}\n");
+
+    append_project_domains_site(
+        &mut content,
+        &projects,
+        port,
+        php_port,
+        &log_file,
+        &htaccess_rules,
+    );
 
     let mut file = File::create(path).map_err(|e| format!("Failed to create Caddyfile: {}", e))?;
     file.write_all(content.as_bytes())

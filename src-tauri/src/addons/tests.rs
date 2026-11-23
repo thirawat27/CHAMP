@@ -61,36 +61,65 @@ fn every_download_is_pinned_https_with_a_sha256() {
                 "{}",
                 download.url
             );
+            let archive = download.url.ends_with(".zip") || download.url.ends_with(".tar.gz");
+            assert_eq!(
+                archive,
+                download.format != ArchiveFormat::Binary,
+                "{}",
+                download.url
+            );
             assert_eq!(os == "windows", download.binary.ends_with(".exe"));
         }
     }
 }
 
 #[test]
-fn mailpit_downloads_everywhere_and_redis_memcached_only_on_windows() {
+fn mailpit_and_meilisearch_download_everywhere_and_redis_only_on_windows() {
     for (os, arch) in PLATFORMS {
         assert!(package_for(AddonKind::Mailpit, os, arch).download.is_some());
+        assert!(package_for(AddonKind::Meilisearch, os, arch)
+            .download
+            .is_some());
         let windows = os == "windows";
         assert_eq!(
             package_for(AddonKind::Redis, os, arch).download.is_some(),
             windows
         );
-        assert_eq!(
-            package_for(AddonKind::Memcached, os, arch)
-                .download
-                .is_some(),
-            windows
-        );
         if !windows {
             assert!(system_install_hint(AddonKind::Redis, os).is_some());
-            assert!(system_install_hint(AddonKind::Memcached, os).is_some());
         }
     }
     // Windows on ARM runs the x64 build through emulation.
+    for kind in [AddonKind::Redis, AddonKind::Meilisearch] {
+        assert_eq!(
+            package_for(kind, "windows", "aarch64"),
+            package_for(kind, "windows", "x86_64")
+        );
+    }
+}
+
+#[test]
+fn a_bare_executable_download_is_installed_as_the_binary() {
+    let dir = tempfile::tempdir().unwrap();
+    let download = dir.path().join("meilisearch.part");
+    fs::write(&download, b"fake server").unwrap();
+    let staging = dir.path().join("staging");
+
+    unpack_into_staging(
+        AddonKind::Meilisearch,
+        &download,
+        ArchiveFormat::Binary,
+        &staging,
+        "meilisearch.exe",
+        "1.56.1",
+    )
+    .unwrap();
+
     assert_eq!(
-        package_for(AddonKind::Redis, "windows", "aarch64"),
-        package_for(AddonKind::Redis, "windows", "x86_64")
+        fs::read(staging.join("meilisearch.exe")).unwrap(),
+        b"fake server"
     );
+    assert!(staging.join(MARKER_FILE).is_file());
 }
 
 #[test]
@@ -144,7 +173,7 @@ fn unpack_writes_the_marker_last_and_finds_the_binary() {
     let staging = dir.path().join("staging");
 
     unpack_into_staging(
-        AddonKind::Memcached,
+        AddonKind::Redis,
         &archive,
         ArchiveFormat::Zip,
         &staging,
@@ -303,12 +332,13 @@ fn an_install_folder_without_a_marker_does_not_count() {
 
 #[test]
 fn only_one_install_per_addon_at_a_time() {
-    let first = InstallGuard::acquire(AddonKind::Memcached).expect("first install");
-    assert!(InstallGuard::acquire(AddonKind::Memcached).is_none());
-    assert!(is_installing(AddonKind::Memcached));
+    // The only non-ignored test that takes an install guard, so it owns them.
+    let first = InstallGuard::acquire(AddonKind::Redis).expect("first install");
+    assert!(InstallGuard::acquire(AddonKind::Redis).is_none());
+    assert!(is_installing(AddonKind::Redis));
     drop(first);
-    assert!(!is_installing(AddonKind::Memcached));
-    assert!(InstallGuard::acquire(AddonKind::Memcached).is_some());
+    assert!(!is_installing(AddonKind::Redis));
+    assert!(InstallGuard::acquire(AddonKind::Redis).is_some());
 }
 
 // --- settings --------------------------------------------------------------
@@ -325,6 +355,16 @@ fn settings_from_before_addons_load_with_defaults() {
     assert!(settings.addons.redis_enabled);
     assert_eq!(settings.addons.redis_port, 6379);
     assert_eq!(settings.addons.mailpit_web_port, 8025);
+}
+
+#[test]
+fn settings_that_still_name_memcached_load() {
+    // Written by versions that offered Memcached; the keys are now ignored.
+    let old = r#"{"web_port":8080,"php_port":9000,"mysql_port":3306,"addons":{"redis_enabled":true,"memcached_enabled":true,"memcached_port":11211}}"#;
+    let settings: AppSettings = serde_json::from_str(old).unwrap();
+    assert!(settings.addons.redis_enabled);
+    let saved = serde_json::to_string(&settings).unwrap();
+    assert!(!saved.contains("memcached"), "{saved}");
 }
 
 #[test]
@@ -368,13 +408,13 @@ fn apply_change_validates_ports() {
         ..Default::default()
     };
     // 3306 is above 1024, so this reaches the duplicate check.
-    let error = apply_change(&mut settings, AddonKind::Memcached, &clash).unwrap_err();
+    let error = apply_change(&mut settings, AddonKind::Redis, &clash).unwrap_err();
     assert!(
-        error.contains("Memcached") && error.contains("MySQL"),
+        error.contains("Redis") && error.contains("MySQL"),
         "{error}"
     );
     assert!(
-        !settings.addons.memcached_enabled,
+        !settings.addons.redis_enabled,
         "a refused change saves nothing"
     );
 
@@ -403,9 +443,6 @@ fn env_lines_cover_only_enabled_addons() {
     assert!(env_pairs(&settings).is_empty());
     assert!(dotenv(&settings).is_empty());
 
-    settings.memcached_enabled = true;
-    assert!(dotenv(&settings).contains("CACHE_STORE=memcached"));
-
     settings.redis_enabled = true;
     settings.redis_port = 6390;
     settings.mailpit_enabled = true;
@@ -419,6 +456,17 @@ fn env_lines_cover_only_enabled_addons() {
     let pairs = env_pairs(&settings);
     assert!(pairs.contains(&("CHAMP_REDIS_PORT", "6390".to_string())));
     assert!(pairs.contains(&("CHAMP_MAILPIT_URL", "http://127.0.0.1:8025/".to_string())));
+    assert!(!dotenv.contains("SCOUT_DRIVER"));
+
+    settings.meilisearch_enabled = true;
+    settings.meilisearch_port = 7710;
+    let with_search = super::dotenv(&settings);
+    assert!(with_search.contains("SCOUT_DRIVER=meilisearch"));
+    assert!(with_search.contains("MEILISEARCH_HOST=http://127.0.0.1:7710"));
+    assert!(env_pairs(&settings).contains(&(
+        "CHAMP_MEILISEARCH_HOST",
+        "http://127.0.0.1:7710".to_string()
+    )));
 }
 
 #[test]
@@ -435,7 +483,8 @@ fn sendmail_command_is_shell_quoted_and_refuses_quotes() {
 
 // --- runtime ---------------------------------------------------------------
 
-/// One test owns Memcached's runtime entry; the map is process-wide.
+/// One test owns Redis's runtime entry; the map is process-wide. The live
+/// test also uses Redis but only runs on its own with `--ignored`.
 #[test]
 fn start_reports_busy_ports_and_spawn_failures_then_stop_clears_them() {
     let dir = tempfile::tempdir().unwrap();
@@ -444,34 +493,34 @@ fn start_reports_busy_ports_and_spawn_failures_then_stop_clears_them() {
     assert!(!port_is_free(busy));
 
     let plan = |port: u16| LaunchPlan {
-        binary: dir.path().join("does-not-exist").join("memcached.exe"),
+        binary: dir.path().join("does-not-exist").join("redis-server.exe"),
         data_dir: dir.path().join("data"),
-        log_path: dir.path().join("memcached.log"),
+        log_path: dir.path().join("redis.log"),
         ports: vec![port],
         owned_binary: false,
     };
 
-    let error = runtime::start(AddonKind::Memcached, plan(busy)).unwrap_err();
+    let error = runtime::start(AddonKind::Redis, plan(busy)).unwrap_err();
     assert!(
         error.contains(&format!("port {busy} is already in use")),
         "{error}"
     );
-    let (state, stored, _) = runtime::snapshot(AddonKind::Memcached);
+    let (state, stored, _) = runtime::snapshot(AddonKind::Redis);
     assert_eq!(state, ServiceState::Error);
     assert_eq!(stored.as_deref(), Some(error.as_str()));
 
     drop(listener);
-    let error = runtime::start(AddonKind::Memcached, plan(busy)).unwrap_err();
-    assert!(error.starts_with("Failed to start Memcached"), "{error}");
+    let error = runtime::start(AddonKind::Redis, plan(busy)).unwrap_err();
+    assert!(error.starts_with("Failed to start Redis"), "{error}");
 
     // Stop on an add-on that never ran succeeds and clears the error.
-    runtime::stop(AddonKind::Memcached).unwrap();
-    let (state, stored, _) = runtime::snapshot(AddonKind::Memcached);
+    runtime::stop(AddonKind::Redis).unwrap();
+    let (state, stored, _) = runtime::snapshot(AddonKind::Redis);
     assert_eq!(state, ServiceState::Stopped);
     assert!(stored.is_none());
 
     // A repeated stop is harmless.
-    runtime::stop(AddonKind::Memcached).unwrap();
+    runtime::stop(AddonKind::Redis).unwrap();
 }
 
 #[test]
@@ -492,21 +541,29 @@ fn mailpit_listens_only_on_loopback_with_auth_accepted() {
     assert!(args.windows(2).any(|w| w == ["--listen", "127.0.0.1:8025"]));
     assert!(args.contains(&"--smtp-auth-accept-any".to_string()));
 
-    for kind in [AddonKind::Redis, AddonKind::Memcached] {
-        let plan = LaunchPlan {
-            ports: vec![7000],
-            ..plan_clone(&plan)
-        };
-        let args: Vec<String> = runtime::build_command(kind, &plan)
-            .get_args()
-            .map(|arg| arg.to_string_lossy().to_string())
-            .collect();
-        assert!(
-            args.contains(&"127.0.0.1".to_string()),
-            "{kind:?} must bind loopback"
-        );
-        assert!(args.contains(&"7000".to_string()));
-    }
+    let plan = LaunchPlan {
+        ports: vec![7000],
+        ..plan_clone(&plan)
+    };
+    let args: Vec<String> = runtime::build_command(AddonKind::Redis, &plan)
+        .get_args()
+        .map(|arg| arg.to_string_lossy().to_string())
+        .collect();
+    assert!(
+        args.contains(&"127.0.0.1".to_string()),
+        "Redis must bind loopback"
+    );
+    assert!(args.contains(&"7000".to_string()));
+
+    let args: Vec<String> = runtime::build_command(AddonKind::Meilisearch, &plan)
+        .get_args()
+        .map(|arg| arg.to_string_lossy().to_string())
+        .collect();
+    assert!(args
+        .windows(2)
+        .any(|w| w == ["--http-addr", "127.0.0.1:7000"]));
+    assert!(args.contains(&"--no-analytics".to_string()));
+    assert!(args.windows(2).any(|w| w == ["--env", "development"]));
 }
 
 fn plan_clone(plan: &LaunchPlan) -> LaunchPlan {
@@ -640,7 +697,7 @@ async fn install_for_test(kind: AddonKind, runtime_dir: &Path) -> Option<PathBuf
 /// Installs and runs the real servers, like the app does:
 /// `cargo test --lib live_addons -- --ignored --nocapture`.
 #[tokio::test(flavor = "multi_thread")]
-#[ignore = "downloads and runs Redis, Memcached, and Mailpit"]
+#[ignore = "downloads and runs Redis and Mailpit"]
 async fn live_addons_start_serve_and_stop() {
     let dir = tempfile::tempdir().unwrap();
     let runtime_dir = dir.path().join("runtime");
@@ -681,29 +738,6 @@ async fn live_addons_start_serve_and_stop() {
         println!("Redis: PING/SET ok, saved on stop");
     } else {
         println!("Redis: skipped (no binary for this system)");
-    }
-
-    // Memcached: version and a set/get round trip.
-    if let Some(binary) = install_for_test(AddonKind::Memcached, &runtime_dir).await {
-        let port = free_port();
-        let launch = plan(AddonKind::Memcached, binary, vec![port]);
-        run_blocking(Box::new(move || {
-            runtime::start(AddonKind::Memcached, launch)
-        }))
-        .await
-        .unwrap()
-        .unwrap_or_else(|e| panic!("Memcached start: {e}"));
-        assert!(talk(port, b"version\r\n", "\r\n").starts_with("VERSION "));
-        assert!(talk(port, b"set champ 0 60 2\r\nok\r\n", "STORED").contains("STORED"));
-        assert!(talk(port, b"get champ\r\n", "END").contains("\r\nok\r\n"));
-        run_blocking(Box::new(|| runtime::stop(AddonKind::Memcached)))
-            .await
-            .unwrap()
-            .unwrap();
-        assert!(port_is_free(port));
-        println!("Memcached: version/set/get ok");
-    } else {
-        println!("Memcached: skipped (no binary for this system)");
     }
 
     // Mailpit: an SMTP message lands in the inbox API, and PHP's mail()
@@ -756,6 +790,66 @@ async fn live_addons_start_serve_and_stop() {
         .unwrap()
         .unwrap();
     assert!(port_is_free(smtp) && port_is_free(web));
+}
+
+/// Downloads the real Meilisearch (about 350 MB), indexes a document, and
+/// finds it: `cargo test --lib live_meilisearch -- --ignored --nocapture`.
+#[tokio::test(flavor = "multi_thread")]
+#[ignore = "downloads and runs Meilisearch"]
+async fn live_meilisearch_indexes_and_searches() {
+    let dir = tempfile::tempdir().unwrap();
+    let runtime_dir = dir.path().join("runtime");
+    let binary = install_for_test(AddonKind::Meilisearch, &runtime_dir)
+        .await
+        .expect("Meilisearch is downloadable everywhere");
+    let port = free_port();
+    let launch = LaunchPlan {
+        binary,
+        data_dir: dir.path().join("addons").join("meilisearch"),
+        log_path: dir.path().join("meilisearch.log"),
+        ports: vec![port],
+        owned_binary: true,
+    };
+    tokio::task::spawn_blocking(move || runtime::start(AddonKind::Meilisearch, launch))
+        .await
+        .unwrap()
+        .unwrap_or_else(|e| panic!("Meilisearch start: {e}"));
+
+    let base = format!("http://127.0.0.1:{port}");
+    let client = reqwest::Client::new();
+    client
+        .post(format!("{base}/indexes/books/documents"))
+        .json(&serde_json::json!([{ "id": 1, "title": "Champions of PHP" }]))
+        .send()
+        .await
+        .unwrap()
+        .error_for_status()
+        .unwrap();
+    // Indexing is asynchronous; a typo still finds the document.
+    let mut hits = 0;
+    for _ in 0..50 {
+        let body: serde_json::Value = client
+            .get(format!("{base}/indexes/books/search?q=champoins"))
+            .send()
+            .await
+            .unwrap()
+            .json()
+            .await
+            .unwrap();
+        hits = body["hits"].as_array().map_or(0, Vec::len);
+        if hits > 0 {
+            break;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+    }
+    assert_eq!(hits, 1, "the indexed document must be found");
+    println!("Meilisearch: indexed and found with a typo");
+
+    tokio::task::spawn_blocking(|| runtime::stop(AddonKind::Meilisearch))
+        .await
+        .unwrap()
+        .unwrap();
+    assert!(port_is_free(port));
 }
 
 /// The ini lines `php_config::php_mail_lines` writes, for the live test.

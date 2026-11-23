@@ -13,7 +13,7 @@ interface AddonsSectionProps {
 }
 
 /**
- * Redis, Memcached, and Mailpit in Settings. Like the agent connector, every
+ * Redis, Mailpit, and Meilisearch in Settings. Like the agent connector, every
  * change is saved at once by its own command, so Save and Cancel of the
  * drawer do not apply to it.
  */

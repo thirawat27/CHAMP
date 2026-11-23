@@ -8,8 +8,9 @@ use std::io::{self, BufReader, Write};
 use std::path::{Path, PathBuf};
 use std::time::{Duration, SystemTime};
 
-/// No add-on archive is anywhere near this; a bigger body is not the release.
-const MAX_DOWNLOAD_BYTES: u64 = 256 * 1024 * 1024;
+/// The largest add-on (Meilisearch, about 350 MB) is well under this; a bigger
+/// body is not the release.
+const MAX_DOWNLOAD_BYTES: u64 = 512 * 1024 * 1024;
 pub(super) const MARKER_FILE: &str = ".champ-addon";
 
 pub(super) fn addons_runtime_dir(runtime_dir: &Path) -> PathBuf {
@@ -60,8 +61,8 @@ pub(super) fn system_binary(kind: AddonKind) -> Option<PathBuf> {
     }
     let name = match kind {
         AddonKind::Redis => "redis-server",
-        AddonKind::Memcached => "memcached",
         AddonKind::Mailpit => "mailpit",
+        AddonKind::Meilisearch => "meilisearch",
     };
     let mut dirs: Vec<PathBuf> = std::env::var_os("PATH")
         .map(|path| std::env::split_paths(&path).collect())
@@ -257,12 +258,20 @@ pub(super) fn unpack_into_staging(
         })?;
     }
     fs::create_dir_all(staging).map_err(|e| format!("Failed to create install folder: {}", e))?;
+    let binary_path = staging.join(relative_path(binary).ok_or("Invalid add-on binary path")?);
     match format {
         ArchiveFormat::Zip => extract_zip(archive, staging)?,
         ArchiveFormat::TarGz => extract_tar_gz(archive, staging)?,
+        ArchiveFormat::Binary => {
+            if let Some(parent) = binary_path.parent() {
+                fs::create_dir_all(parent)
+                    .map_err(|e| format!("Failed to create folder: {}", e))?;
+            }
+            fs::copy(archive, &binary_path)
+                .map_err(|e| format!("Failed to install {}: {}", kind.display_name(), e))?;
+        }
     }
 
-    let binary_path = staging.join(relative_path(binary).ok_or("Invalid add-on binary path")?);
     if !binary_path.is_file() {
         return Err(format!(
             "{} was not found in the downloaded archive ({}).",

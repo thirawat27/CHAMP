@@ -1,9 +1,9 @@
 import { ServiceState } from "./services";
 
 /** Optional services that run beside the stack (see `src-tauri/src/addons`). */
-export type AddonKind = "redis" | "memcached" | "mailpit";
+export type AddonKind = "redis" | "mailpit" | "meilisearch";
 
-export const ADDON_KINDS: readonly AddonKind[] = ["redis", "memcached", "mailpit"];
+export const ADDON_KINDS: readonly AddonKind[] = ["redis", "mailpit", "meilisearch"];
 
 export interface AddonStatus {
   kind: AddonKind;
@@ -42,8 +42,8 @@ export interface AddonInstallProgress {
 export function addonDotenv(addons: AddonStatus[]): string {
   const byKind = new Map(addons.filter((a) => a.enabled).map((a) => [a.kind, a]));
   const redis = byKind.get("redis");
-  const memcached = byKind.get("memcached");
   const mailpit = byKind.get("mailpit");
+  const meilisearch = byKind.get("meilisearch");
   const lines: string[] = [];
   if (redis) {
     lines.push(
@@ -55,10 +55,6 @@ export function addonDotenv(addons: AddonStatus[]): string {
       "QUEUE_CONNECTION=redis"
     );
   }
-  if (memcached) {
-    lines.push("MEMCACHED_HOST=127.0.0.1", `MEMCACHED_PORT=${memcached.port}`);
-    if (!redis) lines.push("CACHE_STORE=memcached");
-  }
   if (mailpit) {
     lines.push(
       "MAIL_MAILER=smtp",
@@ -67,6 +63,13 @@ export function addonDotenv(addons: AddonStatus[]): string {
       "MAIL_USERNAME=null",
       "MAIL_PASSWORD=null",
       "MAIL_ENCRYPTION=null"
+    );
+  }
+  if (meilisearch) {
+    lines.push(
+      "SCOUT_DRIVER=meilisearch",
+      `MEILISEARCH_HOST=http://127.0.0.1:${meilisearch.port}`,
+      "MEILISEARCH_KEY="
     );
   }
   return lines.join("\n");

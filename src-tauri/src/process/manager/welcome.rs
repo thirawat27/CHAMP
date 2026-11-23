@@ -105,12 +105,17 @@ fn encode_path_segment(value: &str) -> String {
         .collect()
 }
 
+/// True when the folder serves a page at its root or, like Laravel, from `public/`.
+fn serves_a_page(dir: &Path) -> bool {
+    has_index_file(dir) || has_index_file(&dir.join(crate::projects::PUBLIC_DIR))
+}
+
 /// Project folders that already serve a page, sorted case-insensitively.
 pub(super) fn list_sites(projects_dir: &Path) -> Vec<String> {
     let mut sites: Vec<String> = match fs::read_dir(projects_dir) {
         Ok(entries) => entries
             .flatten()
-            .filter(|entry| entry.path().is_dir() && has_index_file(&entry.path()))
+            .filter(|entry| entry.path().is_dir() && serves_a_page(&entry.path()))
             .filter_map(|entry| entry.file_name().into_string().ok())
             .filter(|name| !name.starts_with('.'))
             .collect(),
@@ -120,7 +125,27 @@ pub(super) fn list_sites(projects_dir: &Path) -> Vec<String> {
     sites
 }
 
-fn render(projects_dir: &Path, sites: &[String], database_tool_id: &str) -> String {
+/// Where a listed site opens: its own `<folder>.localhost` origin when the
+/// name allows one, else the path under `localhost` (inside `public/` for a
+/// folder that only has an index there).
+fn site_link(projects_dir: &Path, name: &str, web_port: u16) -> (String, String) {
+    if let Some(url) = crate::projects::domain_url(name, web_port) {
+        let shown = url
+            .trim_start_matches("http://")
+            .trim_end_matches('/')
+            .to_string();
+        return (url, shown);
+    }
+    let public = if has_index_file(&projects_dir.join(name)) {
+        String::new()
+    } else {
+        format!("{}/", crate::projects::PUBLIC_DIR)
+    };
+    let href = format!("/{}/{}", encode_path_segment(name), public);
+    (href, format!("/{}/{}", name, public))
+}
+
+fn render(projects_dir: &Path, sites: &[String], database_tool_id: &str, web_port: u16) -> String {
     let (tool_name, tool_path) = if crate::runtime::packages::is_adminer_id(database_tool_id) {
         ("Adminer", "/adminer/")
     } else {
@@ -143,10 +168,12 @@ fn render(projects_dir: &Path, sites: &[String], database_tool_id: &str) -> Stri
         let links: String = sites
             .iter()
             .map(|name| {
+                let (href, shown) = site_link(projects_dir, name, web_port);
                 format!(
-                    "\n        <a href=\"/{href}/\">{label}<span>/{label}/</span></a>",
-                    href = encode_path_segment(name),
-                    label = escape_html(name)
+                    "\n        <a href=\"{href}\">{label}<span>{shown}</span></a>",
+                    href = escape_html(&href),
+                    label = escape_html(name),
+                    shown = escape_html(&shown)
                 )
             })
             .collect();
@@ -156,10 +183,11 @@ fn render(projects_dir: &Path, sites: &[String], database_tool_id: &str) -> Stri
       <div class="sites">{links}
       </div>
       <code class="path">{path}</code>
-      <p class="hint en">Added a project just now? Restart the web server in CHAMP to list it here.</p>
-      <p class="hint th">เพิ่งเพิ่มโปรเจกต์ใหม่ใช่ไหม กด Restart ใน CHAMP เพื่อให้แสดงในรายการนี้</p>
+      <p class="hint en">Every folder also opens at <code>http://&lt;folder&gt;.localhost:{port}</code>, served from <code>public/</code> when it has one. A new folder works there at once; restart the web server in CHAMP to list it here.</p>
+      <p class="hint th">ทุกโฟลเดอร์เปิดได้ที่ <code>http://&lt;ชื่อโฟลเดอร์&gt;.localhost:{port}</code> ด้วย (ใช้ <code>public/</code> เป็นรากเว็บถ้ามี) โฟลเดอร์ใหม่ใช้ได้ทันที แต่ต้องกด Restart ใน CHAMP จึงจะแสดงในรายการนี้</p>
     </section>"#,
             links = links,
+            port = web_port,
             path = escape_html(&projects_dir.to_string_lossy())
         )
     };
@@ -209,12 +237,13 @@ fn render(projects_dir: &Path, sites: &[String], database_tool_id: &str) -> Stri
 pub(super) fn write_welcome_page(
     paths: &RuntimePaths,
     database_tool_id: &str,
+    web_port: u16,
 ) -> Result<PathBuf, String> {
     let dir = paths.config_dir.join("welcome");
     fs::create_dir_all(&dir).map_err(|e| format!("Failed to create welcome directory: {}", e))?;
 
     let sites = list_sites(&paths.projects_dir);
-    let html = render(&paths.projects_dir, &sites, database_tool_id);
+    let html = render(&paths.projects_dir, &sites, database_tool_id, web_port);
     fs::write(dir.join("index.html"), html)
         .map_err(|e| format!("Failed to write welcome page: {}", e))?;
 
@@ -244,12 +273,33 @@ mod tests {
         fs::write(projects.join("readme.txt"), "x").unwrap();
 
         assert_eq!(list_sites(projects), vec!["blog", "shop"]);
+
+        // A Laravel-style folder serves its page from public/.
+        let api = projects.join("api").join("public");
+        fs::create_dir_all(&api).unwrap();
+        fs::write(api.join("index.php"), "x").unwrap();
+        assert_eq!(list_sites(projects), vec!["api", "blog", "shop"]);
+    }
+
+    #[test]
+    fn sites_link_to_their_own_domain() {
+        let temp = tempfile::tempdir().expect("temp dir");
+        let projects = temp.path();
+        fs::create_dir_all(projects.join("my_api").join("public")).unwrap();
+        let sites = vec!["shop".to_string(), "my_api".to_string()];
+        let html = render(projects, &sites, "adminer-5.4", 8080);
+
+        assert!(html.contains("href=\"http://shop.localhost:8080/\""));
+        assert!(html.contains("<span>shop.localhost:8080</span>"));
+        // No domain for an underscore name; its page is inside public/.
+        assert!(html.contains("href=\"/my_api/public/\""));
+        assert!(html.contains(".localhost:8080</code>"));
     }
 
     #[test]
     fn empty_folder_explains_what_to_do() {
         let temp = tempfile::tempdir().expect("temp dir");
-        let html = render(temp.path(), &[], "phpmyadmin-5.2");
+        let html = render(temp.path(), &[], "phpmyadmin-5.2", 8080);
 
         assert!(html.contains("index.php"));
         assert!(html.contains("/phpmyadmin/"));
@@ -261,10 +311,14 @@ mod tests {
     fn sites_are_listed_with_escaped_and_encoded_names() {
         let temp = tempfile::tempdir().expect("temp dir");
         let sites = vec!["my shop".to_string(), "a<b".to_string()];
-        let html = render(temp.path(), &sites, "adminer-5.4");
+        for name in &sites {
+            fs::create_dir_all(temp.path().join(name)).unwrap_or(()); // "a<b" is invalid on Windows
+        }
+        let html = render(temp.path(), &sites, "adminer-5.4", 8080);
 
-        assert!(html.contains("href=\"/my%20shop/\""));
-        assert!(html.contains("href=\"/a%3Cb/\""));
+        // Names that are not DNS labels keep the path link.
+        assert!(html.contains("href=\"/my%20shop/"));
+        assert!(html.contains("href=\"/a%3Cb/"));
         assert!(html.contains("a&lt;b"));
         assert!(!html.contains("a<b<"));
         assert!(html.contains("/adminer/"));
@@ -290,7 +344,7 @@ mod tests {
         };
         fs::create_dir_all(&paths.projects_dir).unwrap();
 
-        let dir = write_welcome_page(&paths, "phpmyadmin-5.2").expect("welcome page");
+        let dir = write_welcome_page(&paths, "phpmyadmin-5.2", 8080).expect("welcome page");
 
         assert_eq!(dir, paths.config_dir.join("welcome"));
         let html = fs::read_to_string(dir.join("index.html")).unwrap();
@@ -332,7 +386,7 @@ mod tests {
         fs::create_dir_all(&shop).unwrap();
         fs::write(shop.join("index.html"), "<h1>SHOP SITE</h1>").unwrap();
 
-        let welcome = write_welcome_page(&paths, "phpmyadmin-5.2").unwrap();
+        let welcome = write_welcome_page(&paths, "phpmyadmin-5.2", 18092).unwrap();
         super::super::caddyfile::generate_caddyfile(
             &paths.config_dir.join("Caddyfile"),
             &paths,

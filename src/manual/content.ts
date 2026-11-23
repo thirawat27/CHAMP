@@ -199,9 +199,23 @@ export const GUIDE_SECTIONS: GuideSection[] = [
         ),
       },
       {
+        kind: "p",
+        text: l(
+          "ทุกโฟลเดอร์ยังมีโดเมนของตัวเองที่ `http://<ชื่อโฟลเดอร์>.localhost:8080/` เว็บจึงอยู่ที่รากของโดเมน ไม่ต้องต่อท้ายด้วย path ถ้าโฟลเดอร์มี `public/index.php` (เช่น Laravel, Symfony) CHAMP ใช้ `public/` เป็นรากเว็บให้เอง เบราว์เซอร์รู้จัก `.localhost` อยู่แล้ว จึงไม่ต้องแก้ไฟล์ hosts และไม่ต้องใช้สิทธิ์แอดมิน โฟลเดอร์ที่สร้างใหม่ใช้ได้ทันทีโดยไม่ต้องรีสตาร์ต",
+          "Every folder also gets its own domain at `http://<folder>.localhost:8080/`, so the site sits at the root of its origin instead of under a path. When the folder has `public/index.php` (Laravel, Symfony), CHAMP serves `public/` as the web root. Browsers already resolve `.localhost`, so there is no hosts file to edit and no administrator rights to grant, and a new folder works at once without a restart."
+        ),
+      },
+      {
         kind: "code",
         label: l("ตัวอย่างโครงสร้าง", "Example layout"),
-        code: "projects/\n  shop/\n    index.php      → http://localhost:8080/shop/\n  blog/\n    index.html     → http://localhost:8080/blog/",
+        code: "projects/\n  shop/\n    index.php        → http://shop.localhost:8080/\n                       http://localhost:8080/shop/\n  blog/\n    index.html       → http://blog.localhost:8080/\n  api/\n    public/index.php → http://api.localhost:8080/",
+      },
+      {
+        kind: "warning",
+        text: l(
+          "โดเมนใช้ได้กับชื่อโฟลเดอร์ที่มีแค่ตัวอักษรอังกฤษ ตัวเลข และ - เท่านั้น (เช่น `my-shop` ใช้ได้ `my_shop` หรือ `ร้านค้า` ใช้ไม่ได้ แต่ยังเปิดผ่าน `localhost:8080/<ชื่อโฟลเดอร์>/` ได้) Chrome, Edge และ Firefox รู้จัก `.localhost` เอง แต่ Safari และโค้ดฝั่งเซิร์ฟเวอร์บน Windows อาจไม่รู้จัก",
+          "A domain needs a folder name made of English letters, digits, and hyphens (`my-shop` works; `my_shop` or a Thai name does not, but still opens at `localhost:8080/<folder>/`). Chrome, Edge, and Firefox resolve `.localhost` themselves; Safari and server-side code on Windows may not."
+        ),
       },
       {
         kind: "tip",
@@ -237,8 +251,8 @@ export const GUIDE_SECTIONS: GuideSection[] = [
       {
         kind: "tip",
         text: l(
-          "Laravel: เปิดที่ `http://localhost:8080/<โปรเจกต์>/public/` และตั้ง `DB_HOST=127.0.0.1` ใน .env",
-          "Laravel: open `http://localhost:8080/<project>/public/` and set `DB_HOST=127.0.0.1` in .env."
+          "Laravel: เปิดที่ `http://<โปรเจกต์>.localhost:8080/` แล้วตั้ง `APP_URL` เป็น URL นี้ และ `DB_HOST=127.0.0.1` ใน .env",
+          "Laravel: open `http://<project>.localhost:8080/`, set `APP_URL` to that URL, and set `DB_HOST=127.0.0.1` in .env."
         ),
       },
     ],
@@ -425,12 +439,12 @@ export const GUIDE_SECTIONS: GuideSection[] = [
     id: "addons",
     icon: Boxes,
     title: l(
-      "บริการเสริม: Redis, Memcached, Mailpit",
-      "Add-on services: Redis, Memcached, Mailpit"
+      "บริการเสริม: Redis, Mailpit, Meilisearch",
+      "Add-on services: Redis, Mailpit, Meilisearch"
     ),
     summary: l(
-      "แคช คิว และกล่องดักอีเมลสำหรับทดสอบ",
-      "Cache, queues, and a mail catcher for testing"
+      "แคช คิว กล่องดักอีเมลสำหรับทดสอบ และระบบค้นหา",
+      "Cache, queues, a mail catcher for testing, and search"
     ),
     blocks: [
       {
@@ -449,7 +463,6 @@ export const GUIDE_SECTIONS: GuideSection[] = [
         ],
         rows: [
           ["Redis", l("แคช คิว (queue) และเซสชัน", "Cache, queues, and sessions"), "6379"],
-          ["Memcached", l("แคชในหน่วยความจำ", "In-memory cache"), "11211"],
           [
             "Mailpit",
             l(
@@ -457,6 +470,14 @@ export const GUIDE_SECTIONS: GuideSection[] = [
               "Catches mail your app sends and shows it in a web inbox; nothing is really sent"
             ),
             l("SMTP 1025, เว็บ 8025", "SMTP 1025, web 8025"),
+          ],
+          [
+            "Meilisearch",
+            l(
+              "ระบบค้นหาข้อความแบบเร็ว พิมพ์ผิดก็ยังเจอ ใช้กับ Laravel Scout มีหน้าทดลองค้นหาบนเว็บ",
+              "Fast, typo-tolerant search for Laravel Scout, with a search preview in the browser"
+            ),
+            "7700",
           ],
         ],
       },
@@ -479,25 +500,29 @@ export const GUIDE_SECTIONS: GuideSection[] = [
             "สำหรับ Mailpit กด เปิดกล่องจดหมาย (หรือ `Ctrl M`) เพื่อดูอีเมลที่จับได้",
             "For Mailpit, press Open inbox (or `Ctrl M`) to see the caught messages."
           ),
+          l(
+            "สำหรับ Meilisearch กด เปิดหน้าทดลองค้นหา เพื่อดูข้อมูลที่ index ไว้และลองค้นหา",
+            "For Meilisearch, press Open search preview to browse the indexed data and try searches."
+          ),
         ],
       },
       {
         kind: "code",
         label: l("ตัวอย่าง .env ของ Laravel", "Example Laravel .env"),
-        code: "REDIS_CLIENT=predis\nREDIS_HOST=127.0.0.1\nREDIS_PORT=6379\nCACHE_STORE=redis\nQUEUE_CONNECTION=redis\nMAIL_MAILER=smtp\nMAIL_HOST=127.0.0.1\nMAIL_PORT=1025",
+        code: "REDIS_CLIENT=predis\nREDIS_HOST=127.0.0.1\nREDIS_PORT=6379\nCACHE_STORE=redis\nQUEUE_CONNECTION=redis\nMAIL_MAILER=smtp\nMAIL_HOST=127.0.0.1\nMAIL_PORT=1025\nSCOUT_DRIVER=meilisearch\nMEILISEARCH_HOST=http://127.0.0.1:7700\nMEILISEARCH_KEY=",
       },
       {
         kind: "tip",
         text: l(
-          "เมื่อเปิด Mailpit ฟังก์ชัน `mail()` ของ PHP จะส่งเข้า Mailpit อัตโนมัติ (CHAMP ตั้งค่า php.ini และรีสตาร์ท PHP ให้) Laravel ต้องติดตั้ง `predis/predis` หรือส่วนขยาย phpredis จึงจะใช้ Redis ได้",
-          "With Mailpit on, PHP's `mail()` goes to Mailpit automatically (CHAMP sets php.ini and restarts PHP for you). Laravel needs `predis/predis` or the phpredis extension to use Redis."
+          "เมื่อเปิด Mailpit ฟังก์ชัน `mail()` ของ PHP จะส่งเข้า Mailpit อัตโนมัติ (CHAMP ตั้งค่า php.ini และรีสตาร์ท PHP ให้) Laravel ต้องติดตั้ง `predis/predis` หรือส่วนขยาย phpredis จึงจะใช้ Redis ได้ ส่วน Laravel Scout ต้องติดตั้ง `laravel/scout`, `meilisearch/meilisearch-php` และ `http-interop/http-factory-guzzle` (Meilisearch ทำงานโหมดพัฒนา ไม่ต้องใช้ master key)",
+          "With Mailpit on, PHP's `mail()` goes to Mailpit automatically (CHAMP sets php.ini and restarts PHP for you). Laravel needs `predis/predis` or the phpredis extension to use Redis. Laravel Scout needs `laravel/scout`, `meilisearch/meilisearch-php`, and `http-interop/http-factory-guzzle`; Meilisearch runs in development mode, without a master key."
         ),
       },
       {
         kind: "warning",
         text: l(
-          "บน macOS และ Linux CHAMP ดาวน์โหลด Redis และ Memcached ให้ไม่ได้ ให้ติดตั้งด้วย `brew install redis memcached` หรือตัวจัดการแพ็กเกจของระบบ แล้ว CHAMP จะใช้ตัวนั้นเอง ถ้าพอร์ตถูกโปรแกรมอื่นใช้อยู่ CHAMP จะแจ้งแทนการย้ายพอร์ตเอง เพราะ .env ของโปรเจกต์ระบุพอร์ตไว้",
-          "On macOS and Linux CHAMP cannot download Redis and Memcached; install them with `brew install redis memcached` or your package manager and CHAMP uses them. When a port is taken by another program, CHAMP reports it instead of moving to another port, because your project's .env names the port."
+          "บน macOS และ Linux CHAMP ดาวน์โหลด Redis ให้ไม่ได้ ให้ติดตั้งด้วย `brew install redis` หรือตัวจัดการแพ็กเกจของระบบ แล้ว CHAMP จะใช้ตัวนั้นเอง ถ้าพอร์ตถูกโปรแกรมอื่นใช้อยู่ CHAMP จะแจ้งแทนการย้ายพอร์ตเอง เพราะ .env ของโปรเจกต์ระบุพอร์ตไว้",
+          "On macOS and Linux CHAMP cannot download Redis; install it with `brew install redis` or your package manager and CHAMP uses it. When a port is taken by another program, CHAMP reports it instead of moving to another port, because your project's .env names the port."
         ),
       },
     ],
@@ -695,8 +720,8 @@ export const GUIDE_SECTIONS: GuideSection[] = [
             "PHP versions and database tool: see the PHP and Databases topics."
           ),
           l(
-            "บริการเสริม: ติดตั้ง เปิดใช้ และตั้งพอร์ตของ Redis, Memcached และ Mailpit บันทึกทันทีโดยไม่ต้องกด บันทึก ดูหัวข้อ บริการเสริม",
-            "Add-on services: install, enable, and set ports for Redis, Memcached, and Mailpit. Saved at once, without Save; see the Add-on services topic."
+            "บริการเสริม: ติดตั้ง เปิดใช้ และตั้งพอร์ตของ Redis, Mailpit และ Meilisearch บันทึกทันทีโดยไม่ต้องกด บันทึก ดูหัวข้อ บริการเสริม",
+            "Add-on services: install, enable, and set ports for Redis, Mailpit, and Meilisearch. Saved at once, without Save; see the Add-on services topic."
           ),
           l(
             "Log Doctor AI, AI Agent Connector และ อัปเดต: ดูหัวข้อของแต่ละส่วน",

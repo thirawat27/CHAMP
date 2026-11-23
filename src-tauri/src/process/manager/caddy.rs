@@ -56,7 +56,7 @@ pub(super) fn start_caddy(
 
     // Always regenerate Caddyfile with current port settings
     let caddyfile_path = paths.config_dir.join("Caddyfile");
-    let welcome_dir = write_welcome_page(paths, database_tool_id)?;
+    let welcome_dir = write_welcome_page(paths, database_tool_id, service_process.port)?;
     generate_caddyfile(
         &caddyfile_path,
         paths,

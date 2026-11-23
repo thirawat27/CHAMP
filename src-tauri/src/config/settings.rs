@@ -53,31 +53,34 @@ pub struct AppSettings {
     pub agent_connector_read_only: bool,
     #[serde(default = "default_agent_connector_port")]
     pub agent_connector_port: u16,
-    /// Optional Redis / Memcached / Mailpit services (see `addons`). Written by
+    /// Optional Redis / Mailpit / Meilisearch services (see `addons`). Written by
     /// `configure_addon`; `save_settings` keeps what is on disk.
     #[serde(default)]
     pub addons: AddonSettings,
 }
 
 pub const DEFAULT_REDIS_PORT: u16 = 6379;
-pub const DEFAULT_MEMCACHED_PORT: u16 = 11211;
 pub const DEFAULT_MAILPIT_SMTP_PORT: u16 = 1025;
 pub const DEFAULT_MAILPIT_WEB_PORT: u16 = 8025;
+pub const DEFAULT_MEILISEARCH_PORT: u16 = 7700;
 
 /// Which optional services start with the stack, and their ports.
 ///
 /// Add-ons never move to a fallback port: an app's `.env` names the port, so a
 /// busy port is reported instead of silently picking another one.
+///
+/// Settings files from versions that offered Memcached still carry
+/// `memcached_enabled` / `memcached_port`; serde ignores those unknown keys.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct AddonSettings {
     pub redis_enabled: bool,
     pub redis_port: u16,
-    pub memcached_enabled: bool,
-    pub memcached_port: u16,
     pub mailpit_enabled: bool,
     pub mailpit_smtp_port: u16,
     pub mailpit_web_port: u16,
+    pub meilisearch_enabled: bool,
+    pub meilisearch_port: u16,
 }
 
 impl Default for AddonSettings {
@@ -85,11 +88,11 @@ impl Default for AddonSettings {
         Self {
             redis_enabled: false,
             redis_port: DEFAULT_REDIS_PORT,
-            memcached_enabled: false,
-            memcached_port: DEFAULT_MEMCACHED_PORT,
             mailpit_enabled: false,
             mailpit_smtp_port: DEFAULT_MAILPIT_SMTP_PORT,
             mailpit_web_port: DEFAULT_MAILPIT_WEB_PORT,
+            meilisearch_enabled: false,
+            meilisearch_port: DEFAULT_MEILISEARCH_PORT,
         }
     }
 }
@@ -101,12 +104,12 @@ impl AddonSettings {
         if self.redis_enabled {
             ports.push(("Redis", self.redis_port));
         }
-        if self.memcached_enabled {
-            ports.push(("Memcached", self.memcached_port));
-        }
         if self.mailpit_enabled {
             ports.push(("Mailpit SMTP", self.mailpit_smtp_port));
             ports.push(("Mailpit web", self.mailpit_web_port));
+        }
+        if self.meilisearch_enabled {
+            ports.push(("Meilisearch", self.meilisearch_port));
         }
         ports
     }

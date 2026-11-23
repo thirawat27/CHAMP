@@ -1,5 +1,6 @@
-//! Optional services: Redis (cache/queue), Memcached (cache), and Mailpit
-//! (catches outgoing mail so nothing is really sent).
+//! Optional services: Redis (cache/queue), Mailpit (catches outgoing mail so
+//! nothing is really sent), and Meilisearch (full-text search for Laravel
+//! Scout and similar).
 //!
 //! Add-ons are independent of the core stack: they have their own state and
 //! never block or fail a stack start. Enabled add-ons start and stop with the
@@ -27,42 +28,43 @@ use tauri::{AppHandle, Emitter};
 #[serde(rename_all = "lowercase")]
 pub enum AddonKind {
     Redis,
-    Memcached,
     Mailpit,
+    Meilisearch,
 }
 
-pub const ALL_ADDONS: [AddonKind; 3] = [AddonKind::Redis, AddonKind::Memcached, AddonKind::Mailpit];
+pub const ALL_ADDONS: [AddonKind; 3] =
+    [AddonKind::Redis, AddonKind::Mailpit, AddonKind::Meilisearch];
 
 impl AddonKind {
     pub fn key(self) -> &'static str {
         match self {
             AddonKind::Redis => "redis",
-            AddonKind::Memcached => "memcached",
             AddonKind::Mailpit => "mailpit",
+            AddonKind::Meilisearch => "meilisearch",
         }
     }
 
     pub fn display_name(self) -> &'static str {
         match self {
             AddonKind::Redis => "Redis",
-            AddonKind::Memcached => "Memcached",
             AddonKind::Mailpit => "Mailpit",
+            AddonKind::Meilisearch => "Meilisearch",
         }
     }
 
     fn enabled(self, settings: &AddonSettings) -> bool {
         match self {
             AddonKind::Redis => settings.redis_enabled,
-            AddonKind::Memcached => settings.memcached_enabled,
             AddonKind::Mailpit => settings.mailpit_enabled,
+            AddonKind::Meilisearch => settings.meilisearch_enabled,
         }
     }
 
     fn set_enabled(self, settings: &mut AddonSettings, enabled: bool) {
         match self {
             AddonKind::Redis => settings.redis_enabled = enabled,
-            AddonKind::Memcached => settings.memcached_enabled = enabled,
             AddonKind::Mailpit => settings.mailpit_enabled = enabled,
+            AddonKind::Meilisearch => settings.meilisearch_enabled = enabled,
         }
     }
 
@@ -99,9 +101,9 @@ pub struct AddonStatus {
     pub enabled: bool,
     pub state: ServiceState,
     pub port: u16,
-    /// Mailpit's web inbox port.
+    /// Mailpit's web inbox port (a second, separately configured port).
     pub web_port: Option<u16>,
-    /// Mailpit's inbox, once it is running.
+    /// Mailpit's inbox or Meilisearch's dashboard, once it is running.
     pub web_url: Option<String>,
     pub error: Option<String>,
     pub log_path: Option<PathBuf>,
@@ -168,6 +170,12 @@ fn status_for(kind: AddonKind, settings: &AddonSettings, paths: &AppDataPaths) -
         configured
     };
     let web_port = (kind == AddonKind::Mailpit).then(|| ports[1]);
+    // Meilisearch serves its dashboard on its API port.
+    let browser_port = match kind {
+        AddonKind::Mailpit => web_port,
+        AddonKind::Meilisearch => Some(ports[0]),
+        AddonKind::Redis => None,
+    };
     let log_path = paths.logs_dir.join(kind.log_name());
     AddonStatus {
         kind,
@@ -186,7 +194,7 @@ fn status_for(kind: AddonKind, settings: &AddonSettings, paths: &AppDataPaths) -
         state: state.clone(),
         port: ports[0],
         web_port,
-        web_url: web_port
+        web_url: browser_port
             .filter(|_| state.is_running())
             .map(|port| format!("http://127.0.0.1:{port}/")),
         error,
@@ -312,16 +320,18 @@ pub fn env_pairs(settings: &AddonSettings) -> Vec<(&'static str, String)> {
         pairs.push(("CHAMP_REDIS_HOST", "127.0.0.1".to_string()));
         pairs.push(("CHAMP_REDIS_PORT", settings.redis_port.to_string()));
     }
-    if settings.memcached_enabled {
-        pairs.push(("CHAMP_MEMCACHED_HOST", "127.0.0.1".to_string()));
-        pairs.push(("CHAMP_MEMCACHED_PORT", settings.memcached_port.to_string()));
-    }
     if settings.mailpit_enabled {
         pairs.push(("CHAMP_MAIL_HOST", "127.0.0.1".to_string()));
         pairs.push(("CHAMP_MAIL_PORT", settings.mailpit_smtp_port.to_string()));
         pairs.push((
             "CHAMP_MAILPIT_URL",
             format!("http://127.0.0.1:{}/", settings.mailpit_web_port),
+        ));
+    }
+    if settings.meilisearch_enabled {
+        pairs.push((
+            "CHAMP_MEILISEARCH_HOST",
+            format!("http://127.0.0.1:{}", settings.meilisearch_port),
         ));
     }
     pairs
@@ -340,15 +350,6 @@ pub fn dotenv(settings: &AddonSettings) -> String {
             "QUEUE_CONNECTION=redis".to_string(),
         ]);
     }
-    if settings.memcached_enabled {
-        lines.extend([
-            "MEMCACHED_HOST=127.0.0.1".to_string(),
-            format!("MEMCACHED_PORT={}", settings.memcached_port),
-        ]);
-        if !settings.redis_enabled {
-            lines.push("CACHE_STORE=memcached".to_string());
-        }
-    }
     if settings.mailpit_enabled {
         lines.extend([
             "MAIL_MAILER=smtp".to_string(),
@@ -357,6 +358,17 @@ pub fn dotenv(settings: &AddonSettings) -> String {
             "MAIL_USERNAME=null".to_string(),
             "MAIL_PASSWORD=null".to_string(),
             "MAIL_ENCRYPTION=null".to_string(),
+        ]);
+    }
+    if settings.meilisearch_enabled {
+        lines.extend([
+            "SCOUT_DRIVER=meilisearch".to_string(),
+            format!(
+                "MEILISEARCH_HOST=http://127.0.0.1:{}",
+                settings.meilisearch_port
+            ),
+            // Development mode runs without a master key.
+            "MEILISEARCH_KEY=".to_string(),
         ]);
     }
     lines.join("\n")
@@ -377,7 +389,7 @@ pub fn environment_json() -> serde_json::Value {
             "web_url": status.web_port.map(|port| format!("http://127.0.0.1:{port}/")),
         })).collect::<Vec<_>>(),
         "dotenv": dotenv(&settings),
-        "note": "Mailpit catches every message sent to its SMTP port and never delivers it. Laravel needs the predis/predis package for REDIS_CLIENT=predis, or the phpredis extension.",
+        "note": "Mailpit catches every message sent to its SMTP port and never delivers it. Laravel needs the predis/predis package for REDIS_CLIENT=predis, or the phpredis extension. Laravel Scout with Meilisearch needs laravel/scout and meilisearch/meilisearch-php http-interop/http-factory-guzzle; Meilisearch runs in development mode without a master key.",
     })
 }
 
@@ -395,8 +407,8 @@ fn apply_change(
     if let Some(port) = change.port {
         match kind {
             AddonKind::Redis => next.addons.redis_port = port,
-            AddonKind::Memcached => next.addons.memcached_port = port,
             AddonKind::Mailpit => next.addons.mailpit_smtp_port = port,
+            AddonKind::Meilisearch => next.addons.meilisearch_port = port,
         }
     }
     if let Some(web_port) = change.web_port {

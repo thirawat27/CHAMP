@@ -60,7 +60,6 @@ const addons = [
     enabled: true,
     state: "running",
   }),
-  addon("memcached", "Memcached", 11211, { version: "1.6.8" }),
   addon("mailpit", "Mailpit", 1025, {
     version: "1.34.0",
     installed_version: "1.34.0",
@@ -71,6 +70,7 @@ const addons = [
     web_port: 8025,
     web_url: "http://127.0.0.1:8025/",
   }),
+  addon("meilisearch", "Meilisearch", 7700, { version: "1.56.1" }),
 ];
 
 const responses: Record<string, unknown> = {

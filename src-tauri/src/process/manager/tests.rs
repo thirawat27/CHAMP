@@ -452,6 +452,73 @@ fn caddyfile_hides_dotfiles_except_well_known() {
     );
 }
 
+/// The `*.localhost` site, checked end to end against real Caddy and PHP when
+/// it was written (see `welcome::tests::caddy_check_writes_full_config`).
+#[test]
+fn project_domains_site_maps_names_to_folders_safely() {
+    let temp = tempfile::tempdir().expect("failed to create temp dir");
+    let paths = caddy_fixture(temp.path());
+    let private = paths.projects_dir.join("blog").join("private");
+    std::fs::create_dir_all(&private).unwrap();
+    std::fs::write(private.join(".htaccess"), "Deny from all\n").unwrap();
+    let content = generated_caddyfile(&paths);
+
+    let site = &content[content
+        .find("http://*.localhost:8080 {")
+        .expect("no domain site")..];
+    assert!(site.contains("bind 127.0.0.1"));
+    assert!(site.contains(super::caddyfile::PROJECT_HOST_REGEXP));
+    assert!(site.contains("{re.project.1}/public"));
+    assert!(site.contains("try_files {path}/index.php {path}/index.html"));
+    // Refusals come before the project handler, as in the main site.
+    let project = site.find("handle @project").unwrap();
+    assert!(site.find("handle @dotfiles").unwrap() < project);
+    let deny = site
+        .find("host blog.localhost")
+        .expect("deny rule for the domain");
+    assert!(deny < project);
+    assert!(site[deny..].starts_with("host blog.localhost\n        path /private /private/*"));
+
+    // Only plain DNS labels reach a folder: nothing that could climb out.
+    let host = regex_lite_match(super::caddyfile::PROJECT_HOST_REGEXP);
+    assert!(host("shop.localhost") && host("My-App2.localhost"));
+    for bad in [
+        "localhost",
+        ".localhost",
+        "a.b.localhost",
+        "a_b.localhost",
+        "..localhost",
+        "-a.localhost",
+        "a\\b.localhost",
+    ] {
+        assert!(!host(bad), "{bad}");
+    }
+}
+
+/// Mirrors `PROJECT_HOST_REGEXP` (Go regexp syntax) without a regex crate.
+fn regex_lite_match(pattern: &str) -> impl Fn(&str) -> bool {
+    assert_eq!(
+        pattern, "(?i)^([a-z0-9]([a-z0-9-]*[a-z0-9])?)[.]localhost$",
+        "update this mirror together with the pattern"
+    );
+    |host: &str| {
+        let Some(label) = host
+            .len()
+            .checked_sub(".localhost".len())
+            .filter(|&end| host[end..].eq_ignore_ascii_case(".localhost"))
+            .map(|end| &host[..end])
+        else {
+            return false;
+        };
+        !label.is_empty()
+            && label
+                .bytes()
+                .all(|b| b.is_ascii_alphanumeric() || b == b'-')
+            && !label.starts_with('-')
+            && !label.ends_with('-')
+    }
+}
+
 #[test]
 fn htaccess_deny_refuses_php_before_php_handlers() {
     let temp = tempfile::tempdir().expect("failed to create temp dir");

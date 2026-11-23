@@ -8,7 +8,7 @@ import { AddonsCard } from "./dashboard/AddonsCard";
 import { AddonsSection } from "./settings/AddonsSection";
 
 const status = (overrides: Partial<AddonStatus> & Pick<AddonStatus, "kind">): AddonStatus => ({
-  name: { redis: "Redis", memcached: "Memcached", mailpit: "Mailpit" }[overrides.kind],
+  name: { redis: "Redis", mailpit: "Mailpit", meilisearch: "Meilisearch" }[overrides.kind],
   version: "1.0.0",
   installed_version: null,
   installed: false,
@@ -19,7 +19,7 @@ const status = (overrides: Partial<AddonStatus> & Pick<AddonStatus, "kind">): Ad
   installing: false,
   enabled: false,
   state: ServiceState.Stopped,
-  port: { redis: 6379, memcached: 11211, mailpit: 1025 }[overrides.kind],
+  port: { redis: 6379, mailpit: 1025, meilisearch: 7700 }[overrides.kind],
   web_port: overrides.kind === "mailpit" ? 8025 : null,
   web_url: null,
   error: null,
@@ -46,8 +46,8 @@ const controller = (addons: AddonStatus[], extra: Partial<AddonsController> = {}
 
 const allStopped = () => [
   status({ kind: "redis" }),
-  status({ kind: "memcached" }),
   status({ kind: "mailpit" }),
+  status({ kind: "meilisearch" }),
 ];
 
 const renderModal = (c: AddonsController) => {
@@ -85,14 +85,8 @@ describe("addonDotenv", () => {
     expect(addonDotenv(allStopped())).toBe("");
   });
 
-  it("uses memcached as the cache only without redis", () => {
-    const memcachedOnly = addonDotenv([status({ kind: "memcached", enabled: true })]);
-    expect(memcachedOnly).toContain("CACHE_STORE=memcached");
-
-    const both = addonDotenv([
-      status({ kind: "redis", enabled: true, port: 6390 }),
-      status({ kind: "memcached", enabled: true }),
-    ]);
+  it("uses redis for the cache and the queue", () => {
+    const both = addonDotenv([status({ kind: "redis", enabled: true, port: 6390 })]);
     expect(both.match(/CACHE_STORE=/g)).toHaveLength(1);
     expect(both).toContain("CACHE_STORE=redis");
     expect(both).toContain("REDIS_PORT=6390");
@@ -104,14 +98,20 @@ describe("addonDotenv", () => {
       "MAIL_PORT=2525"
     );
   });
+
+  it("points Laravel Scout at Meilisearch", () => {
+    const lines = addonDotenv([status({ kind: "meilisearch", enabled: true, port: 7710 })]);
+    expect(lines).toContain("SCOUT_DRIVER=meilisearch");
+    expect(lines).toContain("MEILISEARCH_HOST=http://127.0.0.1:7710");
+  });
 });
 
 describe("AddonsModal", () => {
   beforeEach(() => vi.clearAllMocks());
 
-  it("lists the three add-ons with install buttons when nothing is installed", () => {
+  it("lists every add-on with install buttons when nothing is installed", () => {
     renderModal(controller(allStopped()));
-    for (const kind of ["redis", "memcached", "mailpit"]) {
+    for (const kind of ["redis", "mailpit", "meilisearch"]) {
       const row = screen.getByTestId(`addon-${kind}`);
       expect(within(row).getByText("Not installed")).toBeInTheDocument();
       expect(within(row).getByRole("button", { name: /Install/ })).toBeInTheDocument();
@@ -134,8 +134,8 @@ describe("AddonsModal", () => {
   it("enables an add-on from its toggle", () => {
     const c = controller(allStopped());
     renderModal(c);
-    fireEvent.click(within(screen.getByTestId("addon-memcached")).getByRole("checkbox"));
-    expect(c.configure).toHaveBeenCalledWith("memcached", { enabled: true });
+    fireEvent.click(within(screen.getByTestId("addon-mailpit")).getByRole("checkbox"));
+    expect(c.configure).toHaveBeenCalledWith("mailpit", { enabled: true });
   });
 
   it("saves a valid port on Enter and never sends an invalid one", () => {
@@ -199,20 +199,37 @@ describe("AddonsModal", () => {
     expect(screen.getByTestId("addons-dotenv")).toHaveTextContent("MAIL_PORT=1025");
   });
 
+  it("opens the Meilisearch search preview and explains the Scout packages", () => {
+    const c = controller([
+      status({
+        kind: "meilisearch",
+        installed: true,
+        enabled: true,
+        state: ServiceState.Running,
+        web_url: "http://127.0.0.1:7700/",
+      }),
+    ]);
+    const props = renderModal(c);
+    const row = screen.getByTestId("addon-meilisearch");
+    fireEvent.click(within(row).getByRole("button", { name: /Open search preview/ }));
+    expect(props.openExternal).toHaveBeenCalledWith("http://127.0.0.1:7700/");
+    expect(screen.getByText(/laravel\/scout/)).toBeInTheDocument();
+  });
+
   it("locks every action while one command runs", () => {
     renderModal(
       controller(
         [
           status({ kind: "redis", installed: true, installed_version: "1.0.0" }),
-          status({ kind: "memcached" }),
+          status({ kind: "mailpit" }),
         ],
-        { busyKind: "memcached", progress: { memcached: 42 } }
+        { busyKind: "mailpit", progress: { mailpit: 42 } }
       )
     );
     expect(
       within(screen.getByTestId("addon-redis")).getByRole("button", { name: /Start/ })
     ).toBeDisabled();
-    expect(within(screen.getByTestId("addon-memcached")).getByText(/42%/)).toBeInTheDocument();
+    expect(within(screen.getByTestId("addon-mailpit")).getByText(/42%/)).toBeInTheDocument();
   });
 
   it("offers an update when an older version is installed", () => {
@@ -259,7 +276,7 @@ describe("AddonsCard", () => {
       <AddonsCard
         controller={controller([
           status({ kind: "redis", enabled: true, installed: true, state: ServiceState.Running }),
-          status({ kind: "memcached" }),
+          status({ kind: "mailpit" }),
         ])}
         onManage={onManage}
         openExternal={vi.fn()}
@@ -267,7 +284,7 @@ describe("AddonsCard", () => {
     );
     const card = screen.getByTestId("addons-card");
     expect(within(card).getByText("Redis")).toBeInTheDocument();
-    expect(within(card).queryByText("Memcached")).not.toBeInTheDocument();
+    expect(within(card).queryByText("Mailpit")).not.toBeInTheDocument();
     fireEvent.click(within(card).getByRole("button", { name: "Manage" }));
     expect(onManage).toHaveBeenCalled();
   });
@@ -278,7 +295,7 @@ describe("AddonsSection (Settings)", () => {
     const c = controller(allStopped());
     render(<AddonsSection controller={c} openExternal={vi.fn()} />);
     const section = screen.getByTestId("addons-settings");
-    for (const kind of ["redis", "memcached", "mailpit"]) {
+    for (const kind of ["redis", "mailpit"]) {
       expect(within(section).getByTestId(`addon-${kind}`)).toBeInTheDocument();
     }
     expect(within(section).getByText(/saved at once/)).toBeInTheDocument();

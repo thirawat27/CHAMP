@@ -7,9 +7,9 @@ import {
   ExternalLink,
   LoaderCircle,
   Mail,
-  MemoryStick,
   Play,
   ScrollText,
+  Search,
   Square,
   X,
 } from "lucide-react";
@@ -25,8 +25,8 @@ import { SoundButton } from "./SoundButton";
 
 const ADDON_ICONS: Record<AddonKind, ReactNode> = {
   redis: <Database size={18} />,
-  memcached: <MemoryStick size={18} />,
   mailpit: <Mail size={18} />,
+  meilisearch: <Search size={18} />,
 };
 
 interface AddonsModalProps {
@@ -37,7 +37,7 @@ interface AddonsModalProps {
   openFolder: (path?: string) => void;
 }
 
-/** Install, enable, and configure Redis, Memcached, and Mailpit. */
+/** Install, enable, and configure Redis, Mailpit, and Meilisearch. */
 export function AddonsModal({
   controller,
   logsDir,
@@ -60,6 +60,7 @@ export function AddonsModal({
   );
   const dotenv = addonDotenv(ordered);
   const redisEnabled = ordered.some((addon) => addon.kind === "redis" && addon.enabled);
+  const searchEnabled = ordered.some((addon) => addon.kind === "meilisearch" && addon.enabled);
 
   const copyDotenv = async () => {
     try {
@@ -148,6 +149,7 @@ export function AddonsModal({
               <p className="settings-muted">{t.addonEnvEmpty}</p>
             )}
             {redisEnabled && <p className="settings-muted">{t.addonPredisNote}</p>}
+            {searchEnabled && <p className="settings-muted">{t.addonScoutNote}</p>}
           </section>
         </div>
       </div>
@@ -157,8 +159,8 @@ export function AddonsModal({
 
 const PURPOSE_KEYS = {
   redis: "addonRedisPurpose",
-  memcached: "addonMemcachedPurpose",
   mailpit: "addonMailpitPurpose",
+  meilisearch: "addonMeilisearchPurpose",
 } as const;
 
 function stateLabel(state: ServiceState, t: ReturnType<typeof useTranslation>["t"]) {
@@ -306,6 +308,14 @@ export function AddonRow({ addon, controller, openExternal }: AddonRowProps) {
           >
             <ExternalLink size={14} /> {t.addonOpenInbox}
             {mailCount !== null && <span className="addon-count">{mailCount}</span>}
+          </SoundButton>
+        )}
+        {addon.kind === "meilisearch" && addon.web_url && (
+          <SoundButton
+            className="btn-primary compact"
+            onClick={() => openExternal(addon.web_url as string)}
+          >
+            <ExternalLink size={14} /> {t.addonOpenDashboard}
           </SoundButton>
         )}
       </div>

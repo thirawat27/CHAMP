@@ -20,7 +20,7 @@ Built-in features:
 - AI agent connector: local MCP server for coding agents (off by default)
 - Self-updater: signed updates from GitHub Releases via `tauri-plugin-updater`
 - In-app bilingual guide (F1)
-- Add-on services (optional, off by default): Redis, Memcached, Mailpit. Managed in their own window (`Ctrl+E`), not in Settings; a compact rail card appears only while one is in use
+- Add-on services (optional, off by default): Redis, Mailpit, Meilisearch. Managed in their own window (`Ctrl+E`), not in Settings; a compact rail card appears only while one is in use
 
 Optional Node.js / Python / Go / Ruby runtimes and project templates were removed in 1.4.0. Do not reintroduce them.
 
@@ -88,7 +88,7 @@ src-tauri/src/
   metrics.rs          status bar system metrics
   commands/           IPC handlers: services, settings, runtime, php, database, folders
   tunnel/             HTTPS Preview: mod.rs (ngrok process), install.rs (find/download ngrok)
-  addons/             Redis / Memcached / Mailpit: mod.rs (IPC, PHP and .env integration),
+  addons/             Redis / Mailpit / Meilisearch: mod.rs (IPC, PHP and .env integration),
                       catalog.rs (pinned URLs + SHA-256), install.rs, runtime.rs (processes)
   doctor/             Log Doctor: knowledge, rank, download, model (doctor-knowledge.json)
   agent/              MCP server (hyper, 127.0.0.1, bearer token): http, token, tools, handlers, database
@@ -157,7 +157,8 @@ CHAMP/
 ## Add-on Services
 
 - Downloads are pinned in `src-tauri/src/addons/catalog.rs` with the SHA-256 of the GitHub release asset; update version, URL, and checksum together. Never install an add-on unverified.
-- Redis and Memcached have no official Windows builds: CHAMP uses `redis-windows/redis-windows` (msys2) and `jefyt/memcached-windows`. On macOS/Linux it uses a system install (`brew`/`apt`) and never kills a system copy.
+- Redis has no official Windows build: CHAMP uses `redis-windows/redis-windows` (msys2). On macOS/Linux it uses a system Redis (`brew`/`apt`) and never kills a system copy.
+- Meilisearch ships official single-file binaries for every platform (about 350 MB, `ArchiveFormat::Binary`), pinned at 1.56.1 because 1.56.2 has no Apple Silicon build. It runs with `--env development` (no master key) and serves its search preview on its API port.
 - Add-ons bind `127.0.0.1` only and never move to a fallback port; a busy port is an error the user fixes.
 - With Mailpit enabled, `php.ini` routes `mail()` to it (`SMTP`/`smtp_port` on Windows, `sendmail_path = mailpit sendmail` elsewhere).
 - Add-on failures never fail a stack command; they are reported through the add-on status and the `addon-errors` event.
@@ -196,6 +197,7 @@ Portable mode can be controlled with `CHAMP_DATA_DIR`, `CHAMP_PORTABLE_DIR`, `CH
 - Capabilities live in `src-tauri/capabilities/default.json`; keep them least-privilege.
 - The CSP in `tauri.conf.json` disallows inline scripts in production.
 - Caddy binds to `127.0.0.1` only. phpMyAdmin/Adminer answer only local Hosts and refuse forwarded (tunnel) requests; dotfiles are never served.
+- Project domains (`src-tauri/src/projects.rs`, `append_project_domains_site` in `caddyfile.rs`): one `http://*.localhost:<port>` site maps the host label to the folder per request through `vars_regexp` (`{re.project.1}`), so new folders need no restart and the regexp is what keeps the name from carrying a path. `public/` is the web root when it has an index. `.htaccess` deny rules are re-emitted host-scoped there. Never edit the hosts file or require elevation for this.
 - The agent connector must stay localhost-only, token-protected, and reject requests with an `Origin` header.
 - The updater public key is in `tauri.conf.json`; the private key is a GitHub secret (`TAURI_SIGNING_PRIVATE_KEY`) and must never be committed.
 

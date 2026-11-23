@@ -9,6 +9,7 @@ mod fs_util;
 mod logs;
 mod metrics;
 mod process;
+mod projects;
 mod runtime;
 mod tunnel;
 
@@ -145,7 +146,7 @@ pub fn run() {
             agent::configure_agent_connector,
             agent::regenerate_agent_token,
             agent::test_agent_connector,
-            // Add-on services (Redis, Memcached, Mailpit)
+            // Add-on services (Redis, Mailpit, Meilisearch)
             addons::get_addons_status,
             addons::install_addon,
             addons::start_addon,

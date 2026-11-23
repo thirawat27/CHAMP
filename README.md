@@ -36,9 +36,9 @@ CHAMP is a desktop app that runs a complete PHP development stack **without admi
 | Stack | Caddy, PHP-FPM, MySQL or PostgreSQL, phpMyAdmin or Adminer; start / stop / restart everything or one service |
 | Dashboard | Live request path (browser → Caddy → PHP-FPM → database), status lights, port readouts, CPU / RAM / network |
 | PHP | Install, switch, and update PHP branches; the dashboard offers patch updates for the active PHP |
-| Projects | Every folder in `projects/` is served at `http://localhost:8080/<folder>/`; common `.htaccess` rules are translated to Caddy |
+| Projects | Every folder in `projects/` is served at `http://localhost:8080/<folder>/` and at its own domain `http://<folder>.localhost:8080/` (from `public/` for Laravel-style apps; no hosts file, no admin rights, no restart for new folders); common `.htaccess` rules are translated to Caddy |
 | HTTPS Preview | Public `https://*.ngrok-free.app` link via ngrok (free ngrok authtoken required) |
-| Add-on services | Optional Redis (cache/queue), Memcached, and Mailpit (catches outgoing mail, never delivers it); pinned, SHA-256-verified downloads, start with the stack, ready-made `.env` lines (`Ctrl/Cmd + E`) |
+| Add-on services | Optional Redis (cache/queue), Mailpit (catches outgoing mail, never delivers it), and Meilisearch (typo-tolerant search for Laravel Scout); pinned, SHA-256-verified downloads, start with the stack, ready-made `.env` lines (`Ctrl/Cmd + E`) |
 | Log Doctor | 28 known failure patterns (ports, VC++ runtime, corrupted data, locks, permissions, …) with fixes and one-click actions |
 | AI agents | Local MCP server (127.0.0.1 + bearer token) with status, environment, logs, diagnosis, database, HTTPS Preview, and service-control tools |
 | Updates | Daily update check, one-click install and restart, minisign-verified packages |
@@ -58,8 +58,8 @@ CHAMP is a desktop app that runs a complete PHP development stack **without admi
 | PHP-FPM | 127.0.0.1:9000 (internal) |
 | AI agent connector | http://127.0.0.1:47823/mcp (off by default) |
 | Redis (add-on) | 127.0.0.1:6379 |
-| Memcached (add-on) | 127.0.0.1:11211 |
 | Mailpit (add-on) | SMTP 127.0.0.1:1025, inbox http://127.0.0.1:8025 |
+| Meilisearch (add-on) | http://127.0.0.1:7700 |
 
 All ports can be changed in Settings (add-on ports in Add-on services). If a stack port is busy, CHAMP picks the next free one and tells you. Add-ons never move: your project's `.env` names their port, so a busy add-on port is reported instead.
 
@@ -95,7 +95,7 @@ On first launch the setup wizard checks system libraries, lets you pick PHP / da
 | `Ctrl/Cmd + O` / `L` | Open the projects / logs folder |
 | `Ctrl/Cmd + T` | Terminal with PHP, MySQL, and PostgreSQL on `PATH` |
 | `Ctrl/Cmd + ,` | Settings |
-| `Ctrl/Cmd + E` | Add-on services (Redis, Memcached, Mailpit) |
+| `Ctrl/Cmd + E` | Add-on services (Redis, Mailpit, Meilisearch) |
 | `Ctrl/Cmd + M` | Mailpit inbox (when running) |
 | `F1` | Guide |
 | `?` | Shortcut help |

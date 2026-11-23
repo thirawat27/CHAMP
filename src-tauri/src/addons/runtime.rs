@@ -57,8 +57,8 @@ pub(super) fn lock() -> MutexGuard<'static, HashMap<AddonKind, AddonProcess>> {
 pub(super) fn ports_for(kind: AddonKind, settings: &AddonSettings) -> Vec<u16> {
     match kind {
         AddonKind::Redis => vec![settings.redis_port],
-        AddonKind::Memcached => vec![settings.memcached_port],
         AddonKind::Mailpit => vec![settings.mailpit_smtp_port, settings.mailpit_web_port],
+        AddonKind::Meilisearch => vec![settings.meilisearch_port],
     }
 }
 
@@ -115,20 +115,6 @@ pub(super) fn build_command(kind: AddonKind, plan: &LaunchPlan) -> Command {
                 "./",
             ]);
         }
-        AddonKind::Memcached => {
-            command.args([
-                "-p",
-                &plan.ports[0].to_string(),
-                "-l",
-                "127.0.0.1",
-                // UDP off: it is only an amplification risk on a dev machine.
-                "-U",
-                "0",
-                "-m",
-                "64",
-                "-v",
-            ]);
-        }
         AddonKind::Mailpit => {
             let database = plan.data_dir.join("mailpit.db");
             command
@@ -142,6 +128,17 @@ pub(super) fn build_command(kind: AddonKind, plan: &LaunchPlan) -> Command {
                 .arg("--smtp-auth-accept-any")
                 .arg("--smtp-auth-allow-insecure")
                 .arg("--disable-version-check");
+        }
+        AddonKind::Meilisearch => {
+            // Development mode: no master key needed and the search preview
+            // dashboard is served on the same port. Dumps and snapshots
+            // default to folders under the working directory (`data_dir`).
+            command
+                .arg("--http-addr")
+                .arg(format!("127.0.0.1:{}", plan.ports[0]))
+                .arg("--db-path")
+                .arg(plan.data_dir.join("data.ms"))
+                .args(["--env", "development", "--no-analytics"]);
         }
     }
     command.current_dir(&plan.data_dir).stdin(Stdio::null());

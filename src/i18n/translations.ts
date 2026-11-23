@@ -327,8 +327,10 @@ export interface Translations {
   addonsDescription: string;
   addonsShort: string;
   addonRedisPurpose: string;
-  addonMemcachedPurpose: string;
   addonMailpitPurpose: string;
+  addonMeilisearchPurpose: string;
+  addonOpenDashboard: string;
+  addonScoutNote: string;
   addonInstall: string;
   addonUpdate: string;
   addonInstalling: string;
@@ -693,11 +695,14 @@ const th: Translations = {
   // Footer / Status
   addonsTitle: "บริการเสริม",
   addonsDescription:
-    "แคช คิว และกล่องดักอีเมลสำหรับทดสอบ ทำงานเฉพาะในเครื่อง (127.0.0.1) ตัวที่เปิดใช้จะเริ่ม/หยุดพร้อมสแต็ก",
+    "แคช คิว กล่องดักอีเมลสำหรับทดสอบ และระบบค้นหา ทำงานเฉพาะในเครื่อง (127.0.0.1) ตัวที่เปิดใช้จะเริ่ม/หยุดพร้อมสแต็ก",
   addonsShort: "บริการเสริม",
   addonRedisPurpose: "แคช คิว และเซสชัน",
-  addonMemcachedPurpose: "แคชในหน่วยความจำ",
   addonMailpitPurpose: "ดักอีเมลทดสอบ ไม่ส่งออกจริง",
+  addonMeilisearchPurpose: "ค้นหาข้อความแบบเร็ว พิมพ์ผิดก็ยังเจอ",
+  addonOpenDashboard: "เปิดหน้าทดลองค้นหา",
+  addonScoutNote:
+    "Laravel Scout ต้องติดตั้งแพ็กเกจ laravel/scout, meilisearch/meilisearch-php และ http-interop/http-factory-guzzle (Meilisearch ทำงานโหมดพัฒนา ไม่ต้องใช้ master key)",
   addonInstall: "ติดตั้ง",
   addonUpdate: "อัปเดตเป็น",
   addonInstalling: "กำลังติดตั้ง",
@@ -718,10 +723,10 @@ const th: Translations = {
   addonManage: "จัดการ",
   addonPortInvalid: "ใช้พอร์ต 1024 ถึง 65535",
   addonOpenLog: "เปิดโฟลเดอร์ log",
-  addonsNoneEnabled: "Redis · Memcached · Mailpit ยังไม่ได้เปิดใช้",
+  addonsNoneEnabled: "Redis · Mailpit · Meilisearch ยังไม่ได้เปิดใช้",
   addonPredisNote:
     "Laravel ต้องติดตั้งแพ็กเกจ predis/predis (composer require predis/predis) หรือส่วนขยาย phpredis",
-  shortcutAddons: "บริการเสริม (Redis, Memcached, Mailpit)",
+  shortcutAddons: "บริการเสริม (Redis, Mailpit, Meilisearch)",
   shortcutMailInbox: "เปิดกล่องจดหมาย Mailpit",
   addonSettingsSavedAtOnce: "การเปลี่ยนแปลงในส่วนนี้บันทึกทันที ไม่ต้องกด บันทึก",
   addonOpenWindow: "เปิดหน้าต่างบริการเสริม (ค่า .env)",
@@ -1067,11 +1072,14 @@ const en: Translations = {
   // Footer / Status
   addonsTitle: "Add-on services",
   addonsDescription:
-    "Cache, queue, and a mail catcher for testing. Local only (127.0.0.1). Enabled add-ons start and stop with the stack.",
+    "Cache, queue, a mail catcher for testing, and search. Local only (127.0.0.1). Enabled add-ons start and stop with the stack.",
   addonsShort: "Add-ons",
   addonRedisPurpose: "Cache, queues, and sessions",
-  addonMemcachedPurpose: "In-memory cache",
   addonMailpitPurpose: "Catches test mail; nothing is really sent",
+  addonMeilisearchPurpose: "Fast, typo-tolerant search",
+  addonOpenDashboard: "Open search preview",
+  addonScoutNote:
+    "Laravel Scout needs the laravel/scout, meilisearch/meilisearch-php, and http-interop/http-factory-guzzle packages (Meilisearch runs in development mode, without a master key)",
   addonInstall: "Install",
   addonUpdate: "Update to",
   addonInstalling: "Installing",
@@ -1092,10 +1100,10 @@ const en: Translations = {
   addonManage: "Manage",
   addonPortInvalid: "Use a port from 1024 to 65535",
   addonOpenLog: "Open logs folder",
-  addonsNoneEnabled: "Redis · Memcached · Mailpit are off",
+  addonsNoneEnabled: "Redis · Mailpit · Meilisearch are off",
   addonPredisNote:
     "Laravel needs the predis/predis package (composer require predis/predis) or the phpredis extension",
-  shortcutAddons: "Add-on services (Redis, Memcached, Mailpit)",
+  shortcutAddons: "Add-on services (Redis, Mailpit, Meilisearch)",
   shortcutMailInbox: "Open the Mailpit inbox",
   addonSettingsSavedAtOnce: "Changes here are saved at once; Save is not needed.",
   addonOpenWindow: "Open Add-on services (.env lines)",

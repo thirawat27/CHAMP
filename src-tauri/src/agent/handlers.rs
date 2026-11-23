@@ -116,6 +116,8 @@ pub(super) async fn environment_json(app: &AppHandle) -> Result<Value, String> {
             "url": format!("http://localhost:{web_port}/"),
             "document_root": paths.projects_dir,
             "project_url_pattern": format!("http://localhost:{web_port}/<project-folder>/"),
+            "project_domain_pattern": format!("http://<project-folder>.localhost:{web_port}/"),
+            "project_domain_note": "Each folder whose name is a DNS label is also served at the root of its own origin, from public/ when the folder has public/index.php or public/index.html (Laravel, Symfony). Set APP_URL to this URL. Browsers and curl resolve *.localhost themselves; server-side code on Windows may not.",
             "server": "Caddy with .htaccess rewrite compatibility",
         },
         "php": {
@@ -176,7 +178,17 @@ pub(super) fn list_projects_json() -> Result<Value, String> {
         "projects_folder": paths.projects_dir,
         "projects": projects
             .into_iter()
-            .map(|(name, path)| json!({ "name": name, "path": path, "url": format!("http://localhost:{web_port}/{name}/") }))
+            .map(|(name, path)| {
+                let domain_url = crate::projects::domain_url(&name, web_port);
+                json!({
+                    "name": name,
+                    "path": path,
+                    "url": format!("http://localhost:{web_port}/{name}/"),
+                    // The project at the root of its own origin (served from
+                    // public/ when it has one); null when the name is not a DNS label.
+                    "domain_url": domain_url,
+                })
+            })
             .collect::<Vec<_>>(),
     }))
 }
