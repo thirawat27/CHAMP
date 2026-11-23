@@ -318,12 +318,16 @@
   font-size: 11.5px;
 }
 
+/* A tinted fill as well as the border, so running and failed steps read at a
+   glance. Mixed into the card colour so it stays opaque in both themes. */
 .path-node.running {
-  border-color: color-mix(in srgb, var(--color-success) 40%, var(--border-color));
+  border-color: color-mix(in srgb, var(--color-success) 45%, var(--border-color));
+  background: color-mix(in srgb, var(--color-success) 13%, var(--bg-card-secondary));
 }
 
 .path-node.error {
   border-color: color-mix(in srgb, var(--color-error) 55%, var(--border-color));
+  background: color-mix(in srgb, var(--color-error) 12%, var(--bg-card-secondary));
 }
 
 .path-link {

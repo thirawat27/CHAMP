@@ -108,6 +108,7 @@
   transition:
     box-shadow 0.25s var(--ease),
     border-color 0.25s var(--ease),
+    background-color 0.25s var(--ease),
     opacity 0.25s var(--ease);
 }
 
