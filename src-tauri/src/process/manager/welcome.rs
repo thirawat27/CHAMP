@@ -324,7 +324,14 @@ mod tests {
         fs::create_dir_all(&shop).unwrap();
         fs::write(shop.join("index.php"), "<?php").unwrap();
         let html = page(&paths);
-        assert!(html.contains("e-commerce.localhost:8080"), "{html}");
+        assert!(html.contains(">E-Commerce<span>"), "{html}");
+        // Linux paths are case-sensitive, so a folder with capitals gets no
+        // domain there and links to its path instead.
+        if cfg!(target_os = "linux") {
+            assert!(html.contains("href=\"/E-Commerce/\""), "{html}");
+        } else {
+            assert!(html.contains("e-commerce.localhost:8080"), "{html}");
+        }
 
         // Unchanged content is not rewritten (it is checked on every poll).
         let file = paths.config_dir.join("welcome").join("index.html");
