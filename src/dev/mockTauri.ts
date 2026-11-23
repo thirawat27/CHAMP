@@ -33,6 +33,10 @@ const paths = {
 const addon = (kind: string, name: string, port: number, extra: Record<string, unknown>) => ({
   kind,
   name,
+  category: "cache",
+  custom: false,
+  ports: [{ role: "main", label: name, port }],
+  definition: null,
   version: "1.0.0",
   installed_version: null,
   installed: false,
@@ -70,7 +74,108 @@ const addons = [
     web_port: 8025,
     web_url: "http://127.0.0.1:8025/",
   }),
-  addon("meilisearch", "Meilisearch", 7700, { version: "1.56.1" }),
+  addon("meilisearch", "Meilisearch", 7700, { version: "1.56.1", category: "search" }),
+  addon("centrifugo", "Centrifugo", 8000, { version: "6.10.3", category: "realtime" }),
+  addon("rustfs", "RustFS (S3)", 9100, {
+    version: "1.0.4",
+    category: "storage",
+    ports: [
+      { role: "main", label: "RustFS S3 API", port: 9100 },
+      { role: "console", label: "RustFS console", port: 9101 },
+    ],
+  }),
+  addon("valkey", "Valkey", 6380, {
+    version: "",
+    category: "custom",
+    custom: true,
+    installed: true,
+    source: "custom",
+    downloadable: false,
+    definition: {
+      id: "valkey",
+      name: "Valkey",
+      command: "C:\\tools\\valkey\\valkey-server.exe",
+      args: ["--port", "{port}", "--bind", "127.0.0.1"],
+      port: 6380,
+      web: false,
+      enabled: false,
+    },
+  }),
+];
+
+const projects = [
+  {
+    name: "shop",
+    path: "C:\\Users\\dev\\AppData\\Local\\CHAMP\\projects\\shop",
+    framework: "laravel",
+    framework_name: "Laravel",
+    web_root: "public",
+    php_requirement: "^8.2",
+    has_composer: true,
+    has_vendor: true,
+    has_env: true,
+    has_env_example: true,
+  },
+  {
+    name: "blog",
+    path: "C:\\Users\\dev\\AppData\\Local\\CHAMP\\projects\\blog",
+    framework: "wordpress",
+    framework_name: "WordPress",
+    web_root: "",
+    php_requirement: null,
+    has_composer: false,
+    has_vendor: false,
+    has_env: false,
+    has_env_example: false,
+  },
+];
+
+const envProfiles = {
+  project: null,
+  framework: null,
+  recommended: "champ",
+  profiles: [
+    {
+      id: "laravel",
+      label: "Laravel",
+      target: ".env",
+      format: "dotenv",
+      content:
+        "APP_URL=http://localhost:8080\nDB_CONNECTION=mysql\nDB_HOST=127.0.0.1\nDB_PORT=3306\nDB_DATABASE=app\nDB_USERNAME=root\nDB_PASSWORD=\nMAIL_MAILER=smtp\nMAIL_HOST=127.0.0.1\nMAIL_PORT=1025",
+      notes: [],
+    },
+    {
+      id: "symfony",
+      label: "Symfony",
+      target: ".env.local",
+      format: "dotenv",
+      content:
+        'DEFAULT_URI=http://localhost:8080/\nDATABASE_URL="mysql://root:@127.0.0.1:3306/app?charset=utf8mb4"\nMAILER_DSN=smtp://127.0.0.1:1025',
+      notes: [],
+    },
+    {
+      id: "champ",
+      label: "CHAMP variables (getenv)",
+      target: "any PHP file",
+      format: "php",
+      content: "<?php\n// CHAMP sets these for every PHP request; no .env file is needed.",
+      notes: [],
+    },
+  ],
+};
+
+const workers = [
+  {
+    id: "queue",
+    project: "shop",
+    name: "shop queue",
+    args: ["artisan", "queue:work"],
+    enabled: true,
+    state: "running",
+    error: null,
+    command_line: "php artisan queue:work",
+    log_path: null,
+  },
 ];
 
 const responses: Record<string, unknown> = {
@@ -176,7 +281,24 @@ const responses: Record<string, unknown> = {
   start_addon: addons,
   stop_addon: addons,
   configure_addon: addons,
+  save_custom_addon: addons,
+  remove_custom_addon: addons,
   get_mailpit_message_count: 4,
+  get_project_info: projects,
+  get_env_profiles: envProfiles,
+  get_workers: workers,
+  save_worker: workers,
+  remove_worker: workers,
+  start_worker: workers,
+  stop_worker: workers,
+  get_xdebug_status: {
+    enabled: false,
+    available: false,
+    extension_path: null,
+    ext_dir: "C:\\Users\\dev\\AppData\\Local\\CHAMP\\runtime\\php\\ext",
+    client_port: 9003,
+    hint: "Download the Xdebug DLL that matches this PHP from https://xdebug.org/download and put it in the ext folder.",
+  },
 };
 
 export function installMockTauri() {

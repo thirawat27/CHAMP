@@ -134,6 +134,87 @@ fn meilisearch_download(os: &str, arch: &str) -> Option<AddonDownload> {
     })
 }
 
+/// 6.10.3 is the newest release that is at least two weeks old.
+const CENTRIFUGO_VERSION: &str = "6.10.3";
+/// 1.0.5 and 1.0.6 were under two weeks old when this was pinned.
+const RUSTFS_VERSION: &str = "1.0.4";
+
+fn centrifugo_download(os: &str, arch: &str) -> Option<AddonDownload> {
+    let (url, sha256, format, binary) = match (os, arch) {
+        // Windows on ARM runs the x64 build through its built-in emulation.
+        ("windows", "x86_64" | "aarch64") => (
+            "https://github.com/centrifugal/centrifugo/releases/download/v6.10.3/centrifugo_6.10.3_windows_amd64.zip",
+            "794300b83b76b81738acf87d77d2a3c191e548a26496d4bbad78f5399a523066",
+            ArchiveFormat::Zip,
+            "centrifugo.exe",
+        ),
+        ("linux", "x86_64") => (
+            "https://github.com/centrifugal/centrifugo/releases/download/v6.10.3/centrifugo_6.10.3_linux_amd64.tar.gz",
+            "780bfd4d1266746c3a8bbc66d2ffe66d7bac8917bfa9218b46c83771a1e669d5",
+            ArchiveFormat::TarGz,
+            "centrifugo",
+        ),
+        ("linux", "aarch64") => (
+            "https://github.com/centrifugal/centrifugo/releases/download/v6.10.3/centrifugo_6.10.3_linux_arm64.tar.gz",
+            "d332630f8aeaf045845206ab74061c77ee0ac8746d788743959c59764ca22071",
+            ArchiveFormat::TarGz,
+            "centrifugo",
+        ),
+        ("macos", "x86_64") => (
+            "https://github.com/centrifugal/centrifugo/releases/download/v6.10.3/centrifugo_6.10.3_darwin_amd64.tar.gz",
+            "d1424c17821e41b0aaebf9a054b0cdd7982d7d4674c22b2db0435000872ff2d3",
+            ArchiveFormat::TarGz,
+            "centrifugo",
+        ),
+        ("macos", "aarch64") => (
+            "https://github.com/centrifugal/centrifugo/releases/download/v6.10.3/centrifugo_6.10.3_darwin_arm64.tar.gz",
+            "8a6854615b8296027966b88d73bf5576a084002b40fc46c4e82afb458cdbe78f",
+            ArchiveFormat::TarGz,
+            "centrifugo",
+        ),
+        _ => return None,
+    };
+    Some(AddonDownload {
+        url,
+        sha256,
+        format,
+        binary,
+    })
+}
+
+/// RustFS has no Intel Mac build; musl builds run on any Linux.
+fn rustfs_download(os: &str, arch: &str) -> Option<AddonDownload> {
+    let (url, sha256, binary) = match (os, arch) {
+        ("windows", "x86_64" | "aarch64") => (
+            "https://github.com/rustfs/rustfs/releases/download/1.0.4/rustfs-windows-x86_64-v1.0.4.zip",
+            "2e3af0b187dd70435dfdefe5f61aae7eede5a21fc9a2a2f07e289f727adbcfa6",
+            "rustfs.exe",
+        ),
+        ("linux", "x86_64") => (
+            "https://github.com/rustfs/rustfs/releases/download/1.0.4/rustfs-linux-x86_64-musl-v1.0.4.zip",
+            "4924ad4b699b9f59943051efedae2d1eb6d4cac503a1b0384c4b25f7c2c31b5c",
+            "rustfs",
+        ),
+        ("linux", "aarch64") => (
+            "https://github.com/rustfs/rustfs/releases/download/1.0.4/rustfs-linux-aarch64-musl-v1.0.4.zip",
+            "81414fd0e41969f4f5c2e0555951cee76d3f224c112c269c80f52b31276f187a",
+            "rustfs",
+        ),
+        ("macos", "aarch64") => (
+            "https://github.com/rustfs/rustfs/releases/download/1.0.4/rustfs-macos-aarch64-v1.0.4.zip",
+            "49057482769d7904ef95dc40457d71122f48cbb8e9e0725a0817a3ec6daf8270",
+            "rustfs",
+        ),
+        _ => return None,
+    };
+    Some(AddonDownload {
+        url,
+        sha256,
+        format: ArchiveFormat::Zip,
+        binary,
+    })
+}
+
 /// The package CHAMP installs for `kind` on the given OS/arch
 /// (`std::env::consts` values).
 pub(super) fn package_for(kind: AddonKind, os: &str, arch: &str) -> AddonPackage {
@@ -150,6 +231,14 @@ pub(super) fn package_for(kind: AddonKind, os: &str, arch: &str) -> AddonPackage
         AddonKind::Meilisearch => AddonPackage {
             version: MEILISEARCH_VERSION,
             download: meilisearch_download(os, arch),
+        },
+        AddonKind::Centrifugo => AddonPackage {
+            version: CENTRIFUGO_VERSION,
+            download: centrifugo_download(os, arch),
+        },
+        AddonKind::Rustfs => AddonPackage {
+            version: RUSTFS_VERSION,
+            download: rustfs_download(os, arch),
         },
     }
 }

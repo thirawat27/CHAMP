@@ -341,6 +341,27 @@ fn only_one_install_per_addon_at_a_time() {
     assert!(InstallGuard::acquire(AddonKind::Redis).is_some());
 }
 
+// --- spec ------------------------------------------------------------------
+
+#[test]
+fn every_kind_has_one_spec_with_unique_ports() {
+    for kind in ALL_ADDONS {
+        let spec = spec::spec(kind);
+        assert_eq!(spec.kind, kind);
+        assert_eq!(AddonKind::from_key(spec.key), Some(kind));
+        assert!(!spec.ports.is_empty());
+        if let Some(role) = spec.web_role {
+            assert!(spec.ports.iter().any(|port| port.role == role), "{kind:?}");
+        }
+    }
+    let defaults: Vec<u16> = SPECS
+        .iter()
+        .flat_map(|spec| spec.ports.iter().map(|port| port.default))
+        .collect();
+    let unique: HashSet<u16> = defaults.iter().copied().collect();
+    assert_eq!(unique.len(), defaults.len(), "default ports must not clash");
+}
+
 // --- settings --------------------------------------------------------------
 
 #[test]
@@ -348,13 +369,42 @@ fn settings_from_before_addons_load_with_defaults() {
     let old = r#"{"web_port":8080,"php_port":9000,"mysql_port":3306}"#;
     let settings: AppSettings = serde_json::from_str(old).unwrap();
     assert_eq!(settings.addons, AddonSettings::default());
+    assert_eq!(
+        ports_for(AddonKind::Mailpit, &settings.addons),
+        vec![1025, 8025]
+    );
+}
 
-    let partial =
-        r#"{"web_port":8080,"php_port":9000,"mysql_port":3306,"addons":{"redis_enabled":true}}"#;
-    let settings: AppSettings = serde_json::from_str(partial).unwrap();
-    assert!(settings.addons.redis_enabled);
-    assert_eq!(settings.addons.redis_port, 6379);
-    assert_eq!(settings.addons.mailpit_web_port, 8025);
+#[test]
+fn flat_pre_1_5_settings_migrate_and_save_in_the_new_shape() {
+    let old = r#"{"web_port":8080,"php_port":9000,"mysql_port":3306,"addons":{
+        "redis_enabled":true,"redis_port":6390,
+        "mailpit_enabled":false,"mailpit_smtp_port":1026,"mailpit_web_port":8026,
+        "meilisearch_enabled":true}}"#;
+    let settings: AppSettings = serde_json::from_str(old).unwrap();
+    let addons = &settings.addons;
+    assert!(addons.enabled("redis"));
+    assert_eq!(ports_for(AddonKind::Redis, addons), vec![6390]);
+    assert!(!addons.enabled("mailpit"));
+    assert_eq!(ports_for(AddonKind::Mailpit, addons), vec![1026, 8026]);
+    assert!(addons.enabled("meilisearch"));
+    assert_eq!(ports_for(AddonKind::Meilisearch, addons), vec![7700]);
+
+    let saved = serde_json::to_string(&settings).unwrap();
+    assert!(!saved.contains("redis_port"), "{saved}");
+    let reloaded: AppSettings = serde_json::from_str(&saved).unwrap();
+    assert_eq!(
+        reloaded.addons, settings.addons,
+        "round trip must keep every port"
+    );
+}
+
+#[test]
+fn the_new_shape_wins_over_stray_flat_keys() {
+    let mixed = r#"{"web_port":8080,"php_port":9000,"mysql_port":3306,"addons":{
+        "redis_port":6390,"services":{"redis":{"enabled":true,"ports":{"main":6400}}}}}"#;
+    let settings: AppSettings = serde_json::from_str(mixed).unwrap();
+    assert_eq!(ports_for(AddonKind::Redis, &settings.addons), vec![6400]);
 }
 
 #[test]
@@ -362,19 +412,21 @@ fn settings_that_still_name_memcached_load() {
     // Written by versions that offered Memcached; the keys are now ignored.
     let old = r#"{"web_port":8080,"php_port":9000,"mysql_port":3306,"addons":{"redis_enabled":true,"memcached_enabled":true,"memcached_port":11211}}"#;
     let settings: AppSettings = serde_json::from_str(old).unwrap();
-    assert!(settings.addons.redis_enabled);
+    assert!(settings.addons.enabled("redis"));
     let saved = serde_json::to_string(&settings).unwrap();
     assert!(!saved.contains("memcached"), "{saved}");
 }
 
 #[test]
 fn disabled_addons_never_block_saving_other_settings() {
-    let mut settings = AppSettings::default();
     // The web server moved onto Mailpit's default port, but Mailpit is off.
-    settings.web_port = settings.addons.mailpit_web_port;
+    let mut settings = AppSettings {
+        web_port: 8025,
+        ..Default::default()
+    };
     assert!(settings.validate().is_ok());
 
-    settings.addons.mailpit_enabled = true;
+    settings.addons.set_enabled("mailpit", true);
     let errors = settings.validate().unwrap_err();
     assert!(
         errors
@@ -387,12 +439,14 @@ fn disabled_addons_never_block_saving_other_settings() {
 #[test]
 fn apply_change_validates_ports() {
     let mut settings = AppSettings::default();
+    let redis = AddonId::Builtin(AddonKind::Redis);
+    let mailpit = AddonId::Builtin(AddonKind::Mailpit);
 
     let low = AddonChange {
         port: Some(80),
         ..Default::default()
     };
-    assert!(apply_change(&mut settings, AddonKind::Redis, &low)
+    assert!(apply_change(&mut settings, &redis, &low)
         .unwrap_err()
         .contains("administrator"));
 
@@ -400,7 +454,7 @@ fn apply_change_validates_ports() {
         web_port: Some(9999),
         ..Default::default()
     };
-    assert!(apply_change(&mut settings, AddonKind::Redis, &web_on_redis).is_err());
+    assert!(apply_change(&mut settings, &redis, &web_on_redis).is_err());
 
     let clash = AddonChange {
         enabled: Some(true),
@@ -408,63 +462,183 @@ fn apply_change_validates_ports() {
         ..Default::default()
     };
     // 3306 is above 1024, so this reaches the duplicate check.
-    let error = apply_change(&mut settings, AddonKind::Redis, &clash).unwrap_err();
+    let error = apply_change(&mut settings, &redis, &clash).unwrap_err();
     assert!(
         error.contains("Redis") && error.contains("MySQL"),
         "{error}"
     );
     assert!(
-        !settings.addons.redis_enabled,
+        !settings.addons.enabled("redis"),
         "a refused change saves nothing"
     );
 
     let smtp_equals_web = AddonChange {
         enabled: Some(true),
-        port: Some(settings.addons.mailpit_web_port),
+        port: Some(8025),
         ..Default::default()
     };
-    assert!(apply_change(&mut settings, AddonKind::Mailpit, &smtp_equals_web).is_err());
+    assert!(apply_change(&mut settings, &mailpit, &smtp_equals_web).is_err());
 
     let ok = AddonChange {
         enabled: Some(true),
         port: Some(6380),
         ..Default::default()
     };
-    apply_change(&mut settings, AddonKind::Redis, &ok).unwrap();
-    assert!(settings.addons.redis_enabled);
-    assert_eq!(settings.addons.redis_port, 6380);
+    apply_change(&mut settings, &redis, &ok).unwrap();
+    assert!(settings.addons.enabled("redis"));
+    assert_eq!(ports_for(AddonKind::Redis, &settings.addons), vec![6380]);
 }
 
-// --- PHP / .env integration -------------------------------------------------
+// --- custom add-ons ----------------------------------------------------------
+
+fn custom_addon(command: &Path) -> CustomAddon {
+    CustomAddon {
+        id: "valkey".to_string(),
+        name: "Valkey".to_string(),
+        command: command.to_string_lossy().to_string(),
+        args: vec![
+            "--port".to_string(),
+            "{port}".to_string(),
+            "--dir".to_string(),
+            "{data_dir}".to_string(),
+        ],
+        port: 6500,
+        web: false,
+        enabled: true,
+    }
+}
 
 #[test]
-fn env_lines_cover_only_enabled_addons() {
+fn custom_addons_are_validated() {
+    let dir = tempfile::tempdir().unwrap();
+    let binary = dir.path().join("valkey-server.exe");
+    fs::write(&binary, b"MZ").unwrap();
+    let good = custom_addon(&binary);
+    assert!(custom::validate(&good).is_ok());
+
+    for (bad, why) in [
+        (
+            CustomAddon {
+                id: "Valkey".into(),
+                ..good.clone()
+            },
+            "uppercase id",
+        ),
+        (
+            CustomAddon {
+                id: "redis".into(),
+                ..good.clone()
+            },
+            "built-in id",
+        ),
+        (
+            CustomAddon {
+                id: "a-".into(),
+                ..good.clone()
+            },
+            "trailing hyphen",
+        ),
+        (
+            CustomAddon {
+                name: " ".into(),
+                ..good.clone()
+            },
+            "empty name",
+        ),
+        (
+            CustomAddon {
+                port: 80,
+                ..good.clone()
+            },
+            "privileged port",
+        ),
+        (
+            CustomAddon {
+                command: "valkey-server".into(),
+                ..good.clone()
+            },
+            "relative command",
+        ),
+        (
+            CustomAddon {
+                command: dir.path().join("missing.exe").to_string_lossy().to_string(),
+                ..good.clone()
+            },
+            "missing binary",
+        ),
+    ] {
+        assert!(custom::validate(&bad).is_err(), "{why} must be refused");
+    }
+}
+
+#[test]
+fn custom_addons_join_validation_env_and_args() {
+    let dir = tempfile::tempdir().unwrap();
+    let binary = dir.path().join("valkey-server.exe");
+    fs::write(&binary, b"MZ").unwrap();
+    let mut settings = AppSettings::default();
+
+    let clash = CustomAddon {
+        port: settings.mysql_port,
+        ..custom_addon(&binary)
+    };
+    assert!(custom::upsert(&mut settings, clash)
+        .unwrap_err()
+        .contains("MySQL"));
+    assert!(
+        settings.addons.custom.is_empty(),
+        "a refused add-on is not saved"
+    );
+
+    custom::upsert(&mut settings, custom_addon(&binary)).unwrap();
+    // Saving the same id again replaces it.
+    custom::upsert(
+        &mut settings,
+        CustomAddon {
+            port: 6501,
+            ..custom_addon(&binary)
+        },
+    )
+    .unwrap();
+    assert_eq!(settings.addons.custom.len(), 1);
+    assert_eq!(settings.addons.custom[0].port, 6501);
+
+    let pairs = env_pairs(&settings.addons);
+    assert!(pairs.contains(&("CHAMP_VALKEY_PORT".to_string(), "6501".to_string())));
+    assert!(enabled_ports(&settings.addons).contains(&("Valkey".to_string(), 6501)));
+
+    let data = dir.path().join("data");
+    let args = custom::expand_args(&settings.addons.custom[0], &data);
+    assert_eq!(args[1], "6501");
+    assert_eq!(args[3], data.as_os_str());
+    assert_eq!(custom::env_prefix("my-s3"), "CHAMP_MY_S3");
+
+    let id = AddonId::resolve("valkey", &settings.addons).unwrap();
+    assert!(matches!(id, AddonId::Custom(_)));
+    assert!(AddonId::resolve("nope", &settings.addons).is_err());
+}
+
+// --- PHP environment ----------------------------------------------------------
+
+#[test]
+fn env_pairs_cover_only_enabled_addons() {
     let mut settings = AddonSettings::default();
     assert!(env_pairs(&settings).is_empty());
-    assert!(dotenv(&settings).is_empty());
 
-    settings.redis_enabled = true;
-    settings.redis_port = 6390;
-    settings.mailpit_enabled = true;
-    let dotenv = dotenv(&settings);
-    assert!(dotenv.contains("REDIS_PORT=6390"));
-    assert!(dotenv.contains("QUEUE_CONNECTION=redis"));
-    assert_eq!(dotenv.matches("CACHE_STORE=").count(), 1, "{dotenv}");
-    assert!(dotenv.contains("CACHE_STORE=redis"));
-    assert!(dotenv.contains("MAIL_PORT=1025"));
-
+    settings.set_enabled("redis", true);
+    settings.set_port("redis", "main", 6390);
+    settings.set_enabled("mailpit", true);
     let pairs = env_pairs(&settings);
-    assert!(pairs.contains(&("CHAMP_REDIS_PORT", "6390".to_string())));
-    assert!(pairs.contains(&("CHAMP_MAILPIT_URL", "http://127.0.0.1:8025/".to_string())));
-    assert!(!dotenv.contains("SCOUT_DRIVER"));
+    let has = |key: &str, value: &str| pairs.contains(&(key.to_string(), value.to_string()));
+    assert!(has("CHAMP_REDIS_PORT", "6390"));
+    assert!(has("CHAMP_REDIS_URL", "redis://127.0.0.1:6390"));
+    assert!(has("CHAMP_MAILPIT_URL", "http://127.0.0.1:8025/"));
+    assert!(!pairs.iter().any(|(key, _)| key.contains("MEILISEARCH")));
 
-    settings.meilisearch_enabled = true;
-    settings.meilisearch_port = 7710;
-    let with_search = super::dotenv(&settings);
-    assert!(with_search.contains("SCOUT_DRIVER=meilisearch"));
-    assert!(with_search.contains("MEILISEARCH_HOST=http://127.0.0.1:7710"));
+    settings.set_enabled("meilisearch", true);
+    settings.set_port("meilisearch", "main", 7710);
     assert!(env_pairs(&settings).contains(&(
-        "CHAMP_MEILISEARCH_HOST",
+        "CHAMP_MEILISEARCH_HOST".to_string(),
         "http://127.0.0.1:7710".to_string()
     )));
 }
@@ -493,87 +667,104 @@ fn start_reports_busy_ports_and_spawn_failures_then_stop_clears_them() {
     assert!(!port_is_free(busy));
 
     let plan = |port: u16| LaunchPlan {
+        name: "Redis".to_string(),
         binary: dir.path().join("does-not-exist").join("redis-server.exe"),
+        args: Vec::new(),
         data_dir: dir.path().join("data"),
         log_path: dir.path().join("redis.log"),
         ports: vec![port],
+        stop: StopMethod::RedisShutdown,
         owned_binary: false,
+        env: Vec::new(),
     };
 
-    let error = runtime::start(AddonKind::Redis, plan(busy)).unwrap_err();
+    let error = runtime::start("redis", plan(busy)).unwrap_err();
     assert!(
         error.contains(&format!("port {busy} is already in use")),
         "{error}"
     );
-    let (state, stored, _) = runtime::snapshot(AddonKind::Redis);
+    let (state, stored, _) = runtime::snapshot("redis");
     assert_eq!(state, ServiceState::Error);
     assert_eq!(stored.as_deref(), Some(error.as_str()));
 
     drop(listener);
-    let error = runtime::start(AddonKind::Redis, plan(busy)).unwrap_err();
+    let error = runtime::start("redis", plan(busy)).unwrap_err();
     assert!(error.starts_with("Failed to start Redis"), "{error}");
 
     // Stop on an add-on that never ran succeeds and clears the error.
-    runtime::stop(AddonKind::Redis).unwrap();
-    let (state, stored, _) = runtime::snapshot(AddonKind::Redis);
+    runtime::stop("redis").unwrap();
+    let (state, stored, _) = runtime::snapshot("redis");
     assert_eq!(state, ServiceState::Stopped);
     assert!(stored.is_none());
 
     // A repeated stop is harmless.
-    runtime::stop(AddonKind::Redis).unwrap();
+    runtime::stop("redis").unwrap();
+}
+
+fn launch_strings(kind: AddonKind, ports: &[u16]) -> Vec<String> {
+    spec::launch_args(kind, ports, &std::env::temp_dir())
+        .iter()
+        .map(|arg| arg.to_string_lossy().to_string())
+        .collect()
 }
 
 #[test]
-fn mailpit_listens_only_on_loopback_with_auth_accepted() {
-    let plan = LaunchPlan {
-        binary: "mailpit".into(),
-        data_dir: std::env::temp_dir(),
-        log_path: std::env::temp_dir().join("mailpit.log"),
-        ports: vec![1025, 8025],
-        owned_binary: true,
-    };
-    let command = runtime::build_command(AddonKind::Mailpit, &plan);
-    let args: Vec<String> = command
-        .get_args()
-        .map(|arg| arg.to_string_lossy().to_string())
-        .collect();
+fn centrifugo_and_rustfs_listen_only_on_loopback() {
+    let config: serde_json::Value = serde_json::from_str(&spec::centrifugo_config(8010)).unwrap();
+    assert_eq!(config["http_server"]["address"], "127.0.0.1");
+    assert_eq!(config["http_server"]["port"], 8010);
+    assert_eq!(config["admin"]["enabled"], true);
+
+    let dir = tempfile::tempdir().unwrap();
+    spec::prepare(AddonKind::Centrifugo, &[8010], dir.path()).unwrap();
+    assert!(dir.path().join("config.json").is_file());
+    let args = launch_strings(AddonKind::Centrifugo, &[8010]);
+    assert_eq!(args[0], "-c");
+
+    let args = launch_strings(AddonKind::Rustfs, &[9100, 9101]);
+    assert_eq!(args[0], "server");
+    assert!(args
+        .windows(2)
+        .any(|w| w == ["--address", "127.0.0.1:9100"]));
+    assert!(args
+        .windows(2)
+        .any(|w| w == ["--console-address", "127.0.0.1:9101"]));
+    assert!(spec::launch_env(AddonKind::Rustfs).contains(&("RUSTFS_CHECK_UPDATE", "false")));
+
+    let mut settings = AddonSettings::default();
+    settings.set_enabled("rustfs", true);
+    settings.set_enabled("centrifugo", true);
+    let pairs = env_pairs(&settings);
+    assert!(pairs.contains(&(
+        "CHAMP_S3_ENDPOINT".to_string(),
+        "http://127.0.0.1:9100".to_string()
+    )));
+    assert!(pairs.contains(&(
+        "CHAMP_CENTRIFUGO_API_URL".to_string(),
+        "http://127.0.0.1:8000/api".to_string()
+    )));
+}
+
+#[test]
+fn builtins_listen_only_on_loopback() {
+    let args = launch_strings(AddonKind::Mailpit, &[1025, 8025]);
     assert!(args.windows(2).any(|w| w == ["--smtp", "127.0.0.1:1025"]));
     assert!(args.windows(2).any(|w| w == ["--listen", "127.0.0.1:8025"]));
     assert!(args.contains(&"--smtp-auth-accept-any".to_string()));
 
-    let plan = LaunchPlan {
-        ports: vec![7000],
-        ..plan_clone(&plan)
-    };
-    let args: Vec<String> = runtime::build_command(AddonKind::Redis, &plan)
-        .get_args()
-        .map(|arg| arg.to_string_lossy().to_string())
-        .collect();
+    let args = launch_strings(AddonKind::Redis, &[7000]);
     assert!(
         args.contains(&"127.0.0.1".to_string()),
         "Redis must bind loopback"
     );
     assert!(args.contains(&"7000".to_string()));
 
-    let args: Vec<String> = runtime::build_command(AddonKind::Meilisearch, &plan)
-        .get_args()
-        .map(|arg| arg.to_string_lossy().to_string())
-        .collect();
+    let args = launch_strings(AddonKind::Meilisearch, &[7000]);
     assert!(args
         .windows(2)
         .any(|w| w == ["--http-addr", "127.0.0.1:7000"]));
     assert!(args.contains(&"--no-analytics".to_string()));
     assert!(args.windows(2).any(|w| w == ["--env", "development"]));
-}
-
-fn plan_clone(plan: &LaunchPlan) -> LaunchPlan {
-    LaunchPlan {
-        binary: plan.binary.clone(),
-        data_dir: plan.data_dir.clone(),
-        log_path: plan.log_path.clone(),
-        ports: plan.ports.clone(),
-        owned_binary: plan.owned_binary,
-    }
 }
 
 /// Downloads the real archive for this platform: `cargo test -- --ignored`.
@@ -704,12 +895,19 @@ async fn live_addons_start_serve_and_stop() {
     let logs = dir.path().join("logs");
     fs::create_dir_all(&logs).unwrap();
 
-    let plan = |kind: AddonKind, binary: PathBuf, ports: Vec<u16>| LaunchPlan {
-        binary,
-        data_dir: dir.path().join("addons").join(kind.key()),
-        log_path: logs.join(format!("{}.log", kind.key())),
-        ports,
-        owned_binary: true,
+    let plan = |kind: AddonKind, binary: PathBuf, ports: Vec<u16>| {
+        let data_dir = dir.path().join("addons").join(kind.key());
+        LaunchPlan {
+            name: kind.display_name().to_string(),
+            binary,
+            args: spec::launch_args(kind, &ports, &data_dir),
+            data_dir,
+            log_path: logs.join(format!("{}.log", kind.key())),
+            ports,
+            stop: spec::spec(kind).stop,
+            owned_binary: true,
+            env: Vec::new(),
+        }
     };
     let run_blocking =
         |f: Box<dyn FnOnce() -> Result<(), String> + Send>| tokio::task::spawn_blocking(f);
@@ -719,14 +917,14 @@ async fn live_addons_start_serve_and_stop() {
         let port = free_port();
         let launch = plan(AddonKind::Redis, binary, vec![port]);
         let data_dir = launch.data_dir.clone();
-        run_blocking(Box::new(move || runtime::start(AddonKind::Redis, launch)))
+        run_blocking(Box::new(move || runtime::start("redis", launch)))
             .await
             .unwrap()
             .unwrap_or_else(|e| panic!("Redis start: {e}"));
-        assert_eq!(runtime::snapshot(AddonKind::Redis).0, ServiceState::Running);
+        assert_eq!(runtime::snapshot("redis").0, ServiceState::Running);
         assert!(talk(port, b"PING\r\n", "PONG").contains("+PONG"));
         assert!(talk(port, b"SET champ ok\r\n", "OK").contains("+OK"));
-        run_blocking(Box::new(|| runtime::stop(AddonKind::Redis)))
+        run_blocking(Box::new(|| runtime::stop("redis")))
             .await
             .unwrap()
             .unwrap();
@@ -747,7 +945,7 @@ async fn live_addons_start_serve_and_stop() {
         .expect("Mailpit is downloadable everywhere");
     let (smtp, web) = (free_port(), free_port());
     let launch = plan(AddonKind::Mailpit, binary.clone(), vec![smtp, web]);
-    run_blocking(Box::new(move || runtime::start(AddonKind::Mailpit, launch)))
+    run_blocking(Box::new(move || runtime::start("mailpit", launch)))
         .await
         .unwrap()
         .unwrap_or_else(|e| panic!("Mailpit start: {e}"));
@@ -785,7 +983,7 @@ async fn live_addons_start_serve_and_stop() {
         println!("Mailpit: PHP mail() check skipped (no CHAMP PHP installed)");
     }
 
-    run_blocking(Box::new(|| runtime::stop(AddonKind::Mailpit)))
+    run_blocking(Box::new(|| runtime::stop("mailpit")))
         .await
         .unwrap()
         .unwrap();
@@ -803,14 +1001,19 @@ async fn live_meilisearch_indexes_and_searches() {
         .await
         .expect("Meilisearch is downloadable everywhere");
     let port = free_port();
+    let data_dir = dir.path().join("addons").join("meilisearch");
     let launch = LaunchPlan {
+        name: "Meilisearch".to_string(),
         binary,
-        data_dir: dir.path().join("addons").join("meilisearch"),
+        args: spec::launch_args(AddonKind::Meilisearch, &[port], &data_dir),
+        data_dir,
         log_path: dir.path().join("meilisearch.log"),
         ports: vec![port],
+        stop: StopMethod::Terminate,
         owned_binary: true,
+        env: Vec::new(),
     };
-    tokio::task::spawn_blocking(move || runtime::start(AddonKind::Meilisearch, launch))
+    tokio::task::spawn_blocking(move || runtime::start("meilisearch", launch))
         .await
         .unwrap()
         .unwrap_or_else(|e| panic!("Meilisearch start: {e}"));
@@ -845,7 +1048,7 @@ async fn live_meilisearch_indexes_and_searches() {
     assert_eq!(hits, 1, "the indexed document must be found");
     println!("Meilisearch: indexed and found with a typo");
 
-    tokio::task::spawn_blocking(|| runtime::stop(AddonKind::Meilisearch))
+    tokio::task::spawn_blocking(|| runtime::stop("meilisearch"))
         .await
         .unwrap()
         .unwrap();

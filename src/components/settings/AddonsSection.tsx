@@ -1,7 +1,7 @@
 import { Boxes, ExternalLink, X } from "lucide-react";
 import { AddonsController } from "../../hooks/useAddons";
 import { useTranslation } from "../../stores/preferencesStore";
-import { ADDON_KINDS, AddonStatus } from "../../types/addons";
+import { orderAddons } from "../../types/addons";
 import { AddonRow } from "../AddonsModal";
 import { SoundButton } from "../SoundButton";
 
@@ -20,9 +20,7 @@ interface AddonsSectionProps {
 export function AddonsSection({ controller, openExternal, onOpenWindow }: AddonsSectionProps) {
   const { t } = useTranslation();
   const { addons, loaded, error, clearError } = controller;
-  const ordered = ADDON_KINDS.map((kind) => addons.find((addon) => addon.kind === kind)).filter(
-    (addon): addon is AddonStatus => Boolean(addon)
-  );
+  const ordered = orderAddons(addons);
 
   return (
     <div className="settings-section addons-settings" data-testid="addons-settings">
@@ -44,7 +42,7 @@ export function AddonsSection({ controller, openExternal, onOpenWindow }: Addons
       {!loaded ? (
         <div className="empty-state">{t.loading}</div>
       ) : (
-        <div className="addons-settings-list">
+        <div className="addons-settings-list addons-grid">
           {ordered.map((addon) => (
             <AddonRow
               key={addon.kind}

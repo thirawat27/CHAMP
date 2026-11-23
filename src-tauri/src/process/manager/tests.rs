@@ -977,7 +977,7 @@ fn php_mail_lines_route_mail_to_mailpit_only_when_enabled() {
 #[test]
 fn php_env_block_escapes_values_for_php_strings() {
     assert!(php_env_pairs_block(&[]).is_empty());
-    let block = php_env_pairs_block(&[("CHAMP_X", r"a'b\c".to_string())]);
+    let block = php_env_pairs_block(&[("CHAMP_X".to_string(), r"a'b\c".to_string())]);
     assert_eq!(
         block,
         concat!(

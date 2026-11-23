@@ -1,7 +1,42 @@
 /* ---------- Add-on services (Redis, Mailpit) ---------- */
 
+/* A fixed height, so switching tabs never makes the window jump. */
 .addons-modal {
-  width: min(680px, 100%);
+  width: min(940px, 100%);
+  height: min(820px, 94vh);
+  max-height: min(820px, 94vh);
+}
+
+/* The tab already names the panel; keep its heading for screen readers only. */
+.addons-modal .addons-env-head {
+  justify-content: flex-end;
+}
+
+.addons-modal .addons-env-head h3 {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+.addons-modal .addons-env-lines {
+  max-height: none;
+}
+
+.addons-header {
+  align-items: flex-start;
+}
+
+.addons-header-text {
+  min-width: 0;
+}
+
+.addons-header-actions {
+  display: flex;
+  flex: none;
+  gap: 4px;
 }
 
 .addons-subtitle {
@@ -15,6 +50,217 @@
   display: flex;
   flex-direction: column;
   gap: 12px;
+}
+
+/* ---------- Tabs ---------- */
+
+/* Sticks to the top of the scrolling body (whose top padding is 18px). */
+.addons-tabs {
+  position: sticky;
+  top: -18px;
+  z-index: 2;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 4px;
+  padding: 3px;
+  border-radius: var(--radius);
+  background: var(--bg-sunken);
+}
+
+/* Covers the body padding above the tabs so scrolled cards don't show through. */
+.addons-tabs::before {
+  position: absolute;
+  right: -20px;
+  bottom: 100%;
+  left: -20px;
+  height: 18px;
+  background: var(--bg-card);
+  content: "";
+}
+
+.addons-tab {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-width: 0;
+  min-height: 32px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.addons-tab span:not(.addons-tab-badge) {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.addons-tab.selected {
+  background: var(--bg-card);
+  color: var(--text-primary);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.18);
+}
+
+.addons-tab:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 1px;
+}
+
+.addons-tab-badge {
+  min-width: 18px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: var(--status-running-bg);
+  color: var(--status-running-text);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 18px;
+}
+
+/* ---------- Service grid ---------- */
+
+.addons-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 280px), 1fr));
+  gap: 10px;
+  align-items: stretch;
+}
+
+.addons-grid-wide {
+  grid-column: 1 / -1;
+}
+
+.addons-grid .addon-row {
+  gap: 9px;
+  padding: 12px;
+}
+
+.addons-grid .addon-actions {
+  margin-top: auto;
+}
+
+.addon-row.missing .addon-icon {
+  background: var(--bg-sunken);
+  color: var(--text-secondary);
+}
+
+.addon-add-card {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 4px;
+  min-height: 120px;
+  padding: 12px;
+  border: 1px dashed var(--border-strong, var(--border-color));
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--text-secondary);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.addon-add-card strong {
+  color: var(--text-primary);
+  font-size: 14px;
+}
+
+.addon-add-card small {
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.addon-add-card:hover,
+.addon-add-card:focus-visible {
+  border-color: var(--color-primary);
+  color: var(--text-primary);
+  outline: none;
+}
+
+/* ---------- Start-with-stack switch ---------- */
+
+/* Its own row on every card (label left, switch right) so cards line up. */
+.addon-switch {
+  position: relative;
+  display: flex;
+  flex: 1 1 100%;
+  flex-direction: row-reverse;
+  align-items: center;
+  justify-content: space-between;
+  gap: 7px;
+  min-height: 30px;
+  padding-top: 6px;
+  border-top: 1px dashed var(--border-color);
+  color: var(--text-secondary);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.addon-switch input {
+  position: absolute;
+  opacity: 0;
+  width: 1px;
+  height: 1px;
+}
+
+.addon-switch-track {
+  position: relative;
+  flex: none;
+  width: 32px;
+  height: 18px;
+  border-radius: 999px;
+  background: var(--border-color);
+  transition: background 0.15s;
+}
+
+.addon-switch-track::after {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--bg-card);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
+  content: "";
+  transition: transform 0.15s;
+}
+
+.addon-switch input:checked + .addon-switch-track {
+  background: var(--color-primary);
+}
+
+.addon-switch input:checked + .addon-switch-track::after {
+  transform: translateX(14px);
+}
+
+.addon-switch input:focus-visible + .addon-switch-track {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+}
+
+.addon-switch input:disabled + .addon-switch-track {
+  opacity: 0.5;
+}
+
+.addon-actions-end {
+  display: inline-flex;
+  gap: 2px;
+  margin-left: auto;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .addon-switch-track,
+  .addon-switch-track::after {
+    transition: none;
+  }
 }
 
 .addons-body > .error-box {
@@ -240,6 +486,103 @@
   font-size: 12px;
   line-height: 1.6;
   user-select: text;
+}
+
+.addon-port select {
+  min-width: 160px;
+  padding: 6px 8px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  background: var(--bg-card);
+  color: var(--text-primary);
+  font-size: 13px;
+}
+
+.addon-port.wide input {
+  width: 100%;
+}
+
+.addon-port.readonly code {
+  padding: 6px 8px;
+  font-family: var(--font-mono);
+  font-size: 13px;
+  color: var(--text-primary);
+}
+
+.env-profile-pickers,
+.custom-addon-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 16px;
+}
+
+.custom-addon-form {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px;
+  border: 1px dashed var(--border-color);
+  border-radius: var(--radius-sm);
+}
+
+.custom-addon-grid .addon-port input {
+  width: 140px;
+}
+
+.addons-env .settings-muted code {
+  font-family: var(--font-mono);
+  font-size: 12px;
+}
+
+.xdebug-toggle {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 14px;
+}
+
+.addons-grid .addon-port input {
+  width: 78px;
+}
+
+/* Long hints and errors stay short on a card; the full text is in the tooltip. */
+.addons-grid .addon-hint {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.addons-grid .addon-error {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+}
+
+.addons-grid .addon-hint code {
+  user-select: all;
+  word-break: break-all;
+}
+
+@media (max-width: 560px) {
+  .addons-tab {
+    flex-direction: column;
+    gap: 2px;
+    min-height: 44px;
+    font-size: 11.5px;
+  }
+
+  .addon-port select,
+  .custom-addon-grid .addon-port input {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .env-profile-pickers > *,
+  .custom-addon-grid > * {
+    flex: 1 1 100%;
+  }
 }
 
 /* ---------- Settings section ---------- */

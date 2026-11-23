@@ -64,7 +64,9 @@ pub(super) fn connection_info(engine: ServiceType, port: u16, database: Option<&
     })
 }
 
-fn client_args(engine: ServiceType, port: u16, sql: &str) -> Vec<String> {
+/// Client arguments. `database` matters only for PostgreSQL, whose catalog is
+/// per database; MySQL queries name the schema instead.
+fn client_args(engine: ServiceType, port: u16, sql: &str, database: Option<&str>) -> Vec<String> {
     let port = port.to_string();
     let args: Vec<&str> = if engine == ServiceType::PostgreSQL {
         vec![
@@ -75,9 +77,11 @@ fn client_args(engine: ServiceType, port: u16, sql: &str) -> Vec<String> {
             "-U",
             "postgres",
             "-d",
-            "postgres",
+            database.unwrap_or("postgres"),
             "-w",
             "-At",
+            "-F",
+            "\t",
             "-c",
             sql,
         ]
@@ -102,6 +106,15 @@ fn client_args(engine: ServiceType, port: u16, sql: &str) -> Vec<String> {
 }
 
 fn run_sql(engine: ServiceType, port: u16, sql: &str) -> Result<String, String> {
+    run_sql_in(engine, port, sql, None)
+}
+
+fn run_sql_in(
+    engine: ServiceType,
+    port: u16,
+    sql: &str,
+    database: Option<&str>,
+) -> Result<String, String> {
     let binaries = locate_runtime_binaries()?;
     let client = if engine == ServiceType::PostgreSQL {
         crate::runtime::locator::sibling_binary(&binaries.postgresql, "psql")
@@ -118,7 +131,7 @@ fn run_sql(engine: ServiceType, port: u16, sql: &str) -> Result<String, String> 
 
     let mut command = Command::new(&client);
     command
-        .args(client_args(engine, port, sql))
+        .args(client_args(engine, port, sql, database))
         .env("PGCONNECT_TIMEOUT", "3");
     crate::process::command::hide_console(&mut command);
     let output = command
@@ -206,9 +219,130 @@ pub(super) fn create_database(engine: ServiceType, port: u16, name: &str) -> Res
     }))
 }
 
+/// Tab-separated client output as rows of cells (`NULL`/empty become null).
+fn parse_rows(output: &str) -> Vec<Vec<Option<String>>> {
+    output
+        .lines()
+        .map(|line| line.trim_end_matches('\r'))
+        .filter(|line| !line.trim().is_empty())
+        .map(|line| {
+            line.split('\t')
+                .map(|cell| (!cell.is_empty() && cell != "NULL").then(|| cell.to_string()))
+                .collect()
+        })
+        .collect()
+}
+
+/// Tables of one database, with MySQL's row estimate. Read-only: fixed
+/// catalog queries, and names are validated identifiers.
+pub(super) fn list_tables(engine: ServiceType, port: u16, database: &str) -> Result<Value, String> {
+    validate_database_name(database)?;
+    let rows = if engine == ServiceType::PostgreSQL {
+        let sql = "SELECT table_schema, table_name FROM information_schema.tables \
+                   WHERE table_type = 'BASE TABLE' AND table_schema NOT IN ('pg_catalog', 'information_schema') \
+                   ORDER BY table_schema, table_name";
+        parse_rows(&run_sql_in(engine, port, sql, Some(database))?)
+            .into_iter()
+            .map(|row| {
+                let schema = row.first().cloned().flatten().unwrap_or_default();
+                let name = row.get(1).cloned().flatten().unwrap_or_default();
+                if schema == "public" {
+                    json!({ "name": name })
+                } else {
+                    json!({ "name": name, "schema": schema })
+                }
+            })
+            .collect::<Vec<_>>()
+    } else {
+        let sql = format!(
+            "SELECT TABLE_NAME, TABLE_ROWS FROM information_schema.TABLES \
+             WHERE TABLE_SCHEMA = '{database}' AND TABLE_TYPE = 'BASE TABLE' ORDER BY TABLE_NAME"
+        );
+        parse_rows(&run_sql(engine, port, &sql)?)
+            .into_iter()
+            .map(|row| {
+                json!({
+                    "name": row.first().cloned().flatten(),
+                    "rows_estimate": row.get(1).cloned().flatten().and_then(|n| n.parse::<u64>().ok()),
+                })
+            })
+            .collect()
+    };
+    Ok(json!({ "engine": engine.key(), "database": database, "tables": rows }))
+}
+
+/// Columns of one table (names, types, nullability, defaults, keys).
+pub(super) fn describe_table(
+    engine: ServiceType,
+    port: u16,
+    database: &str,
+    table: &str,
+) -> Result<Value, String> {
+    validate_database_name(database)?;
+    validate_database_name(table).map_err(|_| {
+        format!("Invalid table name `{table}`. Use letters, digits, or underscores.")
+    })?;
+    let (sql, keys): (String, &[&str]) = if engine == ServiceType::PostgreSQL {
+        (
+            format!(
+                "SELECT column_name, data_type, is_nullable, column_default FROM information_schema.columns \
+                 WHERE table_schema = 'public' AND table_name = '{table}' ORDER BY ordinal_position"
+            ),
+            &["name", "type", "nullable", "default"],
+        )
+    } else {
+        (
+            format!(
+                "SELECT COLUMN_NAME, COLUMN_TYPE, IS_NULLABLE, COLUMN_DEFAULT, COLUMN_KEY, EXTRA FROM information_schema.COLUMNS \
+                 WHERE TABLE_SCHEMA = '{database}' AND TABLE_NAME = '{table}' ORDER BY ORDINAL_POSITION"
+            ),
+            &["name", "type", "nullable", "default", "key", "extra"],
+        )
+    };
+    let database_arg = (engine == ServiceType::PostgreSQL).then_some(database);
+    let columns: Vec<Value> = parse_rows(&run_sql_in(engine, port, &sql, database_arg)?)
+        .into_iter()
+        .map(|row| {
+            let mut column = serde_json::Map::new();
+            for (key, cell) in keys.iter().zip(row) {
+                let value = match (*key, cell) {
+                    ("nullable", Some(text)) => json!(text == "YES"),
+                    (_, Some(text)) => json!(text),
+                    (_, None) => Value::Null,
+                };
+                column.insert((*key).to_string(), value);
+            }
+            Value::Object(column)
+        })
+        .collect();
+    if columns.is_empty() {
+        return Err(format!(
+            "No table `{table}` in database `{database}`. Call list_tables for the names."
+        ));
+    }
+    Ok(json!({ "engine": engine.key(), "database": database, "table": table, "columns": columns }))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn client_rows_parse_tabs_and_nulls() {
+        let rows = parse_rows("id\tint\tNO\tNULL\r\nname\tvarchar(255)\tYES\t\n\n");
+        assert_eq!(rows.len(), 2);
+        assert_eq!(rows[0][0].as_deref(), Some("id"));
+        assert_eq!(rows[0][3], None);
+        assert_eq!(rows[1][3], None);
+    }
+
+    #[test]
+    fn schema_tools_refuse_unsafe_names_before_running_sql() {
+        assert!(list_tables(ServiceType::MySQL, 1, "x'; DROP").is_err());
+        assert!(describe_table(ServiceType::MySQL, 1, "shop", "users; --")
+            .unwrap_err()
+            .contains("Invalid table name"));
+    }
 
     #[test]
     fn database_names_are_restricted_to_safe_identifiers() {
@@ -270,13 +404,16 @@ mod tests {
 
     #[test]
     fn client_args_use_tcp_and_the_service_port() {
-        let mysql = client_args(ServiceType::MySQL, 3307, "SHOW DATABASES");
+        let mysql = client_args(ServiceType::MySQL, 3307, "SHOW DATABASES", None);
         assert!(mysql.contains(&"--protocol=TCP".to_string()));
         assert!(mysql.contains(&"3307".to_string()));
         assert_eq!(mysql.last().unwrap(), "SHOW DATABASES");
-        let postgresql = client_args(ServiceType::PostgreSQL, 5433, "SELECT 1");
+        let postgresql = client_args(ServiceType::PostgreSQL, 5433, "SELECT 1", None);
         assert!(postgresql.contains(&"5433".to_string()));
         assert!(postgresql.contains(&"-w".to_string()));
+        assert!(postgresql.windows(2).any(|w| w == ["-d", "postgres"]));
+        let shop = client_args(ServiceType::PostgreSQL, 5433, "SELECT 1", Some("shop"));
+        assert!(shop.windows(2).any(|w| w == ["-d", "shop"]));
     }
 
     #[test]

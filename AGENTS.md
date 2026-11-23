@@ -20,7 +20,8 @@ Built-in features:
 - AI agent connector: local MCP server for coding agents (off by default)
 - Self-updater: signed updates from GitHub Releases via `tauri-plugin-updater`
 - In-app bilingual guide (F1)
-- Add-on services (optional, off by default): Redis, Mailpit, Meilisearch. Managed in their own window (`Ctrl+E`), not in Settings; a compact rail card appears only while one is in use
+- Add-on services (optional, off by default): Redis, Mailpit, Meilisearch, Centrifugo (realtime), RustFS (S3 storage), plus user-registered custom add-ons. Managed in their own window (`Ctrl+E`), which also holds framework env profiles and project background tasks; a compact rail card appears only while one is in use
+- Framework support beyond Laravel: project detection (`projects.rs`), env profiles for Laravel, Symfony, WordPress, CodeIgniter, CakePHP, generic DSN, and `CHAMP_*` getenv (`envprofile.rs`), Xdebug toggle (`xdebug.rs`)
 
 Optional Node.js / Python / Go / Ruby runtimes and project templates were removed in 1.4.0. Do not reintroduce them.
 
@@ -88,8 +89,13 @@ src-tauri/src/
   metrics.rs          status bar system metrics
   commands/           IPC handlers: services, settings, runtime, php, database, folders
   tunnel/             HTTPS Preview: mod.rs (ngrok process), install.rs (find/download ngrok)
-  addons/             Redis / Mailpit / Meilisearch: mod.rs (IPC, PHP and .env integration),
-                      catalog.rs (pinned URLs + SHA-256), install.rs, runtime.rs (processes)
+  addons/             mod.rs (generic status/IPC/env), spec.rs (one table: ports, launch args,
+                      stop method per built-in), catalog.rs (pinned URLs + SHA-256), install.rs,
+                      runtime.rs (id-keyed processes, no add-on knowledge), custom.rs (user add-ons),
+                      workers.rs (project PHP background tasks on the same runtime)
+  envprofile.rs       framework env profiles (single source for UI and agents)
+  projects.rs         <folder>.localhost domains, framework detection, Composer PHP constraints
+  xdebug.rs           Xdebug detection and php.ini lines
   doctor/             Log Doctor: knowledge, rank, download, model (doctor-knowledge.json)
   agent/              MCP server (hyper, 127.0.0.1, bearer token): http, token, tools, handlers, database
   process/
@@ -121,18 +127,21 @@ src-tauri/src/
 - PHP: `get_installed_php_versions`, `switch_php_version`, `download_php_version` (installs/updates to the newest patch, does not switch)
 - Folders/terminal: `open_folder`, `open_project_terminal` (restricted to the CHAMP data folder)
 - HTTPS Preview: `start_https_tunnel`, `stop_https_tunnel`, `get_https_tunnel_status`
-- Add-ons: `get_addons_status`, `install_addon`, `start_addon`, `stop_addon`, `configure_addon` (enable/ports; restarts PHP when the mail route or env changes), `get_mailpit_message_count`
+- Add-ons: `get_addons_status`, `install_addon`, `start_addon`, `stop_addon`, `configure_addon` (enable/ports; restarts PHP when the mail route or env changes), `save_custom_addon`, `remove_custom_addon`, `get_mailpit_message_count`
+- Projects and frameworks: `get_project_info`, `get_env_profiles`
+- Background tasks: `get_workers`, `save_worker`, `remove_worker`, `start_worker`, `stop_worker`
+- Xdebug: `get_xdebug_status`, `set_xdebug`
 - Log Doctor: `diagnose_service`, `get_log_doctor_status`, `download_log_doctor_model`, `remove_log_doctor_model`
 - Updates: `prepare_for_update` (the update itself uses the updater plugin from the frontend)
 - Agent connector: `get_agent_connector_status`, `configure_agent_connector`, `regenerate_agent_token`, `test_agent_connector` (self-test over HTTP like a real client)
 
 ## Agent Connector (MCP) Tools
 
-Defined in `src-tauri/src/agent/tools.rs` and `agent/handlers.rs` (database helpers in `agent/database.rs`); client setup snippets in `src/utils/agentSnippets.ts`.
+Defined in `src-tauri/src/agent/tools.rs` and `agent/handlers.rs` (database helpers in `agent/database.rs`, add-on/mail/project/PHP/worker tools in `agent/extended.rs`, resources and prompts in `agent/resources.rs`); client setup snippets in `src/utils/agentSnippets.ts`. Protocol versions up to `2025-11-25`; capabilities: tools, resources (`champ://...`), prompts. JSON responses only, so nothing is announced as `listChanged`.
 
-- Read: `get_status`, `get_environment` (includes `.env` lines), `list_projects`, `read_logs`, `diagnose_service`, `list_databases`, `get_https_preview`
-- Write (listed in `WRITE_TOOLS`, hidden and refused in read-only mode): `start_stack`, `stop_stack`, `restart_stack`, `start_service`, `stop_service`, `restart_service`, `create_database`, `start_https_preview`, `stop_https_preview`
-- Write tools emit `agent-activity` so the dashboard shows a notification. Never add a tool that drops data or runs arbitrary SQL/shell commands.
+- Read: `get_status`, `get_environment`, `list_projects`, `get_project`, `get_env_profiles`, `read_logs`, `diagnose_service`, `list_databases`, `list_tables`, `describe_table`, `get_https_preview`, `get_addons`, `read_addon_log`, `list_mail`, `read_mail`, `get_php_info`, `list_workers`, `get_settings`, `check_ports`, `list_php_versions`, `get_system_info`
+- Write (listed in `WRITE_TOOLS`, hidden and refused in read-only mode): `start_stack`, `stop_stack`, `restart_stack`, `start_service`, `stop_service`, `restart_service`, `create_database`, `start_https_preview`, `stop_https_preview`, `start_addon`, `stop_addon`, `set_addon_enabled`, `switch_php_version`, `set_xdebug`, `start_worker`, `stop_worker`, `update_settings`, `install_php_version`, `switch_database_engine`, `switch_database_tool`, `install_addon`, `set_addon_port` (control tools in `agent/control.rs`; agents can do everything the Settings window does except define custom add-ons, background tasks, the ngrok authtoken, or connector settings)
+- Write tools emit `agent-activity` so the dashboard shows a notification. Never add a tool that drops data or runs arbitrary SQL/shell commands. Schema tools run fixed catalog queries with validated identifiers. Agents may start/stop custom add-ons and workers but never create or edit them.
 
 ## Runtime Catalog
 
@@ -162,6 +171,10 @@ CHAMP/
 - Add-ons bind `127.0.0.1` only and never move to a fallback port; a busy port is an error the user fixes.
 - With Mailpit enabled, `php.ini` routes `mail()` to it (`SMTP`/`smtp_port` on Windows, `sendmail_path = mailpit sendmail` elsewhere).
 - Add-on failures never fail a stack command; they are reported through the add-on status and the `addon-errors` event.
+- To add a built-in: a `spec.rs` entry (ports, web role, stop method, args, optional `prepare`/env), a `catalog.rs` download pinned to a release at least two weeks old, an `AddonEndpoints` field, env pairs/profiles, the frontend kind, and bilingual strings. Settings need no new fields: `addons.services.<key>` is a map (flat pre-1.5 keys migrate on load).
+- Centrifugo runs from a generated `config.json` (insecure dev mode, 127.0.0.1). RustFS runs with local-only keys `rustfsadmin`/`rustfsadmin` and `RUSTFS_CHECK_UPDATE=false`; no Intel Mac build.
+- Custom add-ons are user-managed: absolute program path, `{port}`/`{data_dir}` placeholders, never downloaded, verified, or killed as leftovers. Workers run CHAMP's PHP CLI with a script inside the project as the first argument.
+- Xdebug is never downloaded; it is enabled only when an Xdebug file sits in the selected PHP's `ext` folder (static macOS/Linux PHP cannot load it).
 
 Portable mode can be controlled with `CHAMP_DATA_DIR`, `CHAMP_PORTABLE_DIR`, `CHAMP_PORTABLE`, or portable marker files.
 

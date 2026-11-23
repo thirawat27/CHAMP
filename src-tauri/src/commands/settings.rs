@@ -40,6 +40,8 @@ pub async fn save_settings(mut settings: AppSettings, app: AppHandle) -> Result<
         settings.agent_connector_read_only = stored.agent_connector_read_only;
         settings.agent_connector_port = stored.agent_connector_port;
         settings.addons = stored.addons.clone();
+        settings.xdebug = stored.xdebug.clone();
+        settings.workers = stored.workers.clone();
         *stored = settings;
     })?;
 

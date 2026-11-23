@@ -37,12 +37,13 @@ import { GuideModal } from "./GuideModal";
 import { HelpModal } from "./HelpModal";
 import { LogDoctorModal } from "./LogDoctorModal";
 import { ServiceCard } from "./ServiceCard";
-import { SettingsPanel } from "./SettingsPanel";
+import { SettingsPanel, SettingsSectionId } from "./SettingsPanel";
 import { StatusBar } from "./StatusBar";
 
 export function Dashboard() {
   const { t } = useTranslation();
   const [showSettings, setShowSettings] = useState(false);
+  const [settingsSection, setSettingsSection] = useState<SettingsSectionId | undefined>();
   const [showHelp, setShowHelp] = useState(false);
   const [showGuide, setShowGuide] = useState(false);
   const [showAddons, setShowAddons] = useState(false);
@@ -284,13 +285,17 @@ export function Dashboard() {
 
       {showSettings && (
         <SettingsPanel
-          onClose={() => setShowSettings(false)}
+          onClose={() => {
+            setShowSettings(false);
+            setSettingsSection(undefined);
+          }}
           onSettingsChanged={() => {
             refreshAfterChange();
             checkPhpUpdate();
           }}
           addons={addons}
           openExternal={openExternal}
+          initialSection={settingsSection}
           onOpenAddons={() => {
             setShowSettings(false);
             openAddons();
@@ -328,6 +333,8 @@ export function Dashboard() {
           onClose={() => setDoctorService(null)}
           onOpenSettings={() => {
             setDoctorService(null);
+            // Log Doctor sends people to Settings for port conflicts.
+            setSettingsSection("ports");
             setShowSettings(true);
           }}
           onStartPhp={() => {

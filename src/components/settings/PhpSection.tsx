@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useTranslation } from "../../stores/preferencesStore";
 import { InstalledPhpVersion, PhpPackage } from "../../types/services";
 import { SoundButton } from "../SoundButton";
+import { XdebugToggle } from "./XdebugToggle";
 
 interface PhpSectionProps {
   availablePackages: PhpPackage[];
@@ -122,6 +123,7 @@ export function PhpSection({
           <Repeat size={14} /> {t.switchPhp}
         </SoundButton>
       </div>
+      <XdebugToggle />
     </div>
   );
 }

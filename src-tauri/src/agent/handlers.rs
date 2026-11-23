@@ -4,7 +4,7 @@ use super::http::{
     rpc_error, rpc_result, RPC_INVALID_PARAMS, RPC_INVALID_REQUEST, RPC_METHOD_NOT_FOUND,
 };
 use super::tools::{tool_definitions, WRITE_TOOLS};
-use super::{database, Context};
+use super::{control, database, extended, resources, Context};
 use crate::config::AppSettings;
 use crate::process::runner::run_with_manager;
 use crate::process::{ServiceMap, ServiceType};
@@ -14,10 +14,16 @@ use std::fs;
 use std::path::PathBuf;
 use tauri::{AppHandle, Emitter};
 
-pub(super) const SUPPORTED_PROTOCOL_VERSIONS: [&str; 3] =
-    ["2025-06-18", "2025-03-26", "2024-11-05"];
+pub(super) const SUPPORTED_PROTOCOL_VERSIONS: [&str; 4] =
+    ["2025-11-25", "2025-06-18", "2025-03-26", "2024-11-05"];
 
-pub(super) const SERVER_INSTRUCTIONS: &str = "CHAMP runs a local web stack: Caddy (web server) -> PHP-FPM -> MySQL or PostgreSQL, with phpMyAdmin or Adminer. Call get_environment before writing app configuration (database host, port, user, URLs, ready-made .env lines). Projects live in the projects folder and are served at http://localhost:<web port>/<folder>/ (list_projects). Use list_databases / create_database instead of asking the user to open phpMyAdmin. When a service is in the error state, call diagnose_service for the cause and fix, then read_logs for details. get_https_preview / start_https_preview give a public HTTPS URL (ngrok) for webhooks or phone testing. Tools that change things are missing when the user turned on read-only mode.";
+pub(super) const SERVER_INSTRUCTIONS: &str = "CHAMP runs a local PHP stack for any framework: Caddy (web server) -> PHP-FPM -> MySQL or PostgreSQL, with phpMyAdmin or Adminer, plus optional add-ons (Redis, Mailpit, Meilisearch, user-registered custom services) and per-project background PHP tasks. \
+Each project folder is served at the root of its own origin, http://<folder>.localhost:<web port>/ (from public/ when it has one); use that URL as the app URL. \
+Before configuring a project call get_project: it detects the framework (Laravel, Symfony, WordPress, CodeIgniter, CakePHP, Slim, Yii, Laminas, Drupal, plain PHP) and returns ready configuration lines in that framework's convention; get_env_profiles gives every convention. PHP already receives CHAMP_* environment variables, so plain PHP needs no .env. \
+Use create_database, list_tables, and describe_table instead of asking the user to open phpMyAdmin. Mailpit catches all mail: list_mail / read_mail verify emails and give their links. \
+When something is in the error state call diagnose_service (core) or read_addon_log (add-ons) before changing anything; for port conflicts call check_ports, then update_settings or set_addon_port. \
+Everything the Settings window does is available: get_settings, update_settings (ports, startup), list_php_versions / install_php_version / switch_php_version, switch_database_engine, switch_database_tool, install_addon, set_addon_enabled, set_addon_port, set_xdebug. Custom add-ons, background tasks, and the ngrok authtoken are defined by the user only.get_https_preview / start_https_preview give a public HTTPS URL for webhooks or phone testing. \
+Tools that change things are missing when the user turned on read-only mode. Nothing here drops data or runs arbitrary SQL or shell commands.";
 
 pub(super) const READ_ONLY_REFUSAL: &str = "CHAMP's agent connector is in read-only mode, so this tool is disabled. Ask the user to turn off Read-only in CHAMP Settings -> AI agent connector, or ask them to do this step themselves.";
 
@@ -35,7 +41,12 @@ pub(super) fn negotiate_protocol(params: &Value) -> &'static str {
 pub(super) fn initialize_result(params: &Value) -> Value {
     json!({
         "protocolVersion": negotiate_protocol(params),
-        "capabilities": { "tools": { "listChanged": false } },
+        // JSON responses only (no server stream), so nothing is announced as changing.
+        "capabilities": {
+            "tools": { "listChanged": false },
+            "resources": { "listChanged": false, "subscribe": false },
+            "prompts": { "listChanged": false }
+        },
         "serverInfo": { "name": "champ", "title": "CHAMP local web stack", "version": env!("CARGO_PKG_VERSION") },
         "instructions": SERVER_INSTRUCTIONS
     })
@@ -154,6 +165,8 @@ pub(super) async fn environment_json(app: &AppHandle) -> Result<Value, String> {
         },
         "installed_versions": versions,
         "addons": crate::addons::environment_json(),
+        "xdebug": crate::xdebug::status(),
+        "env_profiles_hint": "Call get_project <name> or get_env_profiles for ready configuration in Laravel, Symfony, WordPress, CodeIgniter, CakePHP, generic DSN, or CHAMP getenv form.",
     }))
 }
 
@@ -180,6 +193,7 @@ pub(super) fn list_projects_json() -> Result<Value, String> {
             .into_iter()
             .map(|(name, path)| {
                 let domain_url = crate::projects::domain_url(&name, web_port);
+                let info = crate::projects::inspect(&path);
                 json!({
                     "name": name,
                     "path": path,
@@ -187,6 +201,8 @@ pub(super) fn list_projects_json() -> Result<Value, String> {
                     // The project at the root of its own origin (served from
                     // public/ when it has one); null when the name is not a DNS label.
                     "domain_url": domain_url,
+                    "framework": info.framework,
+                    "web_root": info.web_root,
                 })
             })
             .collect::<Vec<_>>(),
@@ -392,6 +408,52 @@ pub(super) async fn call_tool(
         "get_https_preview" | "start_https_preview" | "stop_https_preview" => {
             https_preview_tool(&ctx.app, name).await.map(|v| (v, None))
         }
+        "get_project" => extended::get_project(args).await.map(|v| (v, None)),
+        "get_env_profiles" => extended::get_env_profiles(args).await.map(|v| (v, None)),
+        "list_tables" | "describe_table" => extended::schema_tool(&ctx.app, name, args)
+            .await
+            .map(|v| (v, None)),
+        "get_addons" => Ok((extended::addons_json(), None)),
+        "read_addon_log" => extended::read_addon_log(args).map(|v| (v, None)),
+        "list_mail" => extended::list_mail(args).await.map(|v| (v, None)),
+        "read_mail" => extended::read_mail(args).await.map(|v| (v, None)),
+        "get_php_info" => extended::php_info().await.map(|v| (v, None)),
+        "list_workers" => extended::list_workers().await.map(|v| (v, None)),
+        "start_addon" | "stop_addon" | "set_addon_enabled" => {
+            extended::addon_write_tool(&ctx.app, name, args)
+                .await
+                .map(|v| (v, None))
+        }
+        "switch_php_version" => extended::switch_php(&ctx.app, args)
+            .await
+            .map(|v| (v, None)),
+        "set_xdebug" => extended::set_xdebug(&ctx.app, args)
+            .await
+            .map(|v| (v, None)),
+        "get_settings" => Ok((control::settings_json(), None)),
+        "check_ports" => control::check_ports(&ctx.app).await.map(|v| (v, None)),
+        "list_php_versions" => control::list_php_versions().await.map(|v| (v, None)),
+        "get_system_info" => control::system_info().await.map(|v| (v, None)),
+        "update_settings" => control::update_settings(&ctx.app, args)
+            .await
+            .map(|v| (v, None)),
+        "install_php_version" => control::install_php(&ctx.app, args)
+            .await
+            .map(|v| (v, None)),
+        "switch_database_engine" | "switch_database_tool" => {
+            control::switch_database(&ctx.app, name, args)
+                .await
+                .map(|v| (v, None))
+        }
+        "install_addon" => control::install_addon(&ctx.app, args)
+            .await
+            .map(|v| (v, None)),
+        "set_addon_port" => control::set_addon_port(&ctx.app, args)
+            .await
+            .map(|v| (v, None)),
+        "start_worker" | "stop_worker" => extended::worker_write_tool(&ctx.app, name, args)
+            .await
+            .map(|v| (v, None)),
         _ => run_write_tool(&ctx.app, name, args)
             .await
             .map(|v| (v, None)),
@@ -435,6 +497,27 @@ pub(super) async fn respond(ctx: &Context, message: &Value) -> Option<Value> {
             match call_tool(ctx, name, &args).await {
                 Ok(result) => rpc_result(id, result),
                 Err((code, message)) => rpc_error(id, code, &message),
+            }
+        }
+        "resources/list" => rpc_result(id, resources::list_resources()),
+        "resources/templates/list" => rpc_result(id, resources::list_templates()),
+        "resources/read" => {
+            let uri = params["uri"].as_str().unwrap_or_default();
+            match resources::read_resource(ctx, uri).await {
+                Ok(result) => rpc_result(id, result),
+                Err(message) => rpc_error(id, RPC_INVALID_PARAMS, &message),
+            }
+        }
+        "prompts/list" => rpc_result(id, resources::list_prompts()),
+        "prompts/get" => {
+            let name = params["name"].as_str().unwrap_or_default();
+            let args = params
+                .get("arguments")
+                .cloned()
+                .unwrap_or_else(|| json!({}));
+            match resources::get_prompt(name, &args) {
+                Ok(result) => rpc_result(id, result),
+                Err(message) => rpc_error(id, RPC_INVALID_PARAMS, &message),
             }
         }
         _ => rpc_error(id, RPC_METHOD_NOT_FOUND, "Method not found"),

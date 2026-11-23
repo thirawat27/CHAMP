@@ -15,7 +15,10 @@
 //! - Read-only mode hides and refuses every tool that changes services.
 //! - The UI is told about each agent action ("agent-activity" event).
 
+mod control;
 mod database;
+mod extended;
+mod resources;
 
 use crate::config::AppSettings;
 use handlers::SUPPORTED_PROTOCOL_VERSIONS;

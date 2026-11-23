@@ -59,11 +59,7 @@ pub(super) fn system_binary(kind: AddonKind) -> Option<PathBuf> {
     if cfg!(windows) {
         return None;
     }
-    let name = match kind {
-        AddonKind::Redis => "redis-server",
-        AddonKind::Mailpit => "mailpit",
-        AddonKind::Meilisearch => "meilisearch",
-    };
+    let name = super::spec::spec(kind).system_binary;
     let mut dirs: Vec<PathBuf> = std::env::var_os("PATH")
         .map(|path| std::env::split_paths(&path).collect())
         .unwrap_or_default();

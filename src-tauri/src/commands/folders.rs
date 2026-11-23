@@ -162,6 +162,37 @@ pub async fn get_download_dir() -> Result<String, String> {
         .to_string())
 }
 
+/// Framework, web root, and PHP requirement of every project folder (or of
+/// one, when `name` is given), sorted by name.
+pub fn project_infos(name: Option<&str>) -> Result<Vec<crate::projects::ProjectInfo>, String> {
+    let paths = get_app_data_paths()?;
+    if let Some(name) = name {
+        let dir = crate::projects::project_dir(&paths.projects_dir, name)?;
+        return Ok(vec![crate::projects::inspect(&dir)]);
+    }
+    let mut infos: Vec<_> = fs::read_dir(&paths.projects_dir)
+        .map(|entries| {
+            entries
+                .flatten()
+                .filter(|entry| entry.path().is_dir())
+                .filter(|entry| !entry.file_name().to_string_lossy().starts_with('.'))
+                .map(|entry| crate::projects::inspect(&entry.path()))
+                .collect()
+        })
+        .unwrap_or_default();
+    infos.sort_by_key(|info| info.name.to_lowercase());
+    Ok(infos)
+}
+
+#[tauri::command]
+pub async fn get_project_info(
+    name: Option<String>,
+) -> Result<Vec<crate::projects::ProjectInfo>, String> {
+    tauri::async_runtime::spawn_blocking(move || project_infos(name.as_deref()))
+        .await
+        .map_err(|e| format!("Project scan failed: {e}"))?
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -74,8 +74,10 @@ fn protocol_version_is_negotiated() {
     );
     assert_eq!(
         negotiate_protocol(&json!({ "protocolVersion": "1999-01-01" })),
-        "2025-06-18"
+        "2025-11-25"
     );
+    let caps = &initialize_result(&json!({}))["capabilities"];
+    assert!(caps["resources"].is_object() && caps["prompts"].is_object());
     assert_eq!(initialize_result(&json!({}))["serverInfo"]["name"], "champ");
 }
 

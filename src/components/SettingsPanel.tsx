@@ -1,6 +1,16 @@
 import { invoke } from "@tauri-apps/api/core";
-import { CheckCircle2, Settings2, X } from "lucide-react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  Bot,
+  Boxes,
+  CheckCircle2,
+  Database,
+  FileCode2,
+  Network,
+  Settings2,
+  SlidersHorizontal,
+  X,
+} from "lucide-react";
+import { ReactNode, useCallback, useEffect, useRef, useState } from "react";
 import { SETTINGS_CLOSE_DELAY_MS } from "../constants";
 import { useEscape } from "../hooks/useEscape";
 import { useTranslation } from "../stores/preferencesStore";
@@ -29,6 +39,30 @@ import { UpdatesSection } from "./settings/UpdatesSection";
 import { SoundButton } from "./SoundButton";
 import { componentLabel } from "../utils/downloadProgress";
 
+export type SettingsSectionId = "general" | "ports" | "php" | "database" | "addons" | "ai";
+
+const SECTION_IDS: readonly SettingsSectionId[] = [
+  "general",
+  "ports",
+  "php",
+  "database",
+  "addons",
+  "ai",
+];
+const SECTION_STORAGE_KEY = "champ.settings.section";
+
+function rememberedSection(): SettingsSectionId {
+  try {
+    const saved = window.localStorage.getItem(SECTION_STORAGE_KEY);
+    if (saved && (SECTION_IDS as readonly string[]).includes(saved)) {
+      return saved as SettingsSectionId;
+    }
+  } catch {
+    // Storage can be unavailable; start at the first category.
+  }
+  return "general";
+}
+
 interface SettingsPanelProps {
   onClose: () => void;
   onSettingsChanged?: () => void;
@@ -36,6 +70,8 @@ interface SettingsPanelProps {
   addons?: AddonsController;
   openExternal?: (url: string) => void;
   onOpenAddons?: () => void;
+  /** Open on this category (for example Ports from Log Doctor). */
+  initialSection?: SettingsSectionId;
 }
 
 export function SettingsPanel({
@@ -44,8 +80,29 @@ export function SettingsPanel({
   addons,
   openExternal,
   onOpenAddons,
+  initialSection,
 }: SettingsPanelProps) {
   const { t } = useTranslation();
+  const [section, setSection] = useState<SettingsSectionId>(
+    () => initialSection ?? rememberedSection()
+  );
+  const pickSection = (next: SettingsSectionId) => {
+    setSection(next);
+    try {
+      window.localStorage.setItem(SECTION_STORAGE_KEY, next);
+    } catch {
+      // Only the remembered category is lost.
+    }
+  };
+  const sections: { id: SettingsSectionId; label: string; icon: ReactNode }[] = [
+    { id: "general", label: t.settingsGroupGeneral, icon: <SlidersHorizontal size={15} /> },
+    { id: "ports", label: t.settingsGroupPorts, icon: <Network size={15} /> },
+    { id: "php", label: "PHP", icon: <FileCode2 size={15} /> },
+    { id: "database", label: t.settingsGroupDatabase, icon: <Database size={15} /> },
+    ...(addons ? [{ id: "addons" as const, label: t.addonsTitle, icon: <Boxes size={15} /> }] : []),
+    { id: "ai", label: t.settingsGroupAi, icon: <Bot size={15} /> },
+  ];
+  const shown = sections.some((item) => item.id === section) ? section : "general";
   const [settings, setSettings] = useState<AppSettings>({
     web_port: DEFAULT_PORTS[ServiceType.Caddy],
     php_port: DEFAULT_PORTS[ServiceType.PhpFpm],
@@ -206,74 +263,111 @@ export function SettingsPanel({
           </button>
         </header>
 
-        <div className="settings-content">
-          {loading ? (
-            <div className="empty-state">{t.loading}</div>
-          ) : (
-            <>
-              {error && (
-                <div className="error-box">
-                  <p className="error-box-text">{error}</p>
-                </div>
-              )}
-              {message && (
-                <div className="success-box">
-                  <CheckCircle2 size={16} />
-                  <p className="success-box-text">{message}</p>
-                </div>
-              )}
+        <div className="settings-layout">
+          <nav className="settings-nav" role="tablist" aria-orientation="vertical">
+            {sections.map((item) => (
+              <SoundButton
+                key={item.id}
+                role="tab"
+                aria-selected={shown === item.id}
+                className={`settings-nav-item ${shown === item.id ? "selected" : ""}`}
+                onClick={() => pickSection(item.id)}
+                data-testid={`settings-nav-${item.id}`}
+              >
+                {item.icon}
+                <span>{item.label}</span>
+              </SoundButton>
+            ))}
+          </nav>
 
-              <PortsSection settings={settings} onChange={handlePortChange} onError={setError} />
+          <div className="settings-content" role="tabpanel">
+            {loading ? (
+              <div className="empty-state">{t.loading}</div>
+            ) : (
+              <>
+                {error && (
+                  <div className="error-box">
+                    <p className="error-box-text">{error}</p>
+                  </div>
+                )}
+                {message && (
+                  <div className="success-box">
+                    <CheckCircle2 size={16} />
+                    <p className="success-box-text">{message}</p>
+                  </div>
+                )}
 
-              <PhpSection
-                availablePackages={packagesForPlatform(packages?.php ?? [], runtimePlatformKey)}
-                versions={phpVersions}
-                selectedId={selectedPhpId}
-                onSelect={setSelectedPhpId}
-                onVersionsChanged={async () => {
-                  await reloadPhpVersions();
-                  onSettingsChanged?.();
-                }}
-                onSuccess={setMessage}
-                onError={setError}
-                onCommandStart={clearResult}
-              />
+                {shown === "general" && (
+                  <>
+                    <PreferencesSection
+                      autoStart={settings.auto_start_services ?? false}
+                      onAutoStartChange={(enabled) =>
+                        setSettings((current) => ({ ...current, auto_start_services: enabled }))
+                      }
+                    />
+                    <UpdatesSection
+                      autoCheck={settings.auto_check_updates ?? true}
+                      onAutoCheckChange={(enabled) =>
+                        setSettings((current) => ({ ...current, auto_check_updates: enabled }))
+                      }
+                    />
+                  </>
+                )}
 
-              <DatabaseSection
-                selection={settings.package_selection}
-                packages={packages}
-                onChange={(packageSelection) =>
-                  setSettings((current) => ({ ...current, package_selection: packageSelection }))
-                }
-              />
+                {shown === "ports" && (
+                  <PortsSection
+                    settings={settings}
+                    onChange={handlePortChange}
+                    onError={setError}
+                  />
+                )}
 
-              {addons && (
-                <AddonsSection
-                  controller={addons}
-                  openExternal={openExternal ?? (() => undefined)}
-                  onOpenWindow={onOpenAddons}
-                />
-              )}
+                {shown === "php" && (
+                  <PhpSection
+                    availablePackages={packagesForPlatform(packages?.php ?? [], runtimePlatformKey)}
+                    versions={phpVersions}
+                    selectedId={selectedPhpId}
+                    onSelect={setSelectedPhpId}
+                    onVersionsChanged={async () => {
+                      await reloadPhpVersions();
+                      onSettingsChanged?.();
+                    }}
+                    onSuccess={setMessage}
+                    onError={setError}
+                    onCommandStart={clearResult}
+                  />
+                )}
 
-              <LogDoctorSection />
+                {shown === "database" && (
+                  <DatabaseSection
+                    selection={settings.package_selection}
+                    packages={packages}
+                    onChange={(packageSelection) =>
+                      setSettings((current) => ({
+                        ...current,
+                        package_selection: packageSelection,
+                      }))
+                    }
+                  />
+                )}
 
-              <AgentConnectorSection />
+                {shown === "addons" && addons && (
+                  <AddonsSection
+                    controller={addons}
+                    openExternal={openExternal ?? (() => undefined)}
+                    onOpenWindow={onOpenAddons}
+                  />
+                )}
 
-              <UpdatesSection
-                autoCheck={settings.auto_check_updates ?? true}
-                onAutoCheckChange={(enabled) =>
-                  setSettings((current) => ({ ...current, auto_check_updates: enabled }))
-                }
-              />
-
-              <PreferencesSection
-                autoStart={settings.auto_start_services ?? false}
-                onAutoStartChange={(enabled) =>
-                  setSettings((current) => ({ ...current, auto_start_services: enabled }))
-                }
-              />
-            </>
-          )}
+                {shown === "ai" && (
+                  <>
+                    <AgentConnectorSection />
+                    <LogDoctorSection />
+                  </>
+                )}
+              </>
+            )}
+          </div>
         </div>
 
         <footer className="settings-footer">

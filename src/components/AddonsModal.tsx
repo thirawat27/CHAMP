@@ -1,33 +1,64 @@
 import {
   Boxes,
-  Check,
-  Copy,
+  Cog,
   Database,
   Download,
   ExternalLink,
+  FileCode2,
+  HardDrive,
   LoaderCircle,
   Mail,
+  Pencil,
   Play,
+  Plus,
+  Puzzle,
+  Radio,
   ScrollText,
   Search,
   Square,
+  Trash2,
   X,
 } from "lucide-react";
 import { ReactNode, useState } from "react";
-import { COPIED_FEEDBACK_MS } from "../constants";
 import { AddonsController } from "../hooks/useAddons";
 import { useEscape } from "../hooks/useEscape";
 import { useTranslation } from "../stores/preferencesStore";
-import { ADDON_KINDS, AddonKind, AddonStatus, addonDotenv, parseAddonPort } from "../types/addons";
+import { AddonStatus, BuiltinAddonKind, orderAddons, parseAddonPort } from "../types/addons";
 import { ServiceState } from "../types/services";
 import { AudioManager } from "../utils/audioManager";
+import { CustomAddonForm } from "./addons/CustomAddonForm";
+import { EnvProfilesPanel } from "./addons/EnvProfilesPanel";
+import { WorkersPanel } from "./addons/WorkersPanel";
 import { SoundButton } from "./SoundButton";
 
-const ADDON_ICONS: Record<AddonKind, ReactNode> = {
-  redis: <Database size={18} />,
-  mailpit: <Mail size={18} />,
-  meilisearch: <Search size={18} />,
+const ADDON_ICONS: Record<BuiltinAddonKind, ReactNode> = {
+  redis: <Database size={17} />,
+  mailpit: <Mail size={17} />,
+  meilisearch: <Search size={17} />,
+  centrifugo: <Radio size={17} />,
+  rustfs: <HardDrive size={17} />,
 };
+
+type AddonsTab = "services" | "config" | "tasks";
+const TAB_STORAGE_KEY = "champ.addons.tab";
+
+function loadTab(): AddonsTab {
+  try {
+    const saved = window.localStorage.getItem(TAB_STORAGE_KEY);
+    if (saved === "services" || saved === "config" || saved === "tasks") return saved;
+  } catch {
+    // Storage can be unavailable; the first tab is fine.
+  }
+  return "services";
+}
+
+function saveTab(tab: AddonsTab) {
+  try {
+    window.localStorage.setItem(TAB_STORAGE_KEY, tab);
+  } catch {
+    // Not worth reporting: only the remembered tab is lost.
+  }
+}
 
 interface AddonsModalProps {
   controller: AddonsController;
@@ -37,7 +68,11 @@ interface AddonsModalProps {
   openFolder: (path?: string) => void;
 }
 
-/** Install, enable, and configure Redis, Mailpit, and Meilisearch. */
+/**
+ * Add-on services in three tabs: the services themselves (a grid of compact
+ * cards, built-in and custom), configuration lines for every framework, and
+ * project background tasks.
+ */
 export function AddonsModal({
   controller,
   logsDir,
@@ -46,8 +81,9 @@ export function AddonsModal({
   openFolder,
 }: AddonsModalProps) {
   const { t } = useTranslation();
-  const { addons, loaded, error, clearError } = controller;
-  const [copied, setCopied] = useState(false);
+  const { addons, loaded, error, clearError, busyKind, saveCustom } = controller;
+  const [tab, setTab] = useState<AddonsTab>(loadTab);
+  const [addingCustom, setAddingCustom] = useState(false);
 
   const close = () => {
     AudioManager.playClick();
@@ -55,23 +91,23 @@ export function AddonsModal({
   };
   useEscape(close);
 
-  const ordered = ADDON_KINDS.map((kind) => addons.find((addon) => addon.kind === kind)).filter(
-    (addon): addon is AddonStatus => Boolean(addon)
-  );
-  const dotenv = addonDotenv(ordered);
-  const redisEnabled = ordered.some((addon) => addon.kind === "redis" && addon.enabled);
-  const searchEnabled = ordered.some((addon) => addon.kind === "meilisearch" && addon.enabled);
+  const ordered = orderAddons(addons);
+  const enabledCount = ordered.filter((addon) => addon.enabled).length;
+  // Reload the configuration lines when an add-on is toggled or moves port.
+  const refreshKey = ordered
+    .map((addon) => `${addon.kind}:${addon.enabled}:${addon.port}:${addon.web_port}`)
+    .join("|");
 
-  const copyDotenv = async () => {
-    try {
-      await navigator.clipboard.writeText(dotenv);
-      AudioManager.playClick();
-      setCopied(true);
-      window.setTimeout(() => setCopied(false), COPIED_FEEDBACK_MS);
-    } catch (copyError) {
-      console.error("Failed to copy .env lines:", copyError);
-    }
+  const pickTab = (next: AddonsTab) => {
+    setTab(next);
+    saveTab(next);
   };
+
+  const tabs: { id: AddonsTab; label: string; icon: ReactNode; badge?: number }[] = [
+    { id: "services", label: t.addonsTabServices, icon: <Boxes size={14} />, badge: enabledCount },
+    { id: "config", label: t.addonEnvTitle, icon: <FileCode2 size={14} /> },
+    { id: "tasks", label: t.workersTitle, icon: <Cog size={14} /> },
+  ];
 
   return (
     <div className="modal-overlay" onClick={close}>
@@ -83,19 +119,48 @@ export function AddonsModal({
         aria-labelledby="addons-title"
         data-testid="addons-modal"
       >
-        <header className="modal-header">
-          <div>
+        <header className="modal-header addons-header">
+          <div className="addons-header-text">
             <h2 id="addons-title" className="modal-title-with-icon">
               <Boxes size={19} /> {t.addonsTitle}
             </h2>
             <p className="addons-subtitle">{t.addonsDescription}</p>
           </div>
-          <button className="icon-button" onClick={close} aria-label={t.close}>
-            <X size={18} />
-          </button>
+          <div className="addons-header-actions">
+            {logsDir && (
+              <SoundButton
+                className="icon-button"
+                onClick={() => openFolder(logsDir)}
+                aria-label={t.addonOpenLog}
+                title={t.addonOpenLog}
+              >
+                <ScrollText size={16} />
+              </SoundButton>
+            )}
+            <button className="icon-button" onClick={close} aria-label={t.close}>
+              <X size={18} />
+            </button>
+          </div>
         </header>
 
         <div className="modal-body addons-body">
+          <div className="addons-tabs" role="tablist" aria-label={t.addonsTitle}>
+            {tabs.map((item) => (
+              <SoundButton
+                key={item.id}
+                role="tab"
+                aria-selected={tab === item.id}
+                className={`addons-tab ${tab === item.id ? "selected" : ""}`}
+                onClick={() => pickTab(item.id)}
+                data-testid={`addons-tab-${item.id}`}
+              >
+                {item.icon}
+                <span>{item.label}</span>
+                {item.badge ? <span className="addons-tab-badge">{item.badge}</span> : null}
+              </SoundButton>
+            ))}
+          </div>
+
           {error && (
             <div className="error-box" role="alert">
               <p className="error-box-text">{error}</p>
@@ -105,52 +170,54 @@ export function AddonsModal({
             </div>
           )}
 
-          {!loaded ? (
-            <div className="empty-state">{t.loading}</div>
-          ) : (
-            ordered.map((addon) => (
-              <AddonRow
-                key={addon.kind}
-                addon={addon}
-                controller={controller}
-                openExternal={openExternal}
-              />
-            ))
-          )}
-
-          <section className="addons-env" aria-labelledby="addons-env-title">
-            <div className="addons-env-head">
-              <h3 id="addons-env-title">{t.addonEnvTitle}</h3>
-              <div className="addons-env-actions">
-                {logsDir && (
-                  <SoundButton
-                    className="btn-secondary compact"
-                    onClick={() => openFolder(logsDir)}
-                  >
-                    <ScrollText size={14} /> {t.addonOpenLog}
-                  </SoundButton>
-                )}
-                <button
-                  type="button"
-                  className="btn-secondary compact"
-                  onClick={copyDotenv}
-                  disabled={!dotenv}
-                >
-                  {copied ? <Check size={14} /> : <Copy size={14} />}{" "}
-                  {copied ? t.addonCopied : t.addonCopyEnv}
-                </button>
-              </div>
-            </div>
-            {dotenv ? (
-              <pre className="addons-env-lines" data-testid="addons-dotenv">
-                {dotenv}
-              </pre>
+          {tab === "services" &&
+            (!loaded ? (
+              <div className="empty-state">{t.loading}</div>
             ) : (
-              <p className="settings-muted">{t.addonEnvEmpty}</p>
-            )}
-            {redisEnabled && <p className="settings-muted">{t.addonPredisNote}</p>}
-            {searchEnabled && <p className="settings-muted">{t.addonScoutNote}</p>}
-          </section>
+              <div className="addons-grid" role="tabpanel">
+                {ordered.map((addon) => (
+                  <AddonRow
+                    key={addon.kind}
+                    addon={addon}
+                    controller={controller}
+                    openExternal={openExternal}
+                  />
+                ))}
+                {addingCustom ? (
+                  <div className="addons-grid-wide">
+                    <CustomAddonForm
+                      busy={busyKind !== null}
+                      onSave={saveCustom}
+                      onCancel={() => setAddingCustom(false)}
+                    />
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    className="addon-add-card"
+                    onClick={() => {
+                      AudioManager.playClick();
+                      setAddingCustom(true);
+                    }}
+                  >
+                    <Plus size={18} />
+                    <strong>{t.addonCustomAdd}</strong>
+                    <small>{t.addonCustomHelp}</small>
+                  </button>
+                )}
+              </div>
+            ))}
+
+          {tab === "config" && (
+            <div role="tabpanel">
+              <EnvProfilesPanel refreshKey={refreshKey} />
+            </div>
+          )}
+          {tab === "tasks" && (
+            <div role="tabpanel">
+              <WorkersPanel />
+            </div>
+          )}
         </div>
       </div>
     </div>
@@ -161,6 +228,15 @@ const PURPOSE_KEYS = {
   redis: "addonRedisPurpose",
   mailpit: "addonMailpitPurpose",
   meilisearch: "addonMeilisearchPurpose",
+  centrifugo: "addonCentrifugoPurpose",
+  rustfs: "addonRustfsPurpose",
+} as const;
+
+const OPEN_KEYS = {
+  mailpit: "addonOpenInbox",
+  meilisearch: "addonOpenDashboard",
+  centrifugo: "addonOpenAdmin",
+  rustfs: "addonOpenConsole",
 } as const;
 
 function stateLabel(state: ServiceState, t: ReturnType<typeof useTranslation>["t"]) {
@@ -184,28 +260,77 @@ interface AddonRowProps {
   openExternal: (url: string) => void;
 }
 
-/** One add-on with its toggle, ports, and actions (window and Settings). */
+/** One add-on as a compact card (window grid and Settings list). */
 export function AddonRow({ addon, controller, openExternal }: AddonRowProps) {
   const { t } = useTranslation();
-  const { busyKind, progress, install, start, stop, configure, mailCount } = controller;
+  const {
+    busyKind,
+    progress,
+    install,
+    start,
+    stop,
+    configure,
+    mailCount,
+    saveCustom,
+    removeCustom,
+  } = controller;
+  const [editing, setEditing] = useState(false);
   const busy = busyKind === addon.kind || addon.installing;
   const anyBusy = busyKind !== null;
   const running = addon.state === ServiceState.Running;
   const percent = progress[addon.kind];
-  const isMailpit = addon.kind === "mailpit";
+  const builtin = addon.custom ? null : (addon.kind as BuiltinAddonKind);
+  const isMailpit = builtin === "mailpit";
+  const secondPort = addon.ports && addon.ports.length > 1 ? addon.ports[1] : null;
+
+  const purpose =
+    builtin && PURPOSE_KEYS[builtin] ? t[PURPOSE_KEYS[builtin]] : t.addonCustomPurpose;
+  const openKey =
+    builtin && builtin in OPEN_KEYS ? OPEN_KEYS[builtin as keyof typeof OPEN_KEYS] : null;
+  const showInstall = addon.downloadable && (!addon.installed_version || addon.update_available);
+  // One short hint at most, so cards stay the same height.
+  const hint =
+    !addon.installed && !addon.downloadable && addon.install_hint ? (
+      <>
+        {t.addonSystemInstallHint} <code>{addon.install_hint}</code>
+      </>
+    ) : addon.custom && addon.definition ? (
+      <code title={addon.definition.command}>{addon.definition.command}</code>
+    ) : builtin === "rustfs" && addon.enabled ? (
+      t.addonRustfsHint
+    ) : isMailpit && addon.enabled ? (
+      t.addonMailHint
+    ) : null;
+
+  if (editing && addon.definition) {
+    return (
+      <article
+        className="addon-row addons-grid-wide"
+        data-testid={`addon-${addon.kind}`}
+        aria-label={addon.name}
+      >
+        <CustomAddonForm
+          initial={addon.definition}
+          busy={anyBusy}
+          onSave={saveCustom}
+          onCancel={() => setEditing(false)}
+        />
+      </article>
+    );
+  }
 
   return (
     <article
-      className={`addon-row ${addon.state}`}
+      className={`addon-row ${addon.installed ? addon.state : "missing"}`}
       data-testid={`addon-${addon.kind}`}
       aria-label={addon.name}
     >
       <div className="addon-row-head">
-        <span className="addon-icon">{ADDON_ICONS[addon.kind]}</span>
+        <span className="addon-icon">{builtin ? ADDON_ICONS[builtin] : <Puzzle size={17} />}</span>
         <div className="addon-title">
           <strong>{addon.name}</strong>
-          <small>
-            {t[PURPOSE_KEYS[addon.kind]]}
+          <small title={purpose}>
+            {purpose}
             {addon.installed_version
               ? ` · ${addon.installed_version}`
               : addon.source === "system"
@@ -214,24 +339,15 @@ export function AddonRow({ addon, controller, openExternal }: AddonRowProps) {
           </small>
         </div>
         <span className={`addon-state ${addon.installed ? addon.state : "missing"}`}>
-          {addon.installed ? stateLabel(addon.state, t) : t.addonNotInstalled}
+          {addon.installed
+            ? stateLabel(addon.state, t)
+            : addon.custom
+              ? t.addonCustomMissing
+              : t.addonNotInstalled}
         </span>
       </div>
 
       <div className="addon-controls">
-        <label className="toggle-row addon-toggle">
-          <input
-            type="checkbox"
-            checked={addon.enabled}
-            disabled={anyBusy}
-            onChange={(event) => {
-              AudioManager.playToggle();
-              void configure(addon.kind, { enabled: event.target.checked });
-            }}
-          />
-          <span>{t.addonStartWithStack}</span>
-        </label>
-
         <PortInput
           id={`${addon.kind}-port`}
           label={isMailpit ? t.addonSmtpPort : t.addonPort}
@@ -248,22 +364,36 @@ export function AddonRow({ addon, controller, openExternal }: AddonRowProps) {
             onCommit={(web_port) => configure(addon.kind, { web_port })}
           />
         )}
+        {!isMailpit && secondPort && (
+          <span className="addon-port readonly">
+            <span>{secondPort.label}</span>
+            <code>{secondPort.port}</code>
+          </span>
+        )}
+        <label className="addon-switch" title={t.addonStartWithStack}>
+          <input
+            type="checkbox"
+            checked={addon.enabled}
+            disabled={anyBusy}
+            onChange={(event) => {
+              AudioManager.playToggle();
+              void configure(addon.kind, { enabled: event.target.checked });
+            }}
+          />
+          <span className="addon-switch-track" aria-hidden="true" />
+          <span className="addon-switch-label">{t.addonStartWithStack}</span>
+        </label>
       </div>
 
-      {!addon.installed && !addon.downloadable && addon.install_hint && (
-        <p className="addon-hint">
-          {t.addonSystemInstallHint} <code>{addon.install_hint}</code>
-        </p>
-      )}
-      {isMailpit && addon.enabled && <p className="addon-hint">{t.addonMailHint}</p>}
+      {hint && <p className="addon-hint">{hint}</p>}
       {addon.error && (
-        <p className="addon-error" role="status">
+        <p className="addon-error" role="status" title={addon.error}>
           {addon.error}
         </p>
       )}
 
       <div className="addon-actions">
-        {addon.downloadable && (!addon.installed_version || addon.update_available) && (
+        {showInstall && (
           <SoundButton
             className="btn-secondary compact"
             onClick={() => install(addon.kind)}
@@ -301,22 +431,36 @@ export function AddonRow({ addon, controller, openExternal }: AddonRowProps) {
               {t.start}
             </SoundButton>
           ))}
-        {isMailpit && addon.web_url && (
+        {addon.web_url && (
           <SoundButton
             className="btn-primary compact"
             onClick={() => openExternal(addon.web_url as string)}
           >
-            <ExternalLink size={14} /> {t.addonOpenInbox}
-            {mailCount !== null && <span className="addon-count">{mailCount}</span>}
+            <ExternalLink size={14} /> {openKey ? t[openKey] : t.addonOpenPage}
+            {isMailpit && mailCount !== null && <span className="addon-count">{mailCount}</span>}
           </SoundButton>
         )}
-        {addon.kind === "meilisearch" && addon.web_url && (
-          <SoundButton
-            className="btn-primary compact"
-            onClick={() => openExternal(addon.web_url as string)}
-          >
-            <ExternalLink size={14} /> {t.addonOpenDashboard}
-          </SoundButton>
+        {addon.custom && (
+          <span className="addon-actions-end">
+            <SoundButton
+              className="icon-button"
+              onClick={() => setEditing(true)}
+              disabled={anyBusy}
+              aria-label={`${t.addonCustomEdit} ${addon.name}`}
+              title={t.addonCustomEdit}
+            >
+              <Pencil size={14} />
+            </SoundButton>
+            <SoundButton
+              className="icon-button"
+              onClick={() => removeCustom(addon.kind)}
+              disabled={anyBusy}
+              aria-label={`${t.workerRemove} ${addon.name}`}
+              title={t.workerRemove}
+            >
+              <Trash2 size={14} />
+            </SoundButton>
+          </span>
         )}
       </div>
     </article>

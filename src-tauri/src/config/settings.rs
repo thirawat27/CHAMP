@@ -1,5 +1,6 @@
 use crate::runtime::{locator::get_app_data_paths, packages::PackageSelection};
 use serde::{Deserialize, Serialize};
+use std::collections::BTreeMap;
 use std::fs;
 use std::path::PathBuf;
 use std::sync::{Mutex, PoisonError};
@@ -57,61 +58,184 @@ pub struct AppSettings {
     /// `configure_addon`; `save_settings` keeps what is on disk.
     #[serde(default)]
     pub addons: AddonSettings,
+    /// Step debugging. Written by `set_xdebug`; `save_settings` keeps what is on disk.
+    #[serde(default)]
+    pub xdebug: XdebugSettings,
+    /// Per-project PHP background commands (queue workers, schedulers).
+    /// Written by the worker commands; `save_settings` keeps what is on disk.
+    #[serde(default)]
+    pub workers: Vec<ProjectWorker>,
 }
 
-pub const DEFAULT_REDIS_PORT: u16 = 6379;
-pub const DEFAULT_MAILPIT_SMTP_PORT: u16 = 1025;
-pub const DEFAULT_MAILPIT_WEB_PORT: u16 = 8025;
-pub const DEFAULT_MEILISEARCH_PORT: u16 = 7700;
+pub const DEFAULT_XDEBUG_CLIENT_PORT: u16 = 9003;
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct XdebugSettings {
+    pub enabled: bool,
+    /// Port the IDE listens on (CHAMP does not bind it).
+    pub client_port: u16,
+}
+
+impl Default for XdebugSettings {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            client_port: DEFAULT_XDEBUG_CLIENT_PORT,
+        }
+    }
+}
+
+/// A long-running PHP command for one project, run with CHAMP's PHP CLI in
+/// the project folder (for example `artisan queue:work`).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ProjectWorker {
+    /// Lowercase letters, digits, and hyphens.
+    pub id: String,
+    /// Project folder name.
+    pub project: String,
+    pub name: String,
+    /// Arguments after `php`; the first is a script inside the project
+    /// (`artisan`, `bin/console`, `spark`, ...). No shell is involved.
+    pub args: Vec<String>,
+    /// Start with the stack.
+    #[serde(default)]
+    pub enabled: bool,
+}
 
 /// Which optional services start with the stack, and their ports.
+///
+/// `services` is keyed by the built-in add-on key (`redis`, `mailpit`, ...);
+/// a missing entry or port means "off, default port" (defaults live in
+/// `addons::spec`). `custom` holds services the user registered with their
+/// own binary.
 ///
 /// Add-ons never move to a fallback port: an app's `.env` names the port, so a
 /// busy port is reported instead of silently picking another one.
 ///
-/// Settings files from versions that offered Memcached still carry
-/// `memcached_enabled` / `memcached_port`; serde ignores those unknown keys.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(default)]
+/// Files written before 1.5 used flat keys (`redis_enabled`, `redis_port`,
+/// `mailpit_smtp_port`, ...); they are migrated on load and saved in the new
+/// shape. Keys of removed add-ons (Memcached) are ignored.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(from = "AddonSettingsFile")]
 pub struct AddonSettings {
-    pub redis_enabled: bool,
-    pub redis_port: u16,
-    pub mailpit_enabled: bool,
-    pub mailpit_smtp_port: u16,
-    pub mailpit_web_port: u16,
-    pub meilisearch_enabled: bool,
-    pub meilisearch_port: u16,
+    pub services: BTreeMap<String, AddonConfig>,
+    pub custom: Vec<CustomAddon>,
 }
 
-impl Default for AddonSettings {
-    fn default() -> Self {
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct AddonConfig {
+    pub enabled: bool,
+    /// Port per role (`main`, `smtp`, `web`, ...). Missing roles use the default.
+    pub ports: BTreeMap<String, u16>,
+}
+
+/// A service the user runs from their own binary. CHAMP starts and stops it
+/// and waits for its port, but never downloads, verifies, or updates it.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct CustomAddon {
+    /// Lowercase letters, digits, and hyphens; never a built-in key.
+    pub id: String,
+    pub name: String,
+    /// Absolute path to the executable.
+    pub command: String,
+    /// Arguments; `{port}` and `{data_dir}` are replaced at start.
+    #[serde(default)]
+    pub args: Vec<String>,
+    pub port: u16,
+    /// The port serves a page in the browser.
+    #[serde(default)]
+    pub web: bool,
+    #[serde(default)]
+    pub enabled: bool,
+}
+
+/// Accepts both the current shape and the flat pre-1.5 keys.
+#[derive(Deserialize, Default)]
+#[serde(default)]
+struct AddonSettingsFile {
+    services: BTreeMap<String, AddonConfig>,
+    custom: Vec<CustomAddon>,
+    redis_enabled: Option<bool>,
+    redis_port: Option<u16>,
+    mailpit_enabled: Option<bool>,
+    mailpit_smtp_port: Option<u16>,
+    mailpit_web_port: Option<u16>,
+    meilisearch_enabled: Option<bool>,
+    meilisearch_port: Option<u16>,
+}
+
+impl From<AddonSettingsFile> for AddonSettings {
+    fn from(file: AddonSettingsFile) -> Self {
+        let mut services = file.services;
+        let legacy = [
+            ("redis", file.redis_enabled, vec![("main", file.redis_port)]),
+            (
+                "mailpit",
+                file.mailpit_enabled,
+                vec![
+                    ("smtp", file.mailpit_smtp_port),
+                    ("web", file.mailpit_web_port),
+                ],
+            ),
+            (
+                "meilisearch",
+                file.meilisearch_enabled,
+                vec![("main", file.meilisearch_port)],
+            ),
+        ];
+        for (key, enabled, ports) in legacy {
+            let has_legacy = enabled.is_some() || ports.iter().any(|(_, port)| port.is_some());
+            // A file in the new shape wins over stray flat keys.
+            if !has_legacy || services.contains_key(key) {
+                continue;
+            }
+            services.insert(
+                key.to_string(),
+                AddonConfig {
+                    enabled: enabled.unwrap_or(false),
+                    ports: ports
+                        .into_iter()
+                        .filter_map(|(role, port)| port.map(|port| (role.to_string(), port)))
+                        .collect(),
+                },
+            );
+        }
         Self {
-            redis_enabled: false,
-            redis_port: DEFAULT_REDIS_PORT,
-            mailpit_enabled: false,
-            mailpit_smtp_port: DEFAULT_MAILPIT_SMTP_PORT,
-            mailpit_web_port: DEFAULT_MAILPIT_WEB_PORT,
-            meilisearch_enabled: false,
-            meilisearch_port: DEFAULT_MEILISEARCH_PORT,
+            services,
+            custom: file.custom,
         }
     }
 }
 
 impl AddonSettings {
-    /// Ports of the enabled add-ons, labeled for validation messages.
-    pub fn enabled_ports(&self) -> Vec<(&'static str, u16)> {
-        let mut ports = Vec::new();
-        if self.redis_enabled {
-            ports.push(("Redis", self.redis_port));
-        }
-        if self.mailpit_enabled {
-            ports.push(("Mailpit SMTP", self.mailpit_smtp_port));
-            ports.push(("Mailpit web", self.mailpit_web_port));
-        }
-        if self.meilisearch_enabled {
-            ports.push(("Meilisearch", self.meilisearch_port));
-        }
-        ports
+    pub fn enabled(&self, key: &str) -> bool {
+        self.services.get(key).is_some_and(|config| config.enabled)
+    }
+
+    pub fn set_enabled(&mut self, key: &str, enabled: bool) {
+        self.services.entry(key.to_string()).or_default().enabled = enabled;
+    }
+
+    /// The saved port for `role`, or `default` when none is saved.
+    pub fn port(&self, key: &str, role: &str, default: u16) -> u16 {
+        self.services
+            .get(key)
+            .and_then(|config| config.ports.get(role).copied())
+            .unwrap_or(default)
+    }
+
+    pub fn set_port(&mut self, key: &str, role: &str, port: u16) {
+        self.services
+            .entry(key.to_string())
+            .or_default()
+            .ports
+            .insert(role.to_string(), port);
+    }
+
+    pub fn custom(&self, id: &str) -> Option<&CustomAddon> {
+        self.custom.iter().find(|addon| addon.id == id)
     }
 }
 
@@ -132,6 +256,8 @@ impl Default for AppSettings {
             agent_connector_read_only: false,
             agent_connector_port: default_agent_connector_port(),
             addons: AddonSettings::default(),
+            xdebug: XdebugSettings::default(),
+            workers: Vec::new(),
         }
     }
 }
@@ -253,17 +379,20 @@ impl AppSettings {
 
         // Check for duplicate ports across services. Zero ports are handled by the
         // ">0" check above, so ignore them here to avoid duplicate/confusing errors.
-        let mut labeled_ports = vec![
+        let mut labeled_ports: Vec<(String, u16)> = [
             ("HTTP/Web", self.web_port),
             ("PHP-FPM", self.php_port),
             ("MySQL", self.mysql_port),
             ("PostgreSQL", self.postgresql_port),
             ("HTTPS", self.https_port),
-        ];
+        ]
+        .into_iter()
+        .map(|(label, port)| (label.to_string(), port))
+        .collect();
         if self.agent_connector_enabled {
-            labeled_ports.push(("AI agent connector", self.agent_connector_port));
+            labeled_ports.push(("AI agent connector".to_string(), self.agent_connector_port));
         }
-        let addon_ports = self.addons.enabled_ports();
+        let addon_ports = crate::addons::enabled_ports(&self.addons);
         if addon_ports.iter().any(|(_, port)| *port == 0) {
             errors.push("Add-on port numbers must be greater than 0".to_string());
         }
@@ -271,9 +400,9 @@ impl AppSettings {
         // Compare each unique pair once, in a stable, deterministic order.
         for i in 0..labeled_ports.len() {
             for j in (i + 1)..labeled_ports.len() {
-                let (label_a, port_a) = labeled_ports[i];
-                let (label_b, port_b) = labeled_ports[j];
-                if port_a != 0 && port_a == port_b {
+                let (label_a, port_a) = &labeled_ports[i];
+                let (label_b, port_b) = &labeled_ports[j];
+                if *port_a != 0 && port_a == port_b {
                     errors.push(format!(
                         "Ports must be unique: {} and {} are both set to {}",
                         label_a, label_b, port_a
@@ -355,13 +484,13 @@ mod tests {
     #[test]
     fn validate_rejects_a_zero_port_for_an_enabled_addon() {
         let mut settings = AppSettings::default();
-        settings.addons.redis_port = 0;
+        settings.addons.set_port("redis", "main", 0);
         assert!(
             settings.validate().is_ok(),
             "disabled add-ons are not checked"
         );
 
-        settings.addons.redis_enabled = true;
+        settings.addons.set_enabled("redis", true);
         let errors = settings.validate().unwrap_err();
         assert!(
             errors.iter().any(|e| e.contains("Add-on port")),

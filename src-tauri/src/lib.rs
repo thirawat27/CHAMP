@@ -5,6 +5,7 @@ mod commands;
 mod config;
 mod constants;
 mod doctor;
+mod envprofile;
 mod fs_util;
 mod logs;
 mod metrics;
@@ -12,6 +13,7 @@ mod process;
 mod projects;
 mod runtime;
 mod tunnel;
+mod xdebug;
 
 // Re-exports
 pub use config::AppSettings;
@@ -152,6 +154,17 @@ pub fn run() {
             addons::start_addon,
             addons::stop_addon,
             addons::configure_addon,
+            addons::save_custom_addon,
+            addons::remove_custom_addon,
+            envprofile::get_env_profiles,
+            commands::folders::get_project_info,
+            xdebug::get_xdebug_status,
+            xdebug::set_xdebug,
+            addons::workers::get_workers,
+            addons::workers::save_worker,
+            addons::workers::remove_worker,
+            addons::workers::start_worker,
+            addons::workers::stop_worker,
             addons::get_mailpit_message_count,
             // Log Doctor
             doctor::diagnose_service,

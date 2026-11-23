@@ -326,10 +326,7 @@ export const GUIDE_SECTIONS: GuideSection[] = [
       {
         kind: "steps",
         items: [
-          l(
-            "เปิด Settings → เวอร์ชัน PHP แล้วเลือกเวอร์ชัน",
-            "Open Settings → PHP versions and choose a version."
-          ),
+          l("เปิด Settings → PHP แล้วเลือกเวอร์ชัน", "Open Settings → PHP and choose a version."),
           l(
             "กด ติดตั้งที่เลือก (การติดตั้งไม่เปลี่ยน PHP ที่ใช้อยู่)",
             "Press Install selected (installing does not change the active PHP)."
@@ -352,6 +349,38 @@ export const GUIDE_SECTIONS: GuideSection[] = [
         text: l(
           "php.ini ถูกสร้างใหม่ทุกครั้งที่เริ่ม PHP (memory_limit 256M, upload 100M, max_execution_time 300) ถ้าต้องการค่าอื่นเฉพาะสคริปต์ ให้ใช้ `ini_set()` ในโค้ด หรือรัน `php -d memory_limit=-1 script.php` ใน Terminal",
           "php.ini is regenerated every time PHP starts (memory_limit 256M, uploads 100M, max_execution_time 300). For other values in one script use `ini_set()`, or run `php -d memory_limit=-1 script.php` in the terminal."
+        ),
+      },
+      {
+        kind: "steps",
+        items: [
+          l(
+            "ดีบักทีละขั้นด้วย Xdebug (Windows): ดูเวอร์ชันและชนิด TS/NTS ของ PHP ด้วยคำสั่ง `php -v` ใน Terminal (`Ctrl T`)",
+            "Step debugging with Xdebug (Windows): check the PHP version and TS/NTS build with `php -v` in the terminal (`Ctrl T`)."
+          ),
+          l(
+            "ดาวน์โหลดไฟล์ DLL ที่ตรงกันจาก xdebug.org/download (เวอร์ชัน PHP, TS หรือ NTS, x64) แล้ววางในโฟลเดอร์ ext ที่แสดงใน Settings → PHP",
+            "Download the matching DLL from xdebug.org/download (PHP version, TS or NTS, x64) and put it in the ext folder shown in Settings → PHP."
+          ),
+          l(
+            "เปิด Settings → PHP → Xdebug (บันทึกทันที CHAMP รีสตาร์ท PHP ให้)",
+            "Turn on Settings → PHP → Xdebug (saved at once; CHAMP restarts PHP)."
+          ),
+          l(
+            "ใน VS Code ติดตั้งส่วนขยาย PHP Debug แล้วกด Run → Start Debugging (Listen for Xdebug, พอร์ต 9003) ตั้ง breakpoint ในโค้ด",
+            "In VS Code install the PHP Debug extension, then Run → Start Debugging (Listen for Xdebug, port 9003) and set a breakpoint."
+          ),
+          l(
+            "เปิดหน้าเว็บโดยเติม `?XDEBUG_TRIGGER=1` ท้าย URL (หรือใช้ส่วนขยายเบราว์เซอร์ Xdebug Helper) โค้ดจะหยุดที่ breakpoint สำหรับคำสั่ง CLI ใช้ `set XDEBUG_TRIGGER=1` ก่อนรัน",
+            "Open the page with `?XDEBUG_TRIGGER=1` at the end of the URL (or use the Xdebug Helper browser extension) and it stops at the breakpoint. For CLI commands run `set XDEBUG_TRIGGER=1` first."
+          ),
+        ],
+      },
+      {
+        kind: "warning",
+        text: l(
+          "PHP ของ CHAMP บน macOS/Linux เป็นแบบ static จึงโหลด Xdebug ไม่ได้ ปิด Xdebug เมื่อไม่ใช้ เพื่อให้หน้าเว็บเร็วเหมือนเดิม",
+          "CHAMP's PHP on macOS/Linux is a static build and cannot load Xdebug. Turn Xdebug off when you are not debugging so pages stay fast."
         ),
       },
     ],
@@ -439,19 +468,19 @@ export const GUIDE_SECTIONS: GuideSection[] = [
     id: "addons",
     icon: Boxes,
     title: l(
-      "บริการเสริม: Redis, Mailpit, Meilisearch",
-      "Add-on services: Redis, Mailpit, Meilisearch"
+      "บริการเสริม ค่าตั้งค่าโปรเจกต์ และงานเบื้องหลัง",
+      "Add-on services, project configuration, and background tasks"
     ),
     summary: l(
-      "แคช คิว กล่องดักอีเมลสำหรับทดสอบ และระบบค้นหา",
-      "Cache, queues, a mail catcher for testing, and search"
+      "แคช คิว ดักอีเมล ค้นหา เรียลไทม์ ที่เก็บไฟล์ S3 บริการของคุณเอง และ queue worker ใช้ได้ทุกเฟรมเวิร์ก",
+      "Cache, queues, mail catcher, search, realtime, S3 storage, your own services, and queue workers for any framework"
     ),
     blocks: [
       {
         kind: "p",
         text: l(
-          "บริการเสริมเป็นตัวเลือก ไม่ติดตั้งมาให้ตั้งแต่แรก จัดการได้จาก Settings → บริการเสริม หรือหน้าต่างบริการเสริม (บริการเสริม ในแถบทางลัด หรือกด `Ctrl E`) การเปลี่ยนแปลงบันทึกทันทีโดยไม่ต้องกด บันทึก ทุกตัวรับการเชื่อมต่อจากเครื่องนี้ (127.0.0.1) เท่านั้น",
-          "Add-ons are optional and not installed up front. Manage them in Settings → Add-on services or in the Add-on services window (Add-ons in the shortcuts rail, or `Ctrl E`). Changes are saved at once, without Save. Every add-on accepts connections from this computer (127.0.0.1) only."
+          "บริการเสริมเป็นตัวเลือก ไม่ติดตั้งมาให้ตั้งแต่แรก เปิดหน้าต่างบริการเสริมด้วย `Ctrl E` (หรือ บริการเสริม ในแถบทางลัด) หน้าต่างมี 3 แท็บ: บริการ (การ์ดของแต่ละบริการ พร้อมสวิตช์ เริ่มพร้อมสแต็ก และการ์ด เพิ่มบริการ), ค่าตั้งค่าสำหรับโปรเจกต์ และ งานเบื้องหลังของโปรเจกต์ CHAMP จำแท็บล่าสุดไว้ให้ การเปลี่ยนแปลงบันทึกทันทีโดยไม่ต้องกด บันทึก ทุกตัวรับการเชื่อมต่อจากเครื่องนี้ (127.0.0.1) เท่านั้น",
+          "Add-ons are optional and not installed up front. Open the Add-on services window with `Ctrl E` (or Add-ons in the shortcuts rail). It has three tabs: Services (a card per service with a Start with the stack switch, plus an Add service card), Project configuration, and Project background tasks. CHAMP remembers the last tab. Changes are saved at once, without Save. Every add-on accepts connections from this computer (127.0.0.1) only."
         ),
       },
       {
@@ -479,6 +508,22 @@ export const GUIDE_SECTIONS: GuideSection[] = [
             ),
             "7700",
           ],
+          [
+            "Centrifugo",
+            l(
+              "เรียลไทม์ผ่าน WebSocket (แจ้งเตือนสด แชต) โหมดพัฒนาไม่ต้องใช้ token มีหน้าผู้ดูแลบนเว็บ",
+              "Realtime over WebSocket (live updates, chat); development mode needs no tokens, with an admin web UI"
+            ),
+            "8000",
+          ],
+          [
+            "RustFS (S3)",
+            l(
+              "ที่เก็บไฟล์แบบ S3 สำหรับอัปโหลดไฟล์ เข้าคอนโซลด้วย rustfsadmin / rustfsadmin (ยังไม่มีรุ่นสำหรับ Mac Intel)",
+              "S3-compatible storage for uploads; console login rustfsadmin / rustfsadmin (no Intel Mac build)"
+            ),
+            l("API 9100, คอนโซล 9101", "API 9100, console 9101"),
+          ],
         ],
       },
       {
@@ -493,8 +538,8 @@ export const GUIDE_SECTIONS: GuideSection[] = [
             "Tick Start with the stack. Ticked add-ons start and stop with Start all / Stop all, or press Start to run one on its own."
           ),
           l(
-            "คัดลอกค่า .env ด้านล่างไปใส่ในโปรเจกต์",
-            "Copy the .env lines at the bottom into your project."
+            "ที่ ค่าตั้งค่าสำหรับโปรเจกต์ เลือกโปรเจกต์ CHAMP จะตรวจเฟรมเวิร์กให้ (Laravel, Symfony, WordPress, CodeIgniter, CakePHP, Slim, Yii และอื่นๆ) แล้วคัดลอกบรรทัดที่ได้ไปใส่ในไฟล์ที่บอกไว้ เลือกเฟรมเวิร์กอื่นได้ รวมถึงแบบ DSN ทั่วไป",
+            "Under Project configuration, pick a project. CHAMP detects its framework (Laravel, Symfony, WordPress, CodeIgniter, CakePHP, Slim, Yii, and more); copy the lines into the file shown. You can pick another framework, including a generic DSN form."
           ),
           l(
             "สำหรับ Mailpit กด เปิดกล่องจดหมาย (หรือ `Ctrl M`) เพื่อดูอีเมลที่จับได้",
@@ -508,14 +553,31 @@ export const GUIDE_SECTIONS: GuideSection[] = [
       },
       {
         kind: "code",
-        label: l("ตัวอย่าง .env ของ Laravel", "Example Laravel .env"),
-        code: "REDIS_CLIENT=predis\nREDIS_HOST=127.0.0.1\nREDIS_PORT=6379\nCACHE_STORE=redis\nQUEUE_CONNECTION=redis\nMAIL_MAILER=smtp\nMAIL_HOST=127.0.0.1\nMAIL_PORT=1025\nSCOUT_DRIVER=meilisearch\nMEILISEARCH_HOST=http://127.0.0.1:7700\nMEILISEARCH_KEY=",
+        label: l(
+          "PHP ทั่วไป: ใช้ตัวแปรที่ CHAMP ตั้งให้ ไม่ต้องมี .env",
+          "Plain PHP: use the variables CHAMP sets, no .env needed"
+        ),
+        code: "$redisPort = getenv('CHAMP_REDIS_PORT');\n$s3 = getenv('CHAMP_S3_ENDPOINT');\n$api = getenv('CHAMP_CENTRIFUGO_API_URL');",
       },
       {
         kind: "tip",
         text: l(
-          "เมื่อเปิด Mailpit ฟังก์ชัน `mail()` ของ PHP จะส่งเข้า Mailpit อัตโนมัติ (CHAMP ตั้งค่า php.ini และรีสตาร์ท PHP ให้) Laravel ต้องติดตั้ง `predis/predis` หรือส่วนขยาย phpredis จึงจะใช้ Redis ได้ ส่วน Laravel Scout ต้องติดตั้ง `laravel/scout`, `meilisearch/meilisearch-php` และ `http-interop/http-factory-guzzle` (Meilisearch ทำงานโหมดพัฒนา ไม่ต้องใช้ master key)",
-          "With Mailpit on, PHP's `mail()` goes to Mailpit automatically (CHAMP sets php.ini and restarts PHP for you). Laravel needs `predis/predis` or the phpredis extension to use Redis. Laravel Scout needs `laravel/scout`, `meilisearch/meilisearch-php`, and `http-interop/http-factory-guzzle`; Meilisearch runs in development mode, without a master key."
+          "เมื่อเปิด Mailpit ฟังก์ชัน `mail()` ของ PHP จะส่งเข้า Mailpit อัตโนมัติ (CHAMP ตั้งค่า php.ini และรีสตาร์ท PHP ให้) แพ็กเกจที่เฟรมเวิร์กต้องติดตั้ง เช่น `predis/predis` หรือ `laravel/scout` จะแสดงใต้บรรทัดค่าตั้งค่า",
+          "With Mailpit on, PHP's `mail()` goes to Mailpit automatically (CHAMP sets php.ini and restarts PHP for you). Packages a framework needs, such as `predis/predis` or `laravel/scout`, are listed under the configuration lines."
+        ),
+      },
+      {
+        kind: "p",
+        text: l(
+          "บริการของคุณเอง: กด เพิ่มบริการ ใส่ตำแหน่งโปรแกรม พอร์ต และอาร์กิวเมนต์ (`{port}` และ `{data_dir}` จะถูกแทนที่) เช่น Valkey หรือ Redis เวอร์ชันอื่น CHAMP จะเปิด/ปิดพร้อมสแต็กและรอพอร์ตให้ แต่ไม่ดาวน์โหลดหรือตรวจสอบโปรแกรม จึงติดป้าย ผู้ใช้ดูแลเอง",
+          "Your own services: press Add service and enter the program path, port, and arguments (`{port}` and `{data_dir}` are filled in), for example Valkey or another Redis version. CHAMP starts and stops it with the stack and waits for its port, but never downloads or verifies the program, so it is labeled User-managed."
+        ),
+      },
+      {
+        kind: "p",
+        text: l(
+          "งานเบื้องหลังของโปรเจกต์: คำสั่ง PHP ที่ทำงานค้าง เช่น `artisan queue:work` หรือ `bin/console messenger:consume` รันด้วย PHP ของ CHAMP ในโฟลเดอร์โปรเจกต์ (คำแรกต้องเป็นไฟล์ในโปรเจกต์) เริ่มพร้อมสแต็กได้และหยุดพร้อมสแต็กเสมอ log อยู่ที่ `logs/worker-<id>.log`",
+          "Project background tasks: long-running PHP commands such as `artisan queue:work` or `bin/console messenger:consume`, run with CHAMP's PHP in the project folder (the first word must be a file in the project). They can start with the stack and always stop with it; logs go to `logs/worker-<id>.log`."
         ),
       },
       {
@@ -584,8 +646,8 @@ export const GUIDE_SECTIONS: GuideSection[] = [
       {
         kind: "p",
         text: l(
-          "CHAMP มี MCP server ในตัว เมื่อเปิด AI coding agent จะรู้พอร์ตฐานข้อมูล URL และโฟลเดอร์ของคุณ ได้บรรทัด .env พร้อมใช้ อ่าน log ใช้ Log Doctor สร้างฐานข้อมูล สั่งเปิด/ปิดบริการ และเปิด HTTPS Preview ได้เอง",
-          "CHAMP includes an MCP server. Once on, AI coding agents can learn your database ports, URLs, and folders, get ready-made .env lines, read logs, run Log Doctor, create databases, start or stop services, and open HTTPS Preview."
+          "CHAMP มี MCP server ในตัว เมื่อเปิด AI coding agent จะรู้พอร์ตฐานข้อมูล URL และโฟลเดอร์ ตรวจเฟรมเวิร์กของโปรเจกต์และได้ค่าตั้งค่าตามแบบของเฟรมเวิร์กนั้น ดูโครงสร้างตาราง อ่านอีเมลที่ Mailpit ดักไว้ (พร้อมลิงก์ยืนยัน) อ่าน log ใช้ Log Doctor สร้างฐานข้อมูล เปิด/ปิดบริการและบริการเสริม สลับเวอร์ชัน PHP เปิด Xdebug และเปิด HTTPS Preview ได้เอง และยังมี resources กับ prompts สำเร็จรูปให้ด้วย",
+          "CHAMP includes an MCP server. Once on, AI coding agents can learn your database ports, URLs, and folders, detect a project's framework and get configuration in its convention, inspect table structure, read mail Mailpit caught (with its verification links), read logs, run Log Doctor, create databases, start or stop services and add-ons, switch PHP versions, turn on Xdebug, and open HTTPS Preview. It also offers resources and ready-made prompts."
         ),
       },
       {
@@ -630,7 +692,60 @@ export const GUIDE_SECTIONS: GuideSection[] = [
               "Database credentials, URLs, folders, and versions"
             ),
           ],
-          ["list_projects", l("รายชื่อโปรเจกต์พร้อม URL", "Projects with their URLs")],
+          [
+            "list_projects",
+            l("รายชื่อโปรเจกต์พร้อม URL และเฟรมเวิร์ก", "Projects with their URLs and frameworks"),
+          ],
+          [
+            "get_project / get_env_profiles",
+            l(
+              "ตรวจเฟรมเวิร์ก เวอร์ชัน PHP ที่ต้องใช้ และให้ค่าตั้งค่าพร้อมใช้ (Laravel, Symfony, WordPress, CodeIgniter, CakePHP, DSN, getenv)",
+              "Detect the framework and required PHP, with ready configuration (Laravel, Symfony, WordPress, CodeIgniter, CakePHP, DSN, getenv)"
+            ),
+          ],
+          [
+            "list_tables / describe_table",
+            l("ดูตารางและคอลัมน์ (อ่านอย่างเดียว)", "Tables and columns (read-only)"),
+          ],
+          [
+            "get_addons / read_addon_log",
+            l("สถานะและ log ของบริการเสริม", "Add-on status and logs"),
+          ],
+          [
+            "list_mail / read_mail",
+            l(
+              "อ่านอีเมลที่ Mailpit ดักไว้ พร้อมลิงก์ในอีเมล",
+              "Read mail Mailpit caught, with the links inside"
+            ),
+          ],
+          [
+            "get_php_info / list_workers",
+            l(
+              "ส่วนขยายและค่า php.ini ของ PHP และงานเบื้องหลัง",
+              "PHP extensions and ini values, and background tasks"
+            ),
+          ],
+          [
+            "start/stop_addon, set_addon_enabled, switch_php_version, set_xdebug, start/stop_worker",
+            l(
+              "ควบคุมบริการเสริม PHP Xdebug และงานเบื้องหลังที่คุณสร้างไว้ (ปิดในโหมดอ่านอย่างเดียว)",
+              "Control add-ons, PHP, Xdebug, and the background tasks you defined (disabled in read-only mode)"
+            ),
+          ],
+          [
+            "get_settings / check_ports / list_php_versions / get_system_info",
+            l(
+              "ค่าที่บันทึกไว้ สถานะพอร์ต (ว่าง ใช้โดย CHAMP หรือโปรแกรมอื่นใช้อยู่) PHP ที่มี และข้อมูลเครื่อง",
+              "Saved settings, port state (free, used by CHAMP, or taken), available PHP, and system info"
+            ),
+          ],
+          [
+            "update_settings, install_php_version, switch_database_engine/tool, install_addon, set_addon_port",
+            l(
+              "ทำได้ทุกอย่างเหมือนหน้า Settings: เปลี่ยนพอร์ต ติดตั้ง PHP สลับฐานข้อมูลและเครื่องมือ ติดตั้งและย้ายพอร์ตบริการเสริม (ปิดในโหมดอ่านอย่างเดียว) ยกเว้นการสร้างบริการของคุณเอง งานเบื้องหลัง และ ngrok authtoken ที่ผู้ใช้ทำเอง",
+              "Everything the Settings window does: change ports, install PHP, switch database and tool, install and move add-ons (disabled in read-only mode). Custom add-ons, background tasks, and the ngrok authtoken stay with the user."
+            ),
+          ],
           ["read_logs", l("อ่าน log ล่าสุดของบริการ", "Recent log lines of a service")],
           ["diagnose_service", l("รัน Log Doctor", "Run Log Doctor")],
           [
@@ -709,19 +824,30 @@ export const GUIDE_SECTIONS: GuideSection[] = [
     summary: l("พอร์ต เครื่องมือ และพฤติกรรมของแอป", "Ports, tools, and app behaviour"),
     blocks: [
       {
+        kind: "p",
+        text: l(
+          "เปิดด้วย `Ctrl ,` เมนูด้านซ้ายแบ่งเป็นหมวด: ทั่วไป, พอร์ต, PHP, ฐานข้อมูล, บริการเสริม และ AI และ Log Doctor แต่ละครั้งแสดงทีละหมวดจึงไม่ต้องเลื่อนยาว CHAMP จำหมวดล่าสุดไว้ให้ ปุ่ม บันทึก ใช้กับค่าที่แก้ในทุกหมวด ส่วนบริการเสริม Xdebug และ AI Agent Connector บันทึกทันที",
+          "Open it with `Ctrl ,`. The menu on the left splits it into categories: General, Ports, PHP, Database, Add-on services, and AI and Log Doctor. Only one category shows at a time, so there is no long scrolling, and CHAMP remembers the last one. Save applies to changes in every category; add-ons, Xdebug, and the AI agent connector save at once."
+        ),
+      },
+      {
         kind: "list",
         items: [
           l(
-            "พอร์ต: เปลี่ยนพอร์ตของแต่ละบริการ กด ตรวจสอบพอร์ต เพื่อดูว่าว่างไหม พอร์ตต้องไม่ซ้ำกัน",
-            "Ports: change each service's port and use Check ports to see which are free. Ports must be unique."
+            "พอร์ต: เปลี่ยนพอร์ตของแต่ละบริการ กด ตรวจสอบพอร์ต เพื่อดูว่าว่างไหม พอร์ตต้องไม่ซ้ำกัน (ปุ่ม เปิด Settings ใน Log Doctor พามาที่หมวดนี้เลย)",
+            "Ports: change each service's port and use Check ports to see which are free. Ports must be unique. (Open Settings in Log Doctor lands here.)"
           ),
           l(
             "เวอร์ชัน PHP และเครื่องมือฐานข้อมูล: ดูหัวข้อ PHP และ ฐานข้อมูล",
             "PHP versions and database tool: see the PHP and Databases topics."
           ),
           l(
-            "บริการเสริม: ติดตั้ง เปิดใช้ และตั้งพอร์ตของ Redis, Mailpit และ Meilisearch บันทึกทันทีโดยไม่ต้องกด บันทึก ดูหัวข้อ บริการเสริม",
-            "Add-on services: install, enable, and set ports for Redis, Mailpit, and Meilisearch. Saved at once, without Save; see the Add-on services topic."
+            "บริการเสริม: ติดตั้ง เปิดใช้ และตั้งพอร์ตของ Redis, Mailpit, Meilisearch, Centrifugo, RustFS และบริการของคุณเอง บันทึกทันทีโดยไม่ต้องกด บันทึก ดูหัวข้อ บริการเสริม",
+            "Add-on services: install, enable, and set ports for Redis, Mailpit, Meilisearch, Centrifugo, RustFS, and your own services. Saved at once, without Save; see the Add-on services topic."
+          ),
+          l(
+            "Xdebug: เปิด/ปิดได้ที่ส่วน PHP (บันทึกทันที) ต้องมีไฟล์ Xdebug ที่ตรงกับ PHP ในโฟลเดอร์ ext ก่อน (Windows) PHP ของ CHAMP บน macOS/Linux โหลด Xdebug ไม่ได้",
+            "Xdebug: turn it on or off in the PHP section (saved at once). It needs the Xdebug file matching this PHP in its ext folder first (Windows); CHAMP's PHP on macOS/Linux cannot load Xdebug."
           ),
           l(
             "Log Doctor AI, AI Agent Connector และ อัปเดต: ดูหัวข้อของแต่ละส่วน",

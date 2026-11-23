@@ -130,6 +130,13 @@ realpath_cache_ttl=300
         session_path,
         session_path
     );
+    let xdebug = crate::config::AppSettings::load().xdebug;
+    let php_ini_content = php_ini_content
+        + &crate::xdebug::ini_lines(
+            crate::xdebug::find_extension(&ext_dir).as_deref(),
+            xdebug.enabled,
+            xdebug.client_port,
+        );
 
     let mut file = File::create(path).map_err(|e| format!("Failed to create php.ini: {}", e))?;
     file.write_all(php_ini_content.as_bytes())
@@ -140,7 +147,7 @@ realpath_cache_ttl=300
 
 /// `putenv` and `$_SERVER` lines for the enabled add-ons. Values are ports,
 /// hosts, and URLs CHAMP builds itself; they are still escaped for PHP.
-pub(super) fn php_env_pairs_block(pairs: &[(&str, String)]) -> String {
+pub(super) fn php_env_pairs_block(pairs: &[(String, String)]) -> String {
     let mut block = String::new();
     for (key, value) in pairs {
         let value = value.replace('\\', "\\\\").replace('\'', "\\'");

@@ -330,7 +330,6 @@ export interface Translations {
   addonMailpitPurpose: string;
   addonMeilisearchPurpose: string;
   addonOpenDashboard: string;
-  addonScoutNote: string;
   addonInstall: string;
   addonUpdate: string;
   addonInstalling: string;
@@ -343,7 +342,6 @@ export interface Translations {
   addonSystemInstallHint: string;
   addonSystemSource: string;
   addonEnvTitle: string;
-  addonEnvEmpty: string;
   addonCopyEnv: string;
   addonCopied: string;
   addonMailHint: string;
@@ -352,11 +350,53 @@ export interface Translations {
   addonPortInvalid: string;
   addonOpenLog: string;
   addonsNoneEnabled: string;
-  addonPredisNote: string;
   shortcutAddons: string;
   shortcutMailInbox: string;
   addonSettingsSavedAtOnce: string;
   addonOpenWindow: string;
+  addonCentrifugoPurpose: string;
+  addonRustfsPurpose: string;
+  addonRustfsHint: string;
+  addonOpenAdmin: string;
+  addonOpenConsole: string;
+  addonOpenPage: string;
+  addonCustomTitle: string;
+  addonCustomHelp: string;
+  addonCustomAdd: string;
+  addonCustomEdit: string;
+  addonCustomPurpose: string;
+  addonCustomMissing: string;
+  addonCustomWarning: string;
+  addonCustomId: string;
+  addonCustomName: string;
+  addonCustomCommand: string;
+  addonCustomArgs: string;
+  addonCustomArgsHelp: string;
+  addonCustomWeb: string;
+  envProject: string;
+  envWholeStack: string;
+  envFramework: string;
+  envRecommended: string;
+  envDetected: string;
+  envPlainPhp: string;
+  envNeedsComposer: string;
+  envTarget: string;
+  workersTitle: string;
+  addonsTabServices: string;
+  settingsGroupGeneral: string;
+  settingsGroupPorts: string;
+  settingsGroupDatabase: string;
+  settingsGroupAi: string;
+  workersHelp: string;
+  workerAdd: string;
+  workerEmpty: string;
+  workerRemove: string;
+  workerPickProject: string;
+  workerCommand: string;
+  workerCommandHelp: string;
+  xdebugToggle: string;
+  xdebugHelp: string;
+  xdebugUnavailable: string;
 }
 
 const th: Translations = {
@@ -695,14 +735,12 @@ const th: Translations = {
   // Footer / Status
   addonsTitle: "บริการเสริม",
   addonsDescription:
-    "แคช คิว กล่องดักอีเมลสำหรับทดสอบ และระบบค้นหา ทำงานเฉพาะในเครื่อง (127.0.0.1) ตัวที่เปิดใช้จะเริ่ม/หยุดพร้อมสแต็ก",
+    "แคช คิว กล่องดักอีเมลทดสอบ ระบบค้นหา เรียลไทม์ และที่เก็บไฟล์แบบ S3 ใช้ได้กับทุกเฟรมเวิร์ก ทำงานเฉพาะในเครื่อง (127.0.0.1) ตัวที่เปิดใช้จะเริ่ม/หยุดพร้อมสแต็ก",
   addonsShort: "บริการเสริม",
   addonRedisPurpose: "แคช คิว และเซสชัน",
   addonMailpitPurpose: "ดักอีเมลทดสอบ ไม่ส่งออกจริง",
   addonMeilisearchPurpose: "ค้นหาข้อความแบบเร็ว พิมพ์ผิดก็ยังเจอ",
   addonOpenDashboard: "เปิดหน้าทดลองค้นหา",
-  addonScoutNote:
-    "Laravel Scout ต้องติดตั้งแพ็กเกจ laravel/scout, meilisearch/meilisearch-php และ http-interop/http-factory-guzzle (Meilisearch ทำงานโหมดพัฒนา ไม่ต้องใช้ master key)",
   addonInstall: "ติดตั้ง",
   addonUpdate: "อัปเดตเป็น",
   addonInstalling: "กำลังติดตั้ง",
@@ -714,8 +752,7 @@ const th: Translations = {
   addonNotInstalled: "ยังไม่ได้ติดตั้ง",
   addonSystemInstallHint: "CHAMP ดาวน์โหลดตัวนี้ให้ระบบนี้ไม่ได้ ติดตั้งด้วยคำสั่ง:",
   addonSystemSource: "ใช้ตัวที่ติดตั้งในระบบ",
-  addonEnvTitle: "ค่า .env สำหรับโปรเจกต์ (Laravel)",
-  addonEnvEmpty: "เปิดใช้บริการเสริมอย่างน้อยหนึ่งตัวเพื่อดูค่า .env",
+  addonEnvTitle: "ค่าตั้งค่าสำหรับโปรเจกต์",
   addonCopyEnv: "คัดลอก",
   addonCopied: "คัดลอกแล้ว",
   addonMailHint: "เมื่อเปิด Mailpit ฟังก์ชัน mail() ของ PHP จะส่งเข้า Mailpit อัตโนมัติ",
@@ -723,13 +760,62 @@ const th: Translations = {
   addonManage: "จัดการ",
   addonPortInvalid: "ใช้พอร์ต 1024 ถึง 65535",
   addonOpenLog: "เปิดโฟลเดอร์ log",
-  addonsNoneEnabled: "Redis · Mailpit · Meilisearch ยังไม่ได้เปิดใช้",
-  addonPredisNote:
-    "Laravel ต้องติดตั้งแพ็กเกจ predis/predis (composer require predis/predis) หรือส่วนขยาย phpredis",
-  shortcutAddons: "บริการเสริม (Redis, Mailpit, Meilisearch)",
+  addonsNoneEnabled: "ยังไม่ได้เปิดใช้บริการเสริม",
+  shortcutAddons: "บริการเสริม ค่าตั้งค่าโปรเจกต์ และงานเบื้องหลัง",
   shortcutMailInbox: "เปิดกล่องจดหมาย Mailpit",
   addonSettingsSavedAtOnce: "การเปลี่ยนแปลงในส่วนนี้บันทึกทันที ไม่ต้องกด บันทึก",
-  addonOpenWindow: "เปิดหน้าต่างบริการเสริม (ค่า .env)",
+  addonOpenWindow: "เปิดหน้าต่างบริการเสริม (ค่าตั้งค่าและงานเบื้องหลัง)",
+  addonCentrifugoPurpose: "เรียลไทม์ผ่าน WebSocket แจ้งเตือนสด แชต",
+  addonRustfsPurpose: "ที่เก็บไฟล์แบบ S3 สำหรับอัปโหลดไฟล์",
+  addonRustfsHint:
+    "เข้าคอนโซลด้วย rustfsadmin / rustfsadmin แล้วสร้าง bucket ก่อนใช้งาน (ใช้ได้เฉพาะในเครื่อง)",
+  addonOpenAdmin: "เปิดหน้าผู้ดูแล",
+  addonOpenConsole: "เปิดคอนโซล",
+  addonOpenPage: "เปิดหน้าเว็บ",
+  addonCustomTitle: "บริการของคุณเอง",
+  addonCustomHelp:
+    "เพิ่มบริการที่ใช้โปรแกรมของคุณเอง เช่น Valkey หรือ Redis เวอร์ชันอื่น CHAMP จะเปิด/ปิดพร้อมสแต็กและรอพอร์ตให้",
+  addonCustomAdd: "เพิ่มบริการ",
+  addonCustomEdit: "แก้ไข",
+  addonCustomPurpose: "ผู้ใช้ดูแลเอง",
+  addonCustomMissing: "ไม่พบโปรแกรม",
+  addonCustomWarning:
+    "CHAMP ไม่ได้ดาวน์โหลดหรือตรวจสอบโปรแกรมนี้ ใช้เฉพาะโปรแกรมที่คุณเชื่อถือ และตั้งให้ฟังที่ 127.0.0.1",
+  addonCustomId: "รหัส (a-z, 0-9, -)",
+  addonCustomName: "ชื่อ",
+  addonCustomCommand: "ตำแหน่งโปรแกรม (เต็ม)",
+  addonCustomArgs: "อาร์กิวเมนต์",
+  addonCustomArgsHelp:
+    "{port} และ {data_dir} จะถูกแทนที่ตอนเริ่ม ใช้เครื่องหมายคำพูดครอบคำที่มีช่องว่าง",
+  addonCustomWeb: "พอร์ตนี้เปิดหน้าเว็บได้",
+  envProject: "โปรเจกต์",
+  envWholeStack: "ทั้งสแต็ก (ไม่ระบุโปรเจกต์)",
+  envFramework: "เฟรมเวิร์ก",
+  envRecommended: "แนะนำ",
+  envDetected: "ตรวจพบ:",
+  envPlainPhp: "PHP ทั่วไป (ไม่พบเฟรมเวิร์ก)",
+  envNeedsComposer: "ยังไม่ได้รัน composer install",
+  envTarget: "ใส่ใน",
+  workersTitle: "งานเบื้องหลังของโปรเจกต์",
+  addonsTabServices: "บริการ",
+  settingsGroupGeneral: "ทั่วไป",
+  settingsGroupPorts: "พอร์ต",
+  settingsGroupDatabase: "ฐานข้อมูล",
+  settingsGroupAi: "AI และ Log Doctor",
+  workersHelp:
+    "คำสั่ง PHP ที่ทำงานค้างไว้ เช่น queue worker รันด้วย PHP ของ CHAMP ในโฟลเดอร์โปรเจกต์ และหยุดพร้อมสแต็ก",
+  workerAdd: "เพิ่มงาน",
+  workerEmpty: "ยังไม่มีงานเบื้องหลัง",
+  workerRemove: "ลบ",
+  workerPickProject: "เลือกโปรเจกต์",
+  workerCommand: "คำสั่งต่อจาก php",
+  workerCommandHelp:
+    "คำแรกต้องเป็นไฟล์ในโปรเจกต์ เช่น artisan queue:work หรือ bin/console messenger:consume",
+  xdebugToggle: "เปิด Xdebug (ดีบักทีละขั้น)",
+  xdebugHelp:
+    "เชื่อมต่อเฉพาะเมื่อเรียกด้วย XDEBUG_TRIGGER หรือส่วนขยายเบราว์เซอร์ ให้ IDE ฟังที่พอร์ต {port}",
+  xdebugUnavailable:
+    "ยังไม่มี Xdebug: ดาวน์โหลดไฟล์ที่ตรงกับ PHP ตัวนี้ (เวอร์ชัน, TS/NTS, x64) จาก xdebug.org/download แล้ววางในโฟลเดอร์นี้ (PHP ของ CHAMP บน macOS/Linux โหลด Xdebug ไม่ได้)",
 };
 
 const en: Translations = {
@@ -1072,14 +1158,12 @@ const en: Translations = {
   // Footer / Status
   addonsTitle: "Add-on services",
   addonsDescription:
-    "Cache, queue, a mail catcher for testing, and search. Local only (127.0.0.1). Enabled add-ons start and stop with the stack.",
+    "Cache, queues, a test mail catcher, search, realtime, and S3 storage for any framework. Local only (127.0.0.1). Enabled add-ons start and stop with the stack.",
   addonsShort: "Add-ons",
   addonRedisPurpose: "Cache, queues, and sessions",
   addonMailpitPurpose: "Catches test mail; nothing is really sent",
   addonMeilisearchPurpose: "Fast, typo-tolerant search",
   addonOpenDashboard: "Open search preview",
-  addonScoutNote:
-    "Laravel Scout needs the laravel/scout, meilisearch/meilisearch-php, and http-interop/http-factory-guzzle packages (Meilisearch runs in development mode, without a master key)",
   addonInstall: "Install",
   addonUpdate: "Update to",
   addonInstalling: "Installing",
@@ -1091,8 +1175,7 @@ const en: Translations = {
   addonNotInstalled: "Not installed",
   addonSystemInstallHint: "CHAMP cannot download this one for your system. Install it with:",
   addonSystemSource: "Using the system install",
-  addonEnvTitle: "Project .env lines (Laravel)",
-  addonEnvEmpty: "Enable an add-on to see its .env lines",
+  addonEnvTitle: "Project configuration",
   addonCopyEnv: "Copy",
   addonCopied: "Copied",
   addonMailHint: "With Mailpit on, PHP's mail() is delivered to Mailpit automatically",
@@ -1100,13 +1183,62 @@ const en: Translations = {
   addonManage: "Manage",
   addonPortInvalid: "Use a port from 1024 to 65535",
   addonOpenLog: "Open logs folder",
-  addonsNoneEnabled: "Redis · Mailpit · Meilisearch are off",
-  addonPredisNote:
-    "Laravel needs the predis/predis package (composer require predis/predis) or the phpredis extension",
-  shortcutAddons: "Add-on services (Redis, Mailpit, Meilisearch)",
+  addonsNoneEnabled: "No add-on is on",
+  shortcutAddons: "Add-on services, project configuration, and background tasks",
   shortcutMailInbox: "Open the Mailpit inbox",
   addonSettingsSavedAtOnce: "Changes here are saved at once; Save is not needed.",
-  addonOpenWindow: "Open Add-on services (.env lines)",
+  addonOpenWindow: "Open Add-on services (configuration and background tasks)",
+  addonCentrifugoPurpose: "Realtime over WebSocket: live updates, notifications, chat",
+  addonRustfsPurpose: "S3-compatible storage for file uploads",
+  addonRustfsHint:
+    "Sign in to the console with rustfsadmin / rustfsadmin and create a bucket first (local only).",
+  addonOpenAdmin: "Open admin",
+  addonOpenConsole: "Open console",
+  addonOpenPage: "Open page",
+  addonCustomTitle: "Your own services",
+  addonCustomHelp:
+    "Add a service that runs from your own program, such as Valkey or another Redis version. CHAMP starts and stops it with the stack and waits for its port.",
+  addonCustomAdd: "Add service",
+  addonCustomEdit: "Edit",
+  addonCustomPurpose: "User-managed",
+  addonCustomMissing: "Program not found",
+  addonCustomWarning:
+    "CHAMP does not download or verify this program. Use only programs you trust, and make them listen on 127.0.0.1.",
+  addonCustomId: "Id (a-z, 0-9, -)",
+  addonCustomName: "Name",
+  addonCustomCommand: "Program (full path)",
+  addonCustomArgs: "Arguments",
+  addonCustomArgsHelp:
+    "{port} and {data_dir} are filled in at start. Quote words that contain spaces.",
+  addonCustomWeb: "This port serves a web page",
+  envProject: "Project",
+  envWholeStack: "Whole stack (no project)",
+  envFramework: "Framework",
+  envRecommended: "recommended",
+  envDetected: "Detected:",
+  envPlainPhp: "Plain PHP (no framework found)",
+  envNeedsComposer: "composer install has not run yet",
+  envTarget: "Put in",
+  workersTitle: "Project background tasks",
+  addonsTabServices: "Services",
+  settingsGroupGeneral: "General",
+  settingsGroupPorts: "Ports",
+  settingsGroupDatabase: "Database",
+  settingsGroupAi: "AI and Log Doctor",
+  workersHelp:
+    "Long-running PHP commands such as queue workers. They run with CHAMP's PHP in the project folder and stop with the stack.",
+  workerAdd: "Add task",
+  workerEmpty: "No background tasks yet",
+  workerRemove: "Remove",
+  workerPickProject: "Choose a project",
+  workerCommand: "Command after php",
+  workerCommandHelp:
+    "The first word must be a file in the project, for example artisan queue:work or bin/console messenger:consume",
+  xdebugToggle: "Xdebug (step debugging)",
+  xdebugHelp:
+    "Connects only when a request asks (XDEBUG_TRIGGER or the browser extension). Have your IDE listen on port {port}.",
+  xdebugUnavailable:
+    "No Xdebug yet: download the file matching this PHP (version, TS/NTS, x64) from xdebug.org/download and put it in this folder (CHAMP's PHP on macOS/Linux cannot load Xdebug)",
 };
 
 export const translations: Record<Language, Translations> = { th, en };

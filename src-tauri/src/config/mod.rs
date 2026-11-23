@@ -2,7 +2,7 @@ pub mod ports;
 pub mod settings;
 
 pub use ports::is_port_available;
-pub use settings::{AddonSettings, AppSettings, DEFAULT_PORTS};
+pub use settings::{AddonSettings, AppSettings, CustomAddon, ProjectWorker, DEFAULT_PORTS};
 
 #[cfg(test)]
 mod tests {

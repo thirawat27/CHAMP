@@ -1,7 +1,13 @@
 import { invoke } from "@tauri-apps/api/core";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { STATUS_POLL_INTERVAL_MS } from "../constants";
-import { AddonChange, AddonInstallProgress, AddonKind, AddonStatus } from "../types/addons";
+import {
+  AddonChange,
+  AddonInstallProgress,
+  AddonKind,
+  AddonStatus,
+  CustomAddon,
+} from "../types/addons";
 import { ServiceState } from "../types/services";
 import { listenIfTauri } from "../utils/tauri";
 
@@ -19,6 +25,8 @@ export interface AddonsController {
   start: (kind: AddonKind) => Promise<boolean>;
   stop: (kind: AddonKind) => Promise<boolean>;
   configure: (kind: AddonKind, change: AddonChange) => Promise<boolean>;
+  saveCustom: (addon: CustomAddon) => Promise<boolean>;
+  removeCustom: (id: string) => Promise<boolean>;
 }
 
 const isTransitional = (state: ServiceState) =>
@@ -148,6 +156,16 @@ export function useAddons(): AddonsController {
     [run]
   );
 
+  const saveCustom = useCallback(
+    (addon: CustomAddon) =>
+      run(addon.id, () => invoke<AddonStatus[]>("save_custom_addon", { addon })),
+    [run]
+  );
+  const removeCustom = useCallback(
+    (id: string) => run(id, () => invoke<AddonStatus[]>("remove_custom_addon", { id })),
+    [run]
+  );
+
   const clearError = useCallback(() => setError(null), []);
 
   return {
@@ -163,5 +181,7 @@ export function useAddons(): AddonsController {
     start,
     stop,
     configure,
+    saveCustom,
+    removeCustom,
   };
 }
