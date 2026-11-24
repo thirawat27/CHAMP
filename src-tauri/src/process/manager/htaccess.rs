@@ -363,11 +363,32 @@ pub(super) fn caddy_path_matcher_line(prefix: &str) -> Option<String> {
     }
 }
 
+/// `value` as one Caddyfile token, quoted only when bare it would read as
+/// something else (checked against Caddy 2.11's lexer): whitespace splits it,
+/// a leading `#` starts a comment, `<<` a heredoc, `"` or `` ` `` a quoted
+/// token, a lone `{` or `}` opens or closes a block, and a trailing `\`
+/// escapes the line break.
+///
+/// Inside double quotes only `\"` is an escape and every other backslash is
+/// literal, so backslashes are never doubled. A value that ends in `\` or
+/// holds `\"` cannot be written there and goes in backticks, which are fully
+/// literal. URL paths never hold both a backtick and such a backslash; for a
+/// hand-edited `.htaccess` that does, the double-quoted form is the best left.
 pub(super) fn caddy_token(value: &str) -> String {
-    if value.chars().any(char::is_whitespace) {
-        format!("\"{}\"", value.replace('\\', "\\\\").replace('"', "\\\""))
-    } else {
+    let ends_with_backslash = value.ends_with('\\');
+    let bare = !value.is_empty()
+        && !value.chars().any(char::is_whitespace)
+        && !value.starts_with(['#', '"', '`'])
+        && !value.starts_with("<<")
+        && value != "{"
+        && value != "}"
+        && !ends_with_backslash;
+    if bare {
         value.to_string()
+    } else if (ends_with_backslash || value.contains("\\\"")) && !value.contains('`') {
+        format!("`{value}`")
+    } else {
+        format!("\"{}\"", value.replace('"', "\\\""))
     }
 }
 
@@ -572,6 +593,38 @@ pub(super) fn append_htaccess_no_browse_rules(
         content.push_str("    }\n");
         content.push_str(&format!("    respond @{} 403\n", matcher));
         content.push('\n');
+    }
+}
+
+#[cfg(test)]
+mod caddy_token_tests {
+    use super::caddy_token;
+
+    #[test]
+    fn plain_paths_stay_bare() {
+        for value in ["/index.php", "/a\"b", "/a\\b", "/a\\\"b", "/a{b", "/{path}"] {
+            assert_eq!(caddy_token(value), value);
+        }
+    }
+
+    #[test]
+    fn tokens_caddy_would_misread_are_quoted() {
+        // Expected forms are the ones `caddy adapt` 2.11 reads back as `value`.
+        for (value, expected) in [
+            ("/a b", "\"/a b\""),
+            ("/a\\b c", "\"/a\\b c\""),
+            ("/a\"b c", "\"/a\\\"b c\""),
+            ("#x", "\"#x\""),
+            ("<<x", "\"<<x\""),
+            ("\"x", "\"\\\"x\""),
+            ("}", "\"}\""),
+            ("{", "\"{\""),
+            ("", "\"\""),
+            ("/end\\", "`/end\\`"),
+            ("/a\\\"b c", "`/a\\\"b c`"),
+        ] {
+            assert_eq!(caddy_token(value), expected, "{value:?}");
+        }
     }
 }
 

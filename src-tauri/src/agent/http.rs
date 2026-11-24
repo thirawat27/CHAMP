@@ -37,6 +37,9 @@ pub(super) const BIND_RETRY_ATTEMPTS: usize = 10;
 
 pub(super) const BIND_RETRY_DELAY: Duration = Duration::from_millis(100);
 
+/// Pause after a failed `accept` before trying again.
+const ACCEPT_ERROR_BACKOFF: Duration = Duration::from_millis(100);
+
 /// Reject browser-originated and unauthenticated requests.
 pub(super) fn check_headers(
     headers: &HeaderMap,
@@ -138,7 +141,14 @@ pub(super) async fn accept_loop(
             _ = cancel.cancelled() => break,
             accepted = listener.accept() => match accepted {
                 Ok((stream, _)) => stream,
-                Err(_) => continue,
+                // Errors such as running out of file handles repeat at once;
+                // retrying immediately would spin a core until they clear.
+                Err(_) => {
+                    tokio::select! {
+                        _ = cancel.cancelled() => break,
+                        _ = tokio::time::sleep(ACCEPT_ERROR_BACKOFF) => continue,
+                    }
+                }
             },
         };
 
