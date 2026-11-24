@@ -3,6 +3,37 @@
 All notable changes to CHAMP. Versions follow [Semantic Versioning](https://semver.org/);
 the format follows [Keep a Changelog](https://keepachangelog.com/).
 
+## [2.1.2] - 2026-11-24
+
+Reliability fixes for the web server configuration, service control, and add-on
+installs, plus dependency security updates.
+
+### Fixed
+
+- **Caddyfile broke on some `.htaccess` paths and rules.** Quoted values gained an
+  extra backslash, and values starting with `#`, `<<`, a quote or backtick, a lone
+  `{` or `}`, or ending in `\` were misread by Caddy (a trailing `\` could stop the
+  web server from starting). These values are now quoted the way Caddy reads them.
+- **Start and stop could stop working until a restart.** After one internal error,
+  starting or stopping services, ngrok tunnels, and the shutdown that stops MySQL,
+  PHP, Caddy, and ngrok could fail every time. CHAMP now recovers and carries on.
+- **Add-on file permissions.** Installing an add-on no longer marks every file as
+  executable (for example phpMyAdmin's `.php` files). Executable files are now set
+  the same way for `.tar.gz` and `.tar.xz` downloads, and a failed install (for
+  example a full disk) is reported instead of leaving a broken add-on.
+- **Busy or hidden window.** The add-on and background task lists no longer send
+  overlapping requests while CHAMP is busy, and they pause while the window is
+  hidden.
+- **AI agent connector under load.** When the connector could not accept new
+  connections (for example when the system ran out of file handles), it retried
+  non-stop and kept a CPU core busy. It now waits briefly between tries.
+- The "Copied" notice no longer stays stuck after copying twice or closing a page.
+
+### Security
+
+- Updated frontend and Rust dependencies, including fixes for RUSTSEC-2026-0592
+  (`url`) and RUSTSEC-2026-0594 (`cookie`).
+
 ## [2.1.1] - 2026-11-23
 
 Fixes for project domains (`http://<folder>.localhost`) and the start page at
@@ -178,6 +209,7 @@ self-updates.
 
 - 2.0.0 has no macOS installers (the macOS build failed). Fixed in 2.1.0.
 
+[2.1.2]: https://github.com/thirawat27/CHAMP/compare/v2.1.1...v2.1.2
 [2.1.1]: https://github.com/thirawat27/CHAMP/compare/v2.1.0...v2.1.1
 [2.1.0]: https://github.com/thirawat27/CHAMP/compare/v2.0.0...v2.1.0
 [2.0.0]: https://github.com/thirawat27/CHAMP/compare/v1.3.0...v2.0.0
