@@ -4,7 +4,7 @@ use super::catalog::{AddonDownload, ArchiveFormat};
 use super::AddonKind;
 use sha2::{Digest, Sha256};
 use std::fs::{self, File};
-use std::io::{self, BufReader, Write};
+use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::time::{Duration, SystemTime};
 
@@ -256,8 +256,9 @@ pub(super) fn unpack_into_staging(
     fs::create_dir_all(staging).map_err(|e| format!("Failed to create install folder: {}", e))?;
     let binary_path = staging.join(relative_path(binary).ok_or("Invalid add-on binary path")?);
     match format {
-        ArchiveFormat::Zip => extract_zip(archive, staging)?,
-        ArchiveFormat::TarGz => extract_tar_gz(archive, staging)?,
+        // Only `binary` needs to run, and it is marked executable below.
+        ArchiveFormat::Zip => crate::archive::extract_zip(archive, staging, |_| false)?,
+        ArchiveFormat::TarGz => crate::archive::extract_tar_gz(archive, staging)?,
         ArchiveFormat::Binary => {
             if let Some(parent) = binary_path.parent() {
                 fs::create_dir_all(parent)
@@ -275,7 +276,7 @@ pub(super) fn unpack_into_staging(
             binary
         ));
     }
-    make_executable(&binary_path)?;
+    crate::archive::make_executable(&binary_path)?;
 
     // Written last: a folder without it is an interrupted install.
     fs::write(
@@ -325,60 +326,5 @@ pub(super) fn swap_in(staging: &Path, final_dir: &Path) -> Result<(), String> {
     if had_previous {
         let _ = fs::remove_dir_all(&backup);
     }
-    Ok(())
-}
-
-pub(super) fn extract_zip(archive_path: &Path, dest: &Path) -> Result<(), String> {
-    let file = File::open(archive_path).map_err(|e| format!("Failed to open archive: {}", e))?;
-    let mut archive = zip::ZipArchive::new(BufReader::new(file))
-        .map_err(|e| format!("Failed to read ZIP: {}", e))?;
-    for index in 0..archive.len() {
-        let mut entry = archive
-            .by_index(index)
-            .map_err(|e| format!("Failed to read ZIP entry: {}", e))?;
-        // `enclosed_name` rejects absolute paths and `..`, so nothing lands
-        // outside the install folder.
-        let Some(relative) = entry.enclosed_name() else {
-            return Err(format!(
-                "Unsafe path in archive: {}",
-                entry.name().unwrap_or_default()
-            ));
-        };
-        let out = dest.join(relative);
-        if entry.is_dir() {
-            fs::create_dir_all(&out).map_err(|e| format!("Failed to create folder: {}", e))?;
-            continue;
-        }
-        if let Some(parent) = out.parent() {
-            fs::create_dir_all(parent).map_err(|e| format!("Failed to create folder: {}", e))?;
-        }
-        let mut target = File::create(&out).map_err(|e| format!("Failed to create file: {}", e))?;
-        io::copy(&mut entry, &mut target).map_err(|e| format!("Failed to unpack file: {}", e))?;
-    }
-    Ok(())
-}
-
-pub(super) fn extract_tar_gz(archive_path: &Path, dest: &Path) -> Result<(), String> {
-    let file = File::open(archive_path).map_err(|e| format!("Failed to open archive: {}", e))?;
-    let mut archive = tar::Archive::new(flate2::read::GzDecoder::new(BufReader::new(file)));
-    // `unpack` refuses entries that would escape `dest`.
-    archive
-        .unpack(dest)
-        .map_err(|e| format!("Failed to unpack archive: {}", e))
-}
-
-fn make_executable(path: &Path) -> Result<(), String> {
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt;
-        let mut permissions = fs::metadata(path)
-            .map_err(|e| format!("Failed to read permissions: {}", e))?
-            .permissions();
-        permissions.set_mode(permissions.mode() | 0o755);
-        fs::set_permissions(path, permissions)
-            .map_err(|e| format!("Failed to mark the binary executable: {}", e))?;
-    }
-    #[cfg(not(unix))]
-    let _ = path;
     Ok(())
 }

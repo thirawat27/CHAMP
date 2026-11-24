@@ -1,6 +1,7 @@
 // Modules
 mod addons;
 mod agent;
+mod archive;
 mod commands;
 mod config;
 mod constants;
@@ -12,6 +13,7 @@ mod metrics;
 mod process;
 mod projects;
 mod runtime;
+mod sync_util;
 mod tunnel;
 mod xdebug;
 

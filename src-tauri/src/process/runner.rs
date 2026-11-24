@@ -16,12 +16,9 @@ where
     let app = app.clone();
     tauri::async_runtime::spawn_blocking(move || {
         let state = app.state::<AppState>();
-        let mut manager = state
-            .process_manager
-            .lock()
-            .map_err(|e| format!("Failed to acquire process manager lock: {}", e))?;
-        Ok(f(&mut manager))
+        let mut manager = crate::sync_util::lock_unpoisoned(&state.process_manager);
+        f(&mut manager)
     })
     .await
-    .map_err(|e| format!("Process manager task failed: {}", e))?
+    .map_err(|e| format!("Process manager task failed: {}", e))
 }

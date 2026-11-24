@@ -1,8 +1,10 @@
 use super::catalog::{package_for, system_install_hint, ArchiveFormat};
-use super::install::{
-    extract_tar_gz, extract_zip, relative_path, swap_in, unpack_into_staging, verify_checksum,
-    MARKER_FILE,
-};
+use super::install::{relative_path, swap_in, unpack_into_staging, verify_checksum, MARKER_FILE};
+use crate::archive::extract_tar_gz;
+
+fn extract_zip(archive: &Path, dest: &Path) -> Result<(), String> {
+    crate::archive::extract_zip(archive, dest, |_| false)
+}
 use super::runtime::{self, port_is_free, LaunchPlan};
 use super::*;
 use crate::config::AppSettings;

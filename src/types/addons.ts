@@ -14,10 +14,6 @@ export const ADDON_KINDS: readonly BuiltinAddonKind[] = [
   "rustfs",
 ];
 
-export function isBuiltinAddon(kind: string): kind is BuiltinAddonKind {
-  return (ADDON_KINDS as readonly string[]).includes(kind);
-}
-
 export interface AddonPort {
   role: string;
   label: string;

@@ -115,9 +115,5 @@ static SYSTEM_METRICS_MONITOR: OnceLock<Mutex<SystemMetricsMonitor>> = OnceLock:
 /// Current CPU, memory, and network figures, sampled at most once per interval.
 pub fn current_metrics() -> Result<SystemMetricsDto, String> {
     let monitor = SYSTEM_METRICS_MONITOR.get_or_init(|| Mutex::new(SystemMetricsMonitor::new()));
-    let mut monitor = monitor
-        .lock()
-        .map_err(|e| format!("Failed to acquire system metrics lock: {}", e))?;
-
-    Ok(monitor.collect())
+    Ok(crate::sync_util::lock_unpoisoned(monitor).collect())
 }

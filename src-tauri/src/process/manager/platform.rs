@@ -448,6 +448,9 @@ pub(super) fn process_exists(pid: u32) -> bool {
 
     {
         let mut guard = cache.lock().unwrap_or_else(PoisonError::into_inner);
+        // Expired entries are never read again; dropping them keeps the map
+        // from growing with every PID a long session restarts through.
+        guard.retain(|_, (recorded_at, _)| recorded_at.elapsed() < PROCESS_EXISTS_TTL);
         guard.insert(pid, (Instant::now(), result));
     }
 

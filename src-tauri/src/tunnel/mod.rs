@@ -65,10 +65,9 @@ static TUNNEL_START: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
 /// cancelled and does not open a public tunnel after the user pressed Stop.
 static STOP_GENERATION: AtomicU64 = AtomicU64::new(0);
 
-fn lock_runtime() -> Result<MutexGuard<'static, HttpsTunnelRuntime>, String> {
-    tunnel_runtime()
-        .lock()
-        .map_err(|e| format!("Failed to acquire tunnel lock: {}", e))
+/// Never fails: a poisoned lock would leave a public tunnel nothing can stop.
+fn lock_runtime() -> MutexGuard<'static, HttpsTunnelRuntime> {
+    crate::sync_util::lock_unpoisoned(tunnel_runtime())
 }
 
 fn tunnel_runtime() -> &'static Mutex<HttpsTunnelRuntime> {
@@ -130,7 +129,7 @@ pub async fn start_https_tunnel(web_port: u16) -> Result<HttpsTunnelStatus, Stri
     let (stdout, stderr) = {
         // Holding the lock from here to storing the child means a stop either is
         // seen by this check or finds the new child and kills it.
-        let mut runtime = lock_runtime()?;
+        let mut runtime = lock_runtime();
         if STOP_GENERATION.load(Ordering::SeqCst) != generation {
             return Ok(runtime.status.clone());
         }
@@ -170,7 +169,7 @@ pub async fn start_https_tunnel(web_port: u16) -> Result<HttpsTunnelStatus, Stri
 
 pub fn stop_https_tunnel() -> Result<HttpsTunnelStatus, String> {
     STOP_GENERATION.fetch_add(1, Ordering::SeqCst);
-    let mut runtime = lock_runtime()?;
+    let mut runtime = lock_runtime();
 
     if let Some(mut child) = runtime.child.take() {
         let _ = child.kill();
@@ -194,10 +193,10 @@ fn local_url_for(web_port: u16) -> String {
 /// claiming to be ready while serving errors, so stop it.
 pub fn stop_if_not_forwarding_to(web_port: u16) {
     let local_url = local_url_for(web_port);
-    let stale = tunnel_runtime()
-        .lock()
-        .map(|runtime| runtime.child.is_some() && runtime.status.local_url != local_url)
-        .unwrap_or(false);
+    let stale = {
+        let runtime = lock_runtime();
+        runtime.child.is_some() && runtime.status.local_url != local_url
+    };
     if stale {
         let _ = stop_https_tunnel();
     }
@@ -226,7 +225,7 @@ pub fn spawn_stale_agent_cleanup() {
 
 pub fn get_https_tunnel_status() -> Result<HttpsTunnelStatus, String> {
     update_tunnel_health()?;
-    let mut runtime = lock_runtime()?;
+    let mut runtime = lock_runtime();
     runtime.status.authtoken_configured = authtoken_configured();
     Ok(runtime.status.clone())
 }
@@ -304,7 +303,7 @@ fn config_has_authtoken(content: &str) -> bool {
 
 fn running_status_for_local_url(local_url: &str) -> Result<Option<HttpsTunnelStatus>, String> {
     update_tunnel_health()?;
-    let runtime = lock_runtime()?;
+    let runtime = lock_runtime();
     if runtime.status.running && runtime.status.local_url == local_url {
         return Ok(Some(runtime.status.clone()));
     }
@@ -312,7 +311,7 @@ fn running_status_for_local_url(local_url: &str) -> Result<Option<HttpsTunnelSta
 }
 
 fn update_tunnel_health() -> Result<(), String> {
-    let mut runtime = lock_runtime()?;
+    let mut runtime = lock_runtime();
 
     if let Some(child) = runtime.child.as_mut() {
         match child.try_wait() {
@@ -378,14 +377,14 @@ async fn is_public_url_ready(client: &reqwest::Client, url: &str) -> bool {
 }
 
 fn mark_public_url_ready() -> Result<HttpsTunnelStatus, String> {
-    let mut runtime = lock_runtime()?;
+    let mut runtime = lock_runtime();
     runtime.status.ready = true;
     runtime.status.error = None;
     Ok(runtime.status.clone())
 }
 
 fn mark_public_url_timeout() -> Result<HttpsTunnelStatus, String> {
-    let mut runtime = lock_runtime()?;
+    let mut runtime = lock_runtime();
     runtime.status.ready = false;
     runtime.status.error = Some(
         "Timed out waiting for the public HTTPS domain to become reachable. Stop and start HTTPS to request a fresh tunnel."
@@ -422,14 +421,13 @@ fn record_tunnel_output(line: &str) {
         return;
     }
 
-    if let Ok(mut runtime) = tunnel_runtime().lock() {
-        if let Some(url) = public_url {
-            runtime.status.url = Some(url);
-            runtime.status.ready = false;
-            runtime.status.error = None;
-        } else if runtime.status.url.is_none() {
-            runtime.status.error = error;
-        }
+    let mut runtime = lock_runtime();
+    if let Some(url) = public_url {
+        runtime.status.url = Some(url);
+        runtime.status.ready = false;
+        runtime.status.error = None;
+    } else if runtime.status.url.is_none() {
+        runtime.status.error = error;
     }
 }
 

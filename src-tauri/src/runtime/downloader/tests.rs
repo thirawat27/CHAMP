@@ -305,9 +305,29 @@ fn tar_gz_extraction_writes_entries_under_the_destination() {
 
     let dest = temp.path().join("out");
     fs::create_dir_all(&dest).unwrap();
-    RuntimeDownloader::new()
-        .extract_tar_gz(&archive_path, &dest)
-        .expect("extraction failed");
+    crate::archive::extract_tar_gz(&archive_path, &dest).expect("extraction failed");
 
     assert_eq!(fs::read_to_string(dest.join("bin/tool")).unwrap(), "hello");
+}
+
+#[test]
+fn only_runtime_binaries_count_as_executable_zip_entries() {
+    use super::extract::is_runtime_binary;
+    for path in [
+        "caddy",
+        "php/php-cgi",
+        "mysql/bin/mysqldump",
+        "pgsql/sbin/x",
+    ] {
+        assert!(is_runtime_binary(Path::new(path)), "{path}");
+    }
+    // Suffix matching used to make every PHP source file executable.
+    for path in [
+        "phpMyAdmin/index.php",
+        "docs/caddy.md",
+        "cgi-bin/script",
+        "libphp",
+    ] {
+        assert!(!is_runtime_binary(Path::new(path)), "{path}");
+    }
 }

@@ -2,7 +2,7 @@ import { Bot, Check, Copy, KeyRound, PlugZap } from "lucide-react";
 import { useState } from "react";
 import { useAgentConnector } from "../../hooks/useAgentConnector";
 import { useTranslation } from "../../stores/preferencesStore";
-import { COPIED_FEEDBACK_MS } from "../../constants";
+import { useCopiedFlag } from "../../hooks/useCopiedFlag";
 import { AudioManager } from "../../utils/audioManager";
 import { SoundButton } from "../SoundButton";
 import {
@@ -19,7 +19,7 @@ export function AgentConnectorSection() {
     useAgentConnector();
   const [portDraft, setPortDraft] = useState<string | null>(null);
   const [client, setClient] = useState<AgentClientId>("claude-code");
-  const [copied, setCopied] = useState(false);
+  const { copied, markCopied, resetCopied } = useCopiedFlag();
 
   if (!status) {
     return error ? (
@@ -41,8 +41,7 @@ export function AgentConnectorSection() {
     try {
       await navigator.clipboard.writeText(text);
       AudioManager.playClick();
-      setCopied(true);
-      window.setTimeout(() => setCopied(false), COPIED_FEEDBACK_MS);
+      markCopied();
     } catch (copyError) {
       console.error("Failed to copy agent config:", copyError);
     }
@@ -105,7 +104,7 @@ export function AgentConnectorSection() {
                 className={`agent-client ${client === id ? "selected" : ""}`}
                 onClick={() => {
                   setClient(id);
-                  setCopied(false);
+                  resetCopied();
                 }}
               >
                 {agentClientSetup(id, status.url, token).label}

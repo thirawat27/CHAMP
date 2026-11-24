@@ -22,7 +22,8 @@ pub(crate) fn read_tail_lines(path: &Path) -> Option<Vec<String>> {
     let start = len.saturating_sub(LOG_TAIL_BYTES);
     file.seek(SeekFrom::Start(start)).ok()?;
     let mut bytes = Vec::with_capacity((len - start) as usize);
-    file.read_to_end(&mut bytes).ok()?;
+    // A live log keeps growing after `len` was read; stay within the tail.
+    file.take(LOG_TAIL_BYTES).read_to_end(&mut bytes).ok()?;
 
     let text = String::from_utf8_lossy(&bytes);
     let mut lines: Vec<String> = text.lines().map(str::to_string).collect();

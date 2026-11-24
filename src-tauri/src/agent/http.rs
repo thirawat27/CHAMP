@@ -24,7 +24,6 @@ pub(super) const MAX_BODY_BYTES: usize = 1024 * 1024;
 
 pub(super) type HttpResponse = Response<Full<Bytes>>;
 
-/// Tools that change the stack; hidden and refused in read-only mode.
 // JSON-RPC 2.0 error codes.
 pub(super) const RPC_PARSE_ERROR: i64 = -32700;
 

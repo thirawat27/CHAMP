@@ -1,7 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { Cog, LoaderCircle, Play, Plus, Save, Square, Trash2, X } from "lucide-react";
 import { FormEvent, useCallback, useEffect, useState } from "react";
-import { STATUS_POLL_INTERVAL_MS } from "../../constants";
+import { useStatusPolling } from "../../hooks/useStatusPolling";
 import { useTranslation } from "../../stores/preferencesStore";
 import {
   isValidAddonId,
@@ -62,11 +62,7 @@ export function WorkersPanel() {
   }, [refresh]);
 
   const active = workers.some((worker) => worker.state !== ServiceState.Stopped);
-  useEffect(() => {
-    if (!active) return undefined;
-    const timer = window.setInterval(() => void refresh(), STATUS_POLL_INTERVAL_MS);
-    return () => window.clearInterval(timer);
-  }, [active, refresh]);
+  useStatusPolling(refresh, { enabled: active, immediate: false });
 
   const run = async (id: string, command: string, args: Record<string, unknown>) => {
     setBusy(id);

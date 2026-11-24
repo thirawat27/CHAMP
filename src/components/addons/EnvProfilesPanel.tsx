@@ -1,7 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { Check, Copy, FileCode2 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
-import { COPIED_FEEDBACK_MS } from "../../constants";
+import { useCopiedFlag } from "../../hooks/useCopiedFlag";
 import { useTranslation } from "../../stores/preferencesStore";
 import { EnvProfilesReply, ProjectInfo } from "../../types/addons";
 import { AudioManager } from "../../utils/audioManager";
@@ -22,7 +22,7 @@ export function EnvProfilesPanel({ refreshKey }: EnvProfilesPanelProps) {
   const [project, setProject] = useState("");
   const [reply, setReply] = useState<EnvProfilesReply | null>(null);
   const [chosen, setChosen] = useState<string | null>(null);
-  const [copied, setCopied] = useState(false);
+  const { copied, markCopied } = useCopiedFlag();
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -69,8 +69,7 @@ export function EnvProfilesPanel({ refreshKey }: EnvProfilesPanelProps) {
     try {
       await navigator.clipboard.writeText(profile.content);
       AudioManager.playClick();
-      setCopied(true);
-      window.setTimeout(() => setCopied(false), COPIED_FEEDBACK_MS);
+      markCopied();
     } catch (copyError) {
       console.error("Failed to copy configuration:", copyError);
     }

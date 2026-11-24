@@ -1,6 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { STATUS_POLL_INTERVAL_MS } from "../constants";
 import {
   AddonChange,
   AddonInstallProgress,
@@ -10,6 +9,7 @@ import {
 } from "../types/addons";
 import { ServiceState } from "../types/services";
 import { listenIfTauri } from "../utils/tauri";
+import { useStatusPolling } from "./useStatusPolling";
 
 export interface AddonsController {
   addons: AddonStatus[];
@@ -87,11 +87,7 @@ export function useAddons(): AddonsController {
       addon.state === ServiceState.Running ||
       isTransitional(addon.state)
   );
-  useEffect(() => {
-    if (!active) return undefined;
-    const timer = window.setInterval(() => void refresh(), STATUS_POLL_INTERVAL_MS);
-    return () => window.clearInterval(timer);
-  }, [active, refresh]);
+  useStatusPolling(refresh, { enabled: active, immediate: false });
 
   useEffect(() => {
     const unlistenProgress = listenIfTauri<AddonInstallProgress>(
